@@ -51,3 +51,4 @@ wc -l "$SCRIPT_DIR/bench_acid_modern.pp" \
       "$SCRIPT_DIR/bench_acid_csharp.cs" \
       "$SCRIPT_DIR/bench_acid_python.py"
 echo "======================================================================"
+

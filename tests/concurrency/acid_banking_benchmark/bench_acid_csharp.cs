@@ -133,3 +133,4 @@ public class Program
         Console.WriteLine($"Final Total Bank Balance: ${finalTotalMoney / 100}.{finalTotalMoney % 100:D2}");
     }
 }
+

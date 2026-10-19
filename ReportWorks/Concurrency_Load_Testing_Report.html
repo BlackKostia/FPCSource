@@ -5,83 +5,112 @@
 <title>Звіт з навантажувального тестування багатопотоковості: Modern Free Pascal (MFPC), Classic Pascal, C# (.NET 8), Python 3.12</title>
 <style>
   @page {
-    size: A4;
-    margin: 1.8cm 1.5cm 1.8cm 1.5cm;
-    @bottom-right {
-      content: counter(page);
-    }
+    size: A4 portrait;
+    margin: 1.0cm 0.9cm 1.0cm 0.9cm;
   }
   body {
-    font-family: 'Liberation Sans', 'DejaVu Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    line-height: 1.5;
-    color: #1f2937;
+    font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
+    line-height: 1.35;
+    color: #1e293b;
     background-color: #ffffff;
-    font-size: 11pt;
+    font-size: 9pt;
   }
   h1 {
     color: #0f172a;
-    font-size: 20pt;
-    border-bottom: 3px solid #2563eb;
-    padding-bottom: 8px;
+    font-size: 16pt;
+    border-bottom: 2.5px solid #2563eb;
+    padding-bottom: 4px;
     margin-top: 0;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
   }
   h2 {
     color: #1e3a8a;
-    font-size: 14pt;
+    font-size: 12pt;
     border-bottom: 1.5px solid #cbd5e1;
-    padding-bottom: 5px;
-    margin-top: 24px;
-    margin-bottom: 10px;
-    page-break-after: avoid;
+    padding-bottom: 3px;
+    margin-top: 10px;
+    margin-bottom: 6px;
   }
   h3 {
     color: #1d4ed8;
-    font-size: 12pt;
-    margin-top: 16px;
-    margin-bottom: 6px;
-    page-break-after: avoid;
+    font-size: 10.5pt;
+    margin-top: 8px;
+    margin-bottom: 4px;
   }
   p {
     margin-top: 0;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     text-align: justify;
   }
   .lead {
-    font-size: 11.5pt;
+    font-size: 9.5pt;
     color: #334155;
     font-weight: 500;
+    margin-bottom: 8px;
   }
-  table {
+  .meta-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
-    margin-bottom: 16px;
-    font-size: 9.5pt;
-    page-break-inside: avoid;
-  }
-  th, td {
+    background-color: #f8fafc;
     border: 1px solid #cbd5e1;
-    padding: 6px 8px;
-    text-align: left;
+    border-left: 4px solid #2563eb;
+    margin-bottom: 10px;
+    font-size: 8.5pt;
   }
-  th {
-    background-color: #f1f5f9;
+  .meta-table td {
+    padding: 4px 8px;
+    border: none;
+    color: #334155;
+  }
+  .meta-table strong {
     color: #0f172a;
-    font-weight: bold;
   }
-  tr:nth-child(even) {
+
+  /* Universal Solid Table Styles */
+  table.report-table {
+    width: 100%;
+    max-width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 8pt;
+    table-layout: fixed;
+    border: 1.5px solid #475569;
+  }
+  table.report-table th {
+    background-color: #1e3a8a;
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #475569;
+    padding: 4px 3px;
+    text-align: center;
+    vertical-align: middle;
+    word-wrap: break-word;
+  }
+  table.report-table td {
+    border: 1px solid #cbd5e1;
+    padding: 3px 4px;
+    vertical-align: middle;
+    text-align: center;
+    word-wrap: break-word;
+    line-height: 1.25;
+  }
+  table.report-table td.text-left {
+    text-align: left;
+    font-weight: 500;
+  }
+  table.report-table tr:nth-child(even) {
     background-color: #f8fafc;
   }
-  .highlight-row {
-    background-color: #eff6ff !important;
+  table.report-table tr.highlight {
+    background-color: #eff6ff;
     font-weight: bold;
   }
+
   .badge {
     display: inline-block;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 8pt;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 7pt;
     font-weight: bold;
     color: white;
   }
@@ -89,130 +118,143 @@
   .badge-warning { background-color: #d97706; }
   .badge-danger { background-color: #dc2626; }
   .badge-info { background-color: #2563eb; }
-  .code-block {
-    background-color: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #2563eb;
-    padding: 8px 12px;
+  
+  .mono {
     font-family: 'Liberation Mono', 'DejaVu Sans Mono', Courier, monospace;
-    font-size: 9pt;
-    margin-bottom: 12px;
-  }
-  .meta-box {
-    background-color: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 10px 14px;
-    margin-bottom: 20px;
-    font-size: 10pt;
-  }
-  .meta-box strong { color: #0f172a; }
-  .page-break {
-    page-break-after: always;
+    font-size: 7.5pt;
   }
   ul, ol {
-    margin-top: 4px;
-    margin-bottom: 10px;
-    padding-left: 20px;
+    margin-top: 3px;
+    margin-bottom: 6px;
+    padding-left: 18px;
   }
   li {
-    margin-bottom: 4px;
+    margin-bottom: 3px;
+  }
+  .conclusion-text {
+    font-size: 8.5pt;
+    margin-bottom: 8px;
+    line-height: 1.3;
   }
 </style>
 </head>
 <body>
 
+<!-- PAGE 1: ВСТУП ТА ОГЛЯД ІНСТРУМЕНТІВ -->
 <h1>Підсумковий звіт з навантажувального тестування багатопотоковості</h1>
-<p class="lead">Порівняльний аналіз архітектурної продуктивності: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Classic Free Pascal</strong>, <strong>C# (.NET 8)</strong> та <strong>Python 3.12</strong></p>
+<p class="lead">Порівняльний архітектурний аналіз: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Classic Free Pascal</strong>, <strong>C# (.NET 8)</strong> та <strong>Python 3.12</strong></p>
 
-<div class="meta-box">
-  <strong>Тестова платформа:</strong> Linux Mint 22.3 (базована на Ubuntu 24.04 LTS "Noble"), ядро Linux x86_64.<br>
-  <strong>Апаратна конфігурація:</strong> 12-ядерний процесор (12 апаратних потоків), 16 ГБ RAM.<br>
-  <strong>Компілятори та середовища:</strong> Modern Free Pascal (FPC Concurrency Trunk ppcx64), Classic FPC (FPC 3.3.1 base), .NET SDK 8.0.132 (Release mode, JIT/Dynamic PGO), CPython 3.12.3.<br>
-  <strong>Системний профайлер:</strong> GNU time (<code>/usr/bin/time -v</code>) з точним збором User Time, System/Kernel Time, Context Switches та Max RSS.
-</div>
+<table class="meta-table" cellpadding="4" cellspacing="0">
+  <tr>
+    <td><strong>Апаратна платформа:</strong> 12-ядерний процесор x86_64, 16 ГБ RAM, ОС Linux Mint 22.3 (Ubuntu 24.04 LTS &quot;Noble&quot;).</td>
+  </tr>
+  <tr>
+    <td><strong>Компілятори та рантайми:</strong> Modern Free Pascal (FPC Concurrency Trunk ppcx64), Classic FPC (3.3.1 base), .NET SDK 8.0.132 (Release mode, RyuJIT / Dynamic PGO), CPython 3.12.3.</td>
+  </tr>
+  <tr>
+    <td><strong>Профайлер ядра:</strong> GNU time (<code>/usr/bin/time -v</code>) з точним збором User CPU Time, System/Kernel Time, Context Switches та Max RSS.</td>
+  </tr>
+</table>
 
 <h2>1. Вступ та мета досліджень</h2>
 <p>
-Метою проведеного циклу навантажувальних досліджень є всебічна практична верифікація нових мовних конструкцій та інструментів паралелізму в <strong>Modern Free Pascal (MFPC)</strong>: типізованих каналів повідомлень (<code>TChannel&lt;T&gt;</code>), швидких блокувань читання/запису в просторі користувача (<code>TSlimReaderWriterLock</code>), багатофазних бар'єрів синхронізації (<code>TBarrier</code>) та динамічного пулу задач (<code>TTask</code> / <code>TThreadPool</code> / <code>TCountdownEvent</code>).
+Метою досліджень є всебічна практична верифікація нових мовних конструкцій та системних примітивів паралелізму в <strong>Modern Free Pascal (MFPC)</strong>: типізованих кільцевих каналів (<code>generic TChannel&lt;T&gt;</code>), надшвидких замків читання/запису (<code>TSlimReaderWriterLock</code>), багатофазних бар'єрів (<code>TBarrier</code>) та динамічного пулу потоків (<code>TTask</code> / <code>TThreadPool</code> / <code>TCountdownEvent</code>).
 </p>
 <p>
-Для виключення синтетичних маніпуляцій було розроблено серію з <strong>5 повномасштабних практичних стрес-тестів</strong> з обсягом навантаження від <strong>1 000 000 до 100 000 000 операцій</strong>, що відображають реальні промислові патерни: біржові книги ордерів, потокові конвеєри розрахунків, багаторівневі акторні графи (DAG) та висококонкурентні банківські реєстри з контролем ACID-інваріантів.
+Для виключення синтетичних маніпуляцій було розроблено серію з <strong>5 повномасштабних стрес-тестів</strong> з обсягом навантаження від <strong>1 000 000 до 100 000 000 операцій</strong>, що відображають реальні промислові сценарії: біржові книги котирувань, конвеєри взаємодії потоків, багаторівневі акторні графи (DAG) та висококонкурентні банківські реєстри з контролем ACID-інваріантів.
 </p>
 
 <h2>2. Огляд інструментів Modern Free Pascal (MFPC)</h2>
 <ul>
-  <li><strong><code>generic TChannel&lt;T&gt;</code> (Модель CSP у стилі Go)</strong>: Потокобезпечний кільцевий буфер передачі сирих типізованих записів без виділення об'єктів у купі. Забезпечує автоматичний backpressure, безпечне закриття (<code>Close</code>) та лаконічний обхід <code>for Msg in Channel do</code>.</li>
-  <li><strong><code>TSlimReaderWriterLock</code></strong>: Легковаговий примітив читання/запису. Дозволяє тисячам потоків читати спільний кеш одночасно на регістрах процесора, звертаючись до системних викликів ядра ОС лише при монопольному записі.</li>
-  <li><strong><code>TBarrier</code></strong>: Багатофазний циклічний бар'єр. Забезпечує гарантований захист від гонитв фаз через подвійну буферизацію та дозволяє виконувати пост-фазну дію (<code>PostPhaseAction</code>) рівно одним потоком між кроками.</li>
+  <li><strong><code>generic TChannel&lt;T&gt;</code> (Модель CSP у стилі Go)</strong>: Потокобезпечний кільцевий буфер передачі сирих типізованих записів без виділення пам'яті в купі (Zero Heap Allocations). Забезпечує автоматичний backpressure, безпечне закриття (<code>Close</code>) та лаконічний обхід <code>for Msg in Channel do</code>.</li>
+  <li><strong><code>TSlimReaderWriterLock</code></strong>: Легковаговий примітив читання/запису. Дозволяє тисячам читачів одночасно звертатися до спільних даних на атомарних регістрах процесора, звертаючись до системних викликів ядра ОС лише при монопольному записі.</li>
+  <li><strong><code>TBarrier</code></strong>: Багатофазний циклічний бар'єр. Забезпечує гарантований захист від гонитв фаз через подвійну буферизацію та дозволяє виконувати атомарну пост-фазну дію (<code>PostPhaseAction</code>) рівно одним потоком між кроками.</li>
   <li><strong><code>TThreadPool</code> та <code>TTask</code></strong>: Легковаговий пул потоків, що розподіляє мільйони підзадач на фіксовану кількість ядер процесора без падіння системи через ліміт дескрипторів ОС.</li>
 </ul>
 
-<div class="page-break"></div>
+<h2>3. Методологія вимірювання та метрики</h2>
+<p>
+Для кожного тесту фіксувалися 6 ключових показників: <strong>Wall Clock Time</strong> (загальний час), <strong>Throughput</strong> (продуктивність операцій/сек), <strong>User CPU Time</strong> (корисний час розрахунків процесора), <strong>System CPU Time</strong> (час блокувань у ядрі Linux), <strong>Max RSS</strong> (пікова оперативна пам'ять) та <strong>Checksum</strong> (гарантія 100% математичної еквівалентності та відсутності втрати даних).
+</p>
 
-<h2>3. Результати навантажувальних стрес-тестів</h2>
+
+<!-- PAGE 2: ТЕСТИ 1 ТА 2 -->
+<h2 style="page-break-before: always; margin-top: 0;">4. Результати стрес-тестів: Тест 1 та Тест 2</h2>
 
 <h3>ТЕСТ 1. In-Memory Trading Cache: Crushing Benchmark (2 000 000 операцій)</h3>
 <p>
-<strong>Сценарій:</strong> 12 конкурентних воркерів на 12 ядрах CPU. 90% операцій (1.8 млн) — конкурентне читання котирувань під Reader-Writer Lock з розрахунком 30-ітераційного поліноміального ризик-хешу. 10% операцій (200 тис.) — монопольне оновлення ціни зі стрімінгом 200 000 подій у фоновий конвеєр через буферизований канал.
+<strong>Сценарій:</strong> 12 воркерів на 12 ядрах CPU. 90% операцій (1.8 млн) — конкурентне читання котирувань під Reader-Writer Lock з розрахунком 30-ітераційного поліноміального ризик-хешу. 10% операцій (200 тис.) — монопольне оновлення ціни зі стрімінгом 200 000 подій у фоновий конвеєр.
 </p>
 
-<table>
+<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+  <colgroup>
+    <col style="width: 25%;">
+    <col style="width: 16%;">
+    <col style="width: 18%;">
+    <col style="width: 11%;">
+    <col style="width: 8%;">
+    <col style="width: 22%;">
+  </colgroup>
   <thead>
     <tr>
       <th>Платформа / Реалізація</th>
       <th>Час (мс)</th>
       <th>Throughput (ops/s)</th>
-      <th>Max RSS (RAM)</th>
-      <th>LoC (рядків)</th>
+      <th>Max RSS</th>
+      <th>LoC</th>
       <th>Контрольна сума</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><strong>C# (.NET 8)</strong> (RWLockSlim + Channel)</td>
-      <td><strong>676 мс</strong></td>
+      <td class="text-left"><strong>C# (.NET 8)</strong> (RWLockSlim + Channel)</td>
+      <td><strong>676&nbsp;мс</strong></td>
       <td>2 958 580 ops/s</td>
       <td>35.5 МБ</td>
       <td>125</td>
-      <td><code>17092326524331000456</code></td>
+      <td class="mono">17092326524331000456</td>
     </tr>
     <tr>
-      <td><strong>Classic Free Pascal</strong> (TCriticalSection)</td>
-      <td><strong>1 102 мс</strong></td>
+      <td class="text-left"><strong>Classic Free Pascal</strong> (TCriticalSection)</td>
+      <td><strong>1 102&nbsp;мс</strong></td>
       <td>1 814 882 ops/s</td>
       <td>16.2 МБ</td>
       <td>211</td>
-      <td><code>17092326524331000456</code></td>
+      <td class="mono">17092326524331000456</td>
     </tr>
-    <tr class="highlight-row">
-      <td><strong>Modern Free Pascal</strong> (TSlimRWLock + TChannel)</td>
-      <td><strong>1 937 мс</strong></td>
+    <tr class="highlight">
+      <td class="text-left"><strong>Modern Free Pascal</strong> (TSlimRWLock + Channel)</td>
+      <td><strong>1 937&nbsp;мс</strong></td>
       <td>1 032 525 ops/s</td>
       <td><strong>6.3 МБ</strong></td>
       <td>127</td>
-      <td><code>17092326524331000456</code></td>
+      <td class="mono">17092326524331000456</td>
     </tr>
     <tr>
-      <td><strong>Python 3.12</strong> (threading.Lock + queue)</td>
-      <td><strong>12 554 мс</strong></td>
+      <td class="text-left"><strong>Python 3.12</strong> (threading.Lock + queue)</td>
+      <td><strong>12.55&nbsp;с</strong> (12&nbsp;554&nbsp;мс)</td>
       <td>159 304 ops/s</td>
       <td>28.5 МБ</td>
       <td><strong>81</strong></td>
-      <td><code>17092326524331000456</code></td>
+      <td class="mono">17092326524331000456</td>
     </tr>
   </tbody>
 </table>
-<p><strong>Висновки:</strong> Modern Pascal забезпечив найменше використання пам'яті (6.3 МБ проти 35.5 МБ у C#). C# був швидшим завдяки Dynamic PGO RyuJIT та неблокуючому <code>TryWrite</code>, тоді як Modern Pascal надійно застосував backpressure блокуючого <code>Send</code>.</p>
-
-<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;">
+<p class="conclusion-text"><strong>Висновки:</strong> Modern Pascal показав бездоганну пам'ять — лише 6.3 МБ (у 5.6 раза менше ніж .NET 8). C# виявився швидшим завдяки JIT RyuJIT та неблокуючому <code>TryWrite</code>, тоді як Modern Pascal стабільно утримував чергу синхронним <code>Send</code> під тиском 12 ядер.</p>
 
 <h3>ТЕСТ 2. Потоковий міжпотоковий обмін (1 000 000 транзакцій / 2 000 000 передач)</h3>
 <p>
-<strong>Сценарій:</strong> Multi-Producer Multi-Consumer конвеєр розрахунку платежів: 6 генераторів транзакцій &rarr; Inbound Channel &rarr; 6 воркерів верифікації та розрахунку комісій &rarr; Outbound Channel &rarr; 1 потік аудиту. Повне системне профілювання завантаження ЦП.
+<strong>Сценарій:</strong> Multi-Producer Multi-Consumer конвеєр: 6 генераторів транзакцій &rarr; Inbound Channel &rarr; 6 воркерів розрахунку комісій &rarr; Outbound Channel &rarr; 1 потік аудиту. Системне профілювання завантаження ядра Linux.
 </p>
 
-<table>
+<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+  <colgroup>
+    <col style="width: 28%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+  </colgroup>
   <thead>
     <tr>
       <th>Показник системного профілювання</th>
@@ -223,57 +265,57 @@
     </tr>
   </thead>
   <tbody>
-    <tr class="highlight-row">
-      <td><strong>Реальний час виконання (Wall Clock)</strong></td>
-      <td><strong>1.58 с</strong></td>
+    <tr class="highlight">
+      <td class="text-left"><strong>Реальний час (Wall Clock)</strong></td>
+      <td><strong>1.58 с</strong> <span class="badge badge-success">Лідер</span></td>
       <td>1.40 с</td>
-      <td><strong>3.07 с</strong></td>
+      <td><strong>3.07&nbsp;с</strong> (повільніше)</td>
       <td><strong>117.4 с</strong> (~2 хв)</td>
     </tr>
     <tr>
-      <td><strong>Пропускна здатність (Throughput)</strong></td>
+      <td class="text-left"><strong>Пропускна здатність (Throughput)</strong></td>
       <td><strong>636 132 tx/s</strong></td>
       <td>713 266 tx/s</td>
       <td>324 780 tx/s</td>
       <td>8 513 tx/s</td>
     </tr>
     <tr>
-      <td><strong>User CPU Time (корисний час коду)</strong></td>
+      <td class="text-left"><strong>User CPU Time (корисний час)</strong></td>
       <td>11.63 с</td>
       <td>4.26 с</td>
       <td>15.80 с</td>
       <td>106.87 с</td>
     </tr>
     <tr>
-      <td><strong>System CPU Time (час у ядрі ОС)</strong></td>
-      <td><strong>0.92 с</strong> <span class="badge badge-success">Мінімум</span></td>
+      <td class="text-left"><strong>System CPU Time (час у ядрі ОС)</strong></td>
+      <td><strong>0.92 с</strong> <span class="badge badge-success">Рекорд</span></td>
       <td><strong>6.64 с</strong> <span class="badge badge-danger">у 7.2x більше</span></td>
       <td>0.77 с</td>
       <td><strong>62.03 с</strong> <span class="badge badge-danger">Колапс</span></td>
     </tr>
     <tr>
-      <td><strong>Співвідношення User / System</strong></td>
-      <td><strong>12.6 : 1</strong> (92.7% корисного часу)</td>
-      <td><strong>0.64 : 1</strong> (61% часу в ядрі!)</td>
+      <td class="text-left"><strong>Співвідношення User / System</strong></td>
+      <td><strong>12.6 : 1</strong> (92.7% коду)</td>
+      <td><strong>0.64 : 1</strong> (61% у ядрі!)</td>
       <td>20.5 : 1</td>
       <td>1.7 : 1</td>
     </tr>
     <tr>
-      <td><strong>Добровільні перемикання контекстів</strong></td>
+      <td class="text-left"><strong>Добровільні перемикання контекстів</strong></td>
       <td><strong>71 736</strong></td>
       <td>414 739</td>
       <td>13 167</td>
       <td><strong>7 456 818</strong></td>
     </tr>
     <tr>
-      <td><strong>Пікова оперативна пам'ять (Max RSS)</strong></td>
-      <td><strong>6.2 МБ</strong> <span class="badge badge-success">Найкраще</span></td>
+      <td class="text-left"><strong>Пікова пам'ять (Max RSS)</strong></td>
+      <td><strong>6.2 МБ</strong> <span class="badge badge-success">Еталон</span></td>
       <td>16.0 МБ</td>
       <td>46.0 МБ</td>
       <td>20.9 МБ</td>
     </tr>
     <tr>
-      <td><strong>Рядків коду (Boilerplate LoC)</strong></td>
+      <td class="text-left"><strong>Рядків коду (Boilerplate LoC)</strong></td>
       <td><strong>165</strong></td>
       <td>355 (+115% коду)</td>
       <td>148</td>
@@ -281,16 +323,23 @@
     </tr>
   </tbody>
 </table>
-<p><strong>Висновки:</strong> У чистому міжпотоковому обміні <strong>Modern Pascal виявився майже вдвічі швидшим за C# (.NET 8)</strong> (1.58 с проти 3.07 с), оскільки не несе накладних витрат асинхронних стейт-машин <code>ValueTask</code> і збирача сміття. Classic Pascal спалив 61% процесорного часу в ядрі Linux на системних викликах <code>futex</code>.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> <strong>Modern Pascal виявився вдвічі швидшим за C# (.NET 8)</strong> (1.58 с проти 3.07 с), не маючи витрат на об'єкти стейт-машин <code>ValueTask</code> та GC. Classic Pascal спалив 61% часу в ядрі Linux через архаїчні примітиви синхронізації <code>futex</code>.</p>
 
-<div class="page-break"></div>
 
-<h3>ТЕСТ 3. Складний акторний граф конвеєра: DAG з Fan-Out / Fan-In (2 000 000 повідомлень)</h3>
+<!-- PAGE 3: ТЕСТИ 3 ТА 4 -->
+<h3 style="page-break-before: always; margin-top: 0;">ТЕСТ 3. Акторний граф конвеєра: DAG з Fan-Out / Fan-In (2 000 000 повідомлень)</h3>
 <p>
-<strong>Сценарій:</strong> Топологія з 10 взаємопов'язаних акторів та 6 каналів: <code>4 Producers</code> &rarr; <code>IngestChannel</code> &rarr; <code>Router Dispatcher</code> &rarr; <code>4 Shard Channels</code> &rarr; <code>4 Shard Workers</code> &rarr; <code>OutboundChannel</code> &rarr; <code>Central Aggregator</code>. Сумарно <strong>8 000 000 міжпотокових передач</strong>.
+<strong>Сценарій:</strong> Топологія з 10 взаємопов'язаних акторів та 6 каналів: <code>4 Producers</code> &rarr; <code>IngestChannel</code> &rarr; <code>Router</code> &rarr; <code>4 Shard Channels</code> &rarr; <code>4 Workers</code> &rarr; <code>OutboundChannel</code> &rarr; <code>Aggregator</code>. Сумарно <strong>8 000 000 міжпотокових передач</strong>.
 </p>
 
-<table>
+<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+  <colgroup>
+    <col style="width: 28%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+  </colgroup>
   <thead>
     <tr>
       <th>Метрика / Показник</th>
@@ -301,60 +350,65 @@
     </tr>
   </thead>
   <tbody>
-    <tr class="highlight-row">
-      <td><strong>Реальний час виконання</strong></td>
+    <tr class="highlight">
+      <td class="text-left"><strong>Реальний час виконання</strong></td>
       <td><strong>1.58 с</strong></td>
       <td>1.40 с</td>
       <td>1.91 с</td>
       <td>139.0 с (2 хв 19 с)</td>
     </tr>
     <tr>
-      <td><strong>Пропускна здатність DAG</strong></td>
+      <td class="text-left"><strong>Пропускна здатність DAG</strong></td>
       <td><strong>1 261 034 msg/s</strong></td>
       <td>1 426 533 msg/s</td>
       <td>1 042 209 msg/s</td>
       <td>14 383 msg/s</td>
     </tr>
     <tr>
-      <td><strong>Пікова оперативна пам'ять (Max RSS)</strong></td>
+      <td class="text-left"><strong>Пікова пам'ять (Max RSS)</strong></td>
       <td><strong>9.3 МБ</strong> <span class="badge badge-success">Стабільно</span></td>
       <td><strong>94.9 МБ</strong> <span class="badge badge-danger">у 10x більше!</span></td>
       <td>46.2 МБ</td>
       <td>49.8 МБ</td>
     </tr>
     <tr>
-      <td><strong>System CPU Time (час ядра ОС)</strong></td>
+      <td class="text-left"><strong>System CPU Time (час ядра ОС)</strong></td>
       <td><strong>2.29 с</strong></td>
       <td>3.51 с</td>
       <td>1.37 с</td>
       <td>52.19 с</td>
     </tr>
     <tr>
-      <td><strong>Рядків коду (LoC)</strong></td>
+      <td class="text-left"><strong>Рядків коду (LoC)</strong></td>
       <td><strong>197</strong></td>
       <td>445 (+126% коду)</td>
       <td>176</td>
       <td>116</td>
     </tr>
     <tr>
-      <td><strong>Контрольний хеш (Checksum)</strong></td>
-      <td><code>14820452197096126848</code></td>
-      <td><code>14820452197096126848</code></td>
-      <td><code>14820452197096126848</code></td>
-      <td><code>14820452197096126848</code></td>
+      <td class="text-left"><strong>Контрольний хеш (Checksum)</strong></td>
+      <td class="mono">14820452197096126848</td>
+      <td class="mono">14820452197096126848</td>
+      <td class="mono">14820452197096126848</td>
+      <td class="mono">14820452197096126848</td>
     </tr>
   </tbody>
 </table>
-<p><strong>Висновки:</strong> Classic Pascal зазнав вибуху пам'яті до <strong>95 МБ</strong> через накопичення 4 млн динамічних структур <code>New()</code> у необмежених зв'язних списках. Modern Pascal завдяки кільцевим буферам <code>TChannel&lt;T&gt;</code> втримав споживання пам'яті на рівні <strong>9.3 МБ</strong>, випередивши C# .NET 8 за швидкістю на 21%.</p>
-
-<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;">
+<p class="conclusion-text"><strong>Висновки:</strong> Classic Pascal зазнав вибуху пам'яті до <strong>95 МБ</strong> через накопичення 4 млн динамічних структур <code>New()</code> у необмежених списках. Modern Pascal втримав споживання пам'яті на рівні <strong>9.3 МБ</strong>, випередивши C# .NET 8 за швидкістю на 21%.</p>
 
 <h3>ТЕСТ 4. Багатофазний бар'єр: 2D-сітка Лапласа (100 000 000 оновлень комірок)</h3>
 <p>
-<strong>Сценарій:</strong> Чисельне моделювання рівняння дифузії на сітці $1000 \times 2000$ (2 млн комірок/фаза) крізь 50 послідовних lockstep фаз на 12 потоках. Перемикання подвійного буфера в атомарному <code>PostPhaseAction</code>.
+<strong>Сценарій:</strong> Моделювання дифузії на сітці 1000 &times; 2000 (2 млн комірок/фаза) крізь 50 послідовних lockstep фаз на 12 потоках. Перемикання подвійного буфера в атомарному <code>PostPhaseAction</code>.
 </p>
 
-<table>
+<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+  <colgroup>
+    <col style="width: 28%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+  </colgroup>
   <thead>
     <tr>
       <th>Метрика / Показник</th>
@@ -365,53 +419,60 @@
     </tr>
   </thead>
   <tbody>
-    <tr class="highlight-row">
-      <td><strong>Час виконання 50 фаз</strong></td>
+    <tr class="highlight">
+      <td class="text-left"><strong>Час виконання 50 фаз</strong></td>
       <td><strong>202 мс</strong></td>
       <td>300 мс</td>
       <td><strong>138 мс</strong></td>
-      <td><strong>23 353 мс</strong> (23.4 с)</td>
+      <td><strong>23.35 с</strong> (23&nbsp;353&nbsp;мс)</td>
     </tr>
     <tr>
-      <td><strong>Пропускна здатність оновлень</strong></td>
+      <td class="text-left"><strong>Пропускна здатність оновлень</strong></td>
       <td><strong>495 049 488 cell/s</strong></td>
       <td>333 333 320 cell/s</td>
       <td>724 637 681 cell/s</td>
       <td>4 282 082 cell/s</td>
     </tr>
     <tr>
-      <td><strong>Оперативна пам'ять (Max RSS)</strong></td>
+      <td class="text-left"><strong>Оперативна пам'ять (Max RSS)</strong></td>
       <td><strong>19.9 МБ</strong></td>
       <td>19.2 МБ</td>
       <td><strong>50.1 МБ</strong> (у 2.5x більше)</td>
       <td>45.0 МБ</td>
     </tr>
     <tr>
-      <td><strong>Рядків коду (LoC)</strong></td>
+      <td class="text-left"><strong>Рядків коду (LoC)</strong></td>
       <td><strong>124</strong></td>
       <td>190 (+53% коду)</td>
       <td>96</td>
       <td>66</td>
     </tr>
     <tr>
-      <td><strong>Енергія сітки (Checksum)</strong></td>
-      <td><code>689432888</code></td>
-      <td><code>689432888</code></td>
-      <td><code>689432888</code></td>
-      <td><code>689432888</code></td>
+      <td class="text-left"><strong>Енергія сітки (Checksum)</strong></td>
+      <td class="mono">689432888</td>
+      <td class="mono">689432888</td>
+      <td class="mono">689432888</td>
+      <td class="mono">689432888</td>
     </tr>
   </tbody>
 </table>
-<p><strong>Висновки:</strong> Примітив <code>TBarrier</code> у Modern Pascal виявився в 1.5 раза швидшим за ручний двофазний бар'єр у Classic Pascal (202 мс проти 300 мс). Python виявився у 115 разів повільнішим через неможливість паралелізації математичних циклів під GIL.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> Примітив <code>TBarrier</code> у Modern Pascal виявився в 1.5 раза швидшим за ручний двофазний бар'єр у Classic Pascal (202 мс проти 300 мс). Python виявився у 115 разів повільнішим через неможливість паралелізації математичних циклів під GIL.</p>
 
-<div class="page-break"></div>
 
-<h3>ТЕСТ 5. Висококонкурентний ACID-банківський реєстр (2 000 000 транзакцій)</h3>
+<!-- PAGE 4: ТЕСТ 5 ТА ЗВЕДЕНА МАТРИЦЯ -->
+<h3 style="page-break-before: always; margin-top: 0;">ТЕСТ 5. Висококонкурентний ACID-банківський реєстр (2 000 000 транзакцій)</h3>
 <p>
-<strong>Сценарій:</strong> 500 банківських рахунків, 12 потоків, екстремальна конкуренція за спільні адреси. 70% перевірок балансу, 20% поповнень/зняттів через апаратний CAS (<code>InterlockedCompareExchange64</code>), 10% переказів із захистом від взаємного блокування (Deadlock-Free впорядковане захоплення $\text{Lock}(\min) \to \text{Lock}(\max)$).
+<strong>Сценарій:</strong> 500 банківських рахунків, 12 потоків. 70% перевірок балансу, 20% поповнень/зняттів через CAS (<code>InterlockedCompareExchange64</code>), 10% переказів із захистом від Deadlock (впорядковане захоплення min(A, B) &rarr; max(A, B)).
 </p>
 
-<table>
+<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+  <colgroup>
+    <col style="width: 28%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+    <col style="width: 18%;">
+  </colgroup>
   <thead>
     <tr>
       <th>Метрика / Показник</th>
@@ -422,36 +483,36 @@
     </tr>
   </thead>
   <tbody>
-    <tr class="highlight-row">
-      <td><strong>Час обробки 2 млн транзакцій</strong></td>
-      <td><strong>67 мс</strong> <span class="badge badge-success">Абсолютний рекорд</span></td>
+    <tr class="highlight">
+      <td class="text-left"><strong>Час обробки 2 млн транзакцій</strong></td>
+      <td><strong>67 мс</strong> <span class="badge badge-success">Рекорд</span></td>
       <td>101 мс</td>
       <td>83 мс</td>
-      <td>2 333 мс (2.33 с)</td>
+      <td>2.33&nbsp;с (2333&nbsp;мс)</td>
     </tr>
     <tr>
-      <td><strong>Throughput (транзакцій/сек)</strong></td>
+      <td class="text-left"><strong>Throughput (транзакцій/сек)</strong></td>
       <td><strong>29 850 745 tx/s</strong></td>
       <td>19 801 979 tx/s</td>
       <td>24 096 385 tx/s</td>
       <td>856 934 tx/s</td>
     </tr>
     <tr>
-      <td><strong>System CPU Time (час ядра ОС)</strong></td>
-      <td><strong>0.01 с</strong> <span class="badge badge-success">Нуль витрат</span></td>
+      <td class="text-left"><strong>System CPU Time (час ядра ОС)</strong></td>
+      <td><strong>0.01 с</strong> <span class="badge badge-success">Рекорд</span></td>
       <td>0.06 с</td>
       <td>0.02 с</td>
       <td>0.09 с</td>
     </tr>
     <tr>
-      <td><strong>Пікова оперативна пам'ять</strong></td>
-      <td><strong>4.0 МБ</strong> (4 044 КБ)</td>
+      <td class="text-left"><strong>Пікова оперативна пам'ять</strong></td>
+      <td><strong>4.0 МБ</strong></td>
       <td>3.0 МБ</td>
-      <td><strong>34.3 МБ</strong> (у 8.5x більше!)</td>
+      <td><strong>34.3 МБ</strong> (у 8.5x більше)</td>
       <td>10.7 МБ</td>
     </tr>
     <tr>
-      <td><strong>Фінальний баланс банку</strong></td>
+      <td class="text-left"><strong>Фінальний баланс банку</strong></td>
       <td><strong>$5 002 000.00</strong> <span class="badge badge-success">ACID ОК</span></td>
       <td>$5 002 000.00</td>
       <td>$5 002 000.00</td>
@@ -459,15 +520,22 @@
     </tr>
   </tbody>
 </table>
-<p><strong>Висновки:</strong> <strong>Modern Free Pascal став беззаперечним лідером тесту з результатом 29.8 млн транзакцій на секунду</strong>, обійшовши C# .NET 8 (24.1 млн tx/s) на 24% та Classic Pascal (19.8 млн tx/s) на 51%. Використання <code>TSlimReaderWriterLock</code> дозволило читачам не блокувати одне одного, а пам'ять склала лише 4.0 МБ.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> <strong>Modern Free Pascal став беззаперечним лідером тесту з результатом 29.8 млн транзакцій на секунду</strong>, обійшовши C# .NET 8 (24.1 млн tx/s) на 24% та Classic Pascal (19.8 млн tx/s) на 51%. Використання <code>TSlimReaderWriterLock</code> дозволило читачам не блокувати одне одного, а пам'ять склала лише 4.0 МБ.</p>
 
-<h2>4. Зведена матриця та глобальні висновки</h2>
+<h2>5. Зведена матриця та глобальні висновки</h2>
 
-<table>
+<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+  <colgroup>
+    <col style="width: 30%;">
+    <col style="width: 20%;">
+    <col style="width: 17%;">
+    <col style="width: 17%;">
+    <col style="width: 16%;">
+  </colgroup>
   <thead>
     <tr>
       <th>Критерій оцінки</th>
-      <th>Modern Free Pascal (MFPC)</th>
+      <th>Modern Free Pascal</th>
       <th>Classic Free Pascal</th>
       <th>C# (.NET 8)</th>
       <th>Python 3.12</th>
@@ -475,49 +543,49 @@
   </thead>
   <tbody>
     <tr>
-      <td><strong>Чиста передача даних (CSP Channels)</strong></td>
-      <td><span class="badge badge-success">Лідер</span> (найвища швидкість)</td>
-      <td>Швидко, але роздуває пам'ять</td>
-      <td>Повільніше через ValueTask</td>
-      <td><span class="badge badge-danger">Непридатний (GIL)</span></td>
+      <td class="text-left"><strong>Передача даних (CSP Channels)</strong></td>
+      <td><span class="badge badge-success">Лідер</span> (швидко)</td>
+      <td>Фрагментує RAM</td>
+      <td>Повільніше (async)</td>
+      <td><span class="badge badge-danger">Непридатний</span></td>
     </tr>
     <tr>
-      <td><strong>Висококонкурентний стан (CAS / Locks)</strong></td>
-      <td><span class="badge badge-success">Лідер</span> (29.8 млн tx/s)</td>
+      <td class="text-left"><strong>Висококонкурентний ACID (CAS)</strong></td>
+      <td><span class="badge badge-success">Лідер</span> (29.8M tx/s)</td>
       <td>Повільніше на 51%</td>
-      <td>Висока (24.1 млн tx/s)</td>
-      <td>Повільно (0.85 млн tx/s)</td>
+      <td>24.1M tx/s</td>
+      <td>0.85M tx/s</td>
     </tr>
     <tr>
-      <td><strong>Синхронізація фаз (TBarrier)</strong></td>
-      <td><span class="badge badge-success">Відмінно</span> (495M cell/s)</td>
-      <td>Повільніше у 1.5 раза</td>
-      <td><span class="badge badge-success">Лідер</span> (724M cell/s)</td>
-      <td>Повільніше у 115 разів</td>
+      <td class="text-left"><strong>Синхронізація фаз (TBarrier)</strong></td>
+      <td><span class="badge badge-success">Відмінно</span> (495M/s)</td>
+      <td>333M/s</td>
+      <td><span class="badge badge-success">Лідер</span> (724M/s)</td>
+      <td>4.2M/s</td>
     </tr>
     <tr>
-      <td><strong>Утилізація оперативної пам'яті (RAM)</strong></td>
+      <td class="text-left"><strong>Утилізація RAM (пам'ять)</strong></td>
       <td><span class="badge badge-success">Еталон</span> (4 &ndash; 19 МБ)</td>
-      <td>3 &ndash; 95 МБ (фрагментація)</td>
+      <td>3 &ndash; 95 МБ</td>
       <td><span class="badge badge-warning">Висока</span> (34 &ndash; 50 МБ)</td>
-      <td>Середня (10 &ndash; 50 МБ)</td>
+      <td>10 &ndash; 50 МБ</td>
     </tr>
     <tr>
-      <td><strong>Ергономіка та безпека коду</strong></td>
-      <td><span class="badge badge-success">Сучасна</span> (типізовано, 0 покажчиків)</td>
-      <td><span class="badge badge-danger">Важка</span> (+50..120% boilerplate)</td>
-      <td><span class="badge badge-success">Відмінна</span> (C# 12)</td>
+      <td class="text-left"><strong>Ергономіка та безпека коду</strong></td>
+      <td><span class="badge badge-success">Сучасна</span> (0 покажчиків)</td>
+      <td><span class="badge badge-danger">+50..120% boilerplate</span></td>
+      <td><span class="badge badge-success">Відмінна</span></td>
       <td><span class="badge badge-success">Лаконічна</span></td>
     </tr>
   </tbody>
 </table>
 
-<h3>Підсумковий вердикт</h3>
+<h3>Підсумковий інженерний вердикт</h3>
 <ol>
-  <li><strong>Modern Free Pascal (MFPC)</strong> перетворює Pascal на високоефективну мову системного рівня для сучасних багатоядерних архітектур. Він поєднує швидкість нативного компільованого машинного коду без віртуальних машин (у 7 &ndash; 115 разів швидше за Python), мінімальне споживання RAM (у 5 &ndash; 8 разів менше за .NET 8) та надійність моделей Go/Rust без небезпечних сирих покажчиків.</li>
-  <li><strong>Classic Pascal</strong>, хоч і показує високу швидкість сирих циклів, абсолютно не пристосований до сучасних складних конвеєрів: відсутність вбудованих каналів та бар'єрів змушує писати сотні рядків небезпечного коду з викликами <code>New()/Dispose()</code>, що призводить до гігантської фрагментації пам'яті (до 95 МБ у DAG-тесті) та спалювання 60% процесорного часу в ядрі ОС на системних викликах <code>futex</code>.</li>
-  <li><strong>C# (.NET 8)</strong> є потужним суперником для чисельних розрахунків завдяки RyuJIT, проте суттєво поступається Modern Pascal у пропускній здатності міжпотокових каналів повідомлень та споживає у 4&ndash;8 разів більше оперативної пам'яті.</li>
-  <li><strong>Python 3.12</strong> через архітектурне обмеження GIL (Global Interpreter Lock) виявився абсолютно непридатним для реальних багатопотокових навантажень з обміном даними, колапсуючи на кожному тесті у десятки та сотні разів.</li>
+  <li><strong>Modern Free Pascal (MFPC)</strong> перетворює Pascal на високоефективну мову системного рівня для сучасних багатоядерних серверів. Він поєднує швидкість нативного компільованого машинного коду (у 7 &ndash; 115 разів швидше за Python), мінімальне споживання RAM (у 5 &ndash; 8 разів менше за .NET 8) та надійність моделей Go/Rust без ручного управління сирими покажчиками.</li>
+  <li><strong>Classic Pascal</strong> непридатний для складних асинхронних конвеєрів: відсутність каналів та бар'єрів змушує писати сотні рядків небезпечного коду з викликами <code>New()/Dispose()</code>, що призводить до вибуху пам'яті (до 95 МБ у DAG-тесті) та спалювання понад 60% часу в ядрі Linux на <code>futex</code>.</li>
+  <li><strong>C# (.NET 8)</strong> є потужним конкурентом для чисельних задач завдяки JIT-оптимізаціям, проте суттєво поступається Modern Pascal у пропускній здатності міжпотокових каналів повідомлень та споживає значно більше пам'яті через накладні витрати CLR.</li>
+  <li><strong>Python 3.12</strong> через архітектурне обмеження GIL непридатний для реальних висококонкурентних навантажень з інтенсивним обміном даними.</li>
 </ol>
 
 </body>

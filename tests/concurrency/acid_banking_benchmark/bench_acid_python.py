@@ -83,3 +83,4 @@ if __name__ == "__main__":
     print(f"Throughput: {TOTAL_TXS / took:.1f} tx/sec")
     print(f"Operations breakdown: Inquiries={TOTAL_TXS * 7 // 10}, Transfers={total_transfers}, CAS Direct Ops={total_cas_ops}")
     print(f"Final Total Bank Balance: ${final_total_money // 100}.{final_total_money % 100:02d}")
+
