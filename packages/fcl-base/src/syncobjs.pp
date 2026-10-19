@@ -88,11 +88,17 @@ type
       procedure Release;virtual;
    end;
 
-   { TLockGuard }
+   { TLockGuard
+
+     Releases the lock when the guard is finalized. A guard that holds a
+     lock cannot be copied (assignment, value parameter): the copy would
+     release the lock a second time, so copying raises ELockException. }
    generic TLockGuard<T:TSynchroObject> = record
      obj: T;
      class operator Initialize(var hdl: TLockGuard);
      class operator Finalize(var hdl: TLockGuard);
+     class operator AddRef(var hdl: TLockGuard);
+     class operator Copy(constref aSrc: TLockGuard; var aDst: TLockGuard);
      procedure Init(AObj: T);
    end;
 
@@ -416,6 +422,9 @@ Type
     Lock: TSlimReaderWriterLock;
     class operator Initialize(var aGuard: TSlimReadLockGuard);
     class operator Finalize(var aGuard: TSlimReadLockGuard);
+    // Copying a guard that holds the lock raises ELockException.
+    class operator AddRef(var aGuard: TSlimReadLockGuard);
+    class operator Copy(constref aSrc: TSlimReadLockGuard; var aDst: TSlimReadLockGuard);
     procedure Init(aLock: TSlimReaderWriterLock);
     procedure Release;
   end;
@@ -426,6 +435,9 @@ Type
     Lock: TSlimReaderWriterLock;
     class operator Initialize(var aGuard: TSlimWriteLockGuard);
     class operator Finalize(var aGuard: TSlimWriteLockGuard);
+    // Copying a guard that holds the lock raises ELockException.
+    class operator AddRef(var aGuard: TSlimWriteLockGuard);
+    class operator Copy(constref aSrc: TSlimWriteLockGuard; var aDst: TSlimWriteLockGuard);
     procedure Init(aLock: TSlimReaderWriterLock);
     procedure Release;
   end;
@@ -493,6 +505,10 @@ Type
     function GetEnumerator: TChannelEnumerator; inline;
   end;
 
+{ Raises ELockException for a copy of a guard that holds a lock. Public only
+  because TLockGuard is specialized in other units; do not call directly. }
+procedure LockGuardCopyError;
+
 implementation
 
 {$ifdef MSWindows}
@@ -528,6 +544,7 @@ Resourcestring
   SErrBarrierTooManyRemovals = 'Cannot remove more participants than are currently registered';
   SErrLockNotOwned        = 'Thread does not own the lock';
   SErrChannelClosed       = 'Channel is closed';
+  SErrGuardCopy           = 'A lock guard that holds a lock cannot be copied; pass it by var/const';
 
 { ---------------------------------------------------------------------
     Real syncobjs implementation
@@ -541,6 +558,11 @@ type
                      end;
   PLocalEventRec = ^TBasicEventState;
 {$ENDIF OS2}
+
+procedure LockGuardCopyError;
+begin
+  raise ELockException.Create(SErrGuardCopy);
+end;
 
 procedure TSynchroObject.Acquire;
 begin
@@ -1394,6 +1416,25 @@ begin
   if (hdl.obj=nil) then
     exit;
   hdl.obj.Release();
+end;
+
+class operator TLockGuard.AddRef(var hdl: TLockGuard);
+begin
+  // hdl is a bitwise copy (value parameter, array or record copy): it must
+  // not release the lock again when finalized.
+  if hdl.obj <> nil then
+  begin
+    hdl.obj := nil;
+    LockGuardCopyError;
+  end;
+end;
+
+class operator TLockGuard.Copy(constref aSrc: TLockGuard; var aDst: TLockGuard);
+begin
+  if @aSrc = @aDst then
+    exit;
+  if aSrc.obj <> nil then
+    LockGuardCopyError;
 end;
 
 procedure TLockGuard.Init(AObj:T);
@@ -2354,6 +2395,24 @@ begin
   aGuard.Release;
 end;
 
+class operator TSlimReadLockGuard.AddRef(var aGuard: TSlimReadLockGuard);
+begin
+  // aGuard is a bitwise copy: it must not release the lock again.
+  if aGuard.Lock <> nil then
+  begin
+    aGuard.Lock := nil;
+    LockGuardCopyError;
+  end;
+end;
+
+class operator TSlimReadLockGuard.Copy(constref aSrc: TSlimReadLockGuard; var aDst: TSlimReadLockGuard);
+begin
+  if @aSrc = @aDst then
+    Exit;
+  if aSrc.Lock <> nil then
+    LockGuardCopyError;
+end;
+
 procedure TSlimReadLockGuard.Init(aLock: TSlimReaderWriterLock);
 begin
   Release;
@@ -2380,6 +2439,24 @@ end;
 class operator TSlimWriteLockGuard.Finalize(var aGuard: TSlimWriteLockGuard);
 begin
   aGuard.Release;
+end;
+
+class operator TSlimWriteLockGuard.AddRef(var aGuard: TSlimWriteLockGuard);
+begin
+  // aGuard is a bitwise copy: it must not release the lock again.
+  if aGuard.Lock <> nil then
+  begin
+    aGuard.Lock := nil;
+    LockGuardCopyError;
+  end;
+end;
+
+class operator TSlimWriteLockGuard.Copy(constref aSrc: TSlimWriteLockGuard; var aDst: TSlimWriteLockGuard);
+begin
+  if @aSrc = @aDst then
+    Exit;
+  if aSrc.Lock <> nil then
+    LockGuardCopyError;
 end;
 
 procedure TSlimWriteLockGuard.Init(aLock: TSlimReaderWriterLock);

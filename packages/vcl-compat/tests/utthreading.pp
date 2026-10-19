@@ -473,6 +473,11 @@ type
     procedure TestSlimRWLockMisuse;
     procedure TestSlimRWLockTryTimeout;
     procedure TestSlimRWGuards;
+    // A bitwise copy of a lock guard must not release the lock a second
+    // time: copying an owning guard raises ELockException instead.
+    procedure TestSlimReadGuardCopy;
+    procedure TestSlimWriteGuardCopy;
+    procedure TestLockGuardCopy;
     procedure TestChannelCloseWakesReceiver;
     procedure TestChannelCloseWakesSender;
     procedure TestChannelDrainAfterClose;
@@ -3650,6 +3655,189 @@ begin
     AssertEquals('Second Release does nothing', 0, RW.ReaderCount);
   finally
     RW.Free;
+  end;
+end;
+
+type
+  { Counts Acquire/Release to observe what TLockGuard does. }
+  TCountingSynchro = class(TSynchroObject)
+  public
+    Acquired, Released: Integer;
+    procedure Acquire; override;
+    procedure Release; override;
+  end;
+  TCountingGuard = specialize TLockGuard<TCountingSynchro>;
+
+procedure TCountingSynchro.Acquire;
+begin
+  Inc(Acquired);
+end;
+
+procedure TCountingSynchro.Release;
+begin
+  Inc(Released);
+end;
+
+procedure TakeReadGuardByValue(G: TSlimReadLockGuard);
+begin
+end;
+
+procedure TakeWriteGuardByValue(G: TSlimWriteLockGuard);
+begin
+end;
+
+procedure TakeLockGuardByValue(G: TCountingGuard);
+begin
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimReadGuardCopy;
+var
+  RW: TSlimReaderWriterLock;
+
+  procedure Scope;
+  var
+    A, B: TSlimReadLockGuard;
+    Raised: Boolean;
+  begin
+    A.Init(RW);
+    AssertEquals('guard + other reader', 2, RW.ReaderCount);
+    Raised := False;
+    try
+      TakeReadGuardByValue(A);
+    except
+      on ELockException do
+        Raised := True;
+    end;
+    AssertTrue('copy by value rejected', Raised);
+    AssertEquals('value copy did not release', 2, RW.ReaderCount);
+    Raised := False;
+    try
+      B := A;
+    except
+      on ELockException do
+        Raised := True;
+    end;
+    AssertTrue('assignment rejected', Raised);
+    AssertEquals('assignment did not take the lock twice', 2, RW.ReaderCount);
+    AssertNull('target stays empty', B.Lock);
+  end;
+
+  procedure EmptyCopy;
+  var
+    A, B: TSlimReadLockGuard;
+  begin
+    B := A;
+    TakeReadGuardByValue(A);
+    AssertNull('empty copy allowed', B.Lock);
+  end;
+
+begin
+  RW := TSlimReaderWriterLock.Create;
+  try
+    // Another reader holds the lock: an extra EndRead from a guard copy
+    // would silently steal its read lock instead of failing.
+    RW.BeginRead;
+    Scope;
+    AssertEquals('only the guard released', 1, RW.ReaderCount);
+    RW.EndRead;
+    EmptyCopy;
+    AssertEquals('nothing held', 0, RW.ReaderCount);
+  finally
+    RW.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimWriteGuardCopy;
+var
+  RW: TSlimReaderWriterLock;
+
+  procedure Scope;
+  var
+    A, B: TSlimWriteLockGuard;
+    Raised: Boolean;
+  begin
+    A.Init(RW);
+    Raised := False;
+    try
+      TakeWriteGuardByValue(A);
+    except
+      on ELockException do
+        Raised := True;
+    end;
+    AssertTrue('copy by value rejected', Raised);
+    AssertTrue('still write locked', RW.IsWriteLocked);
+    Raised := False;
+    try
+      B := A;
+    except
+      on ELockException do
+        Raised := True;
+    end;
+    AssertTrue('assignment rejected', Raised);
+    AssertTrue('still write locked after assignment', RW.IsWriteLocked);
+  end;
+
+begin
+  RW := TSlimReaderWriterLock.Create;
+  try
+    Scope;
+    AssertFalse('released exactly once', RW.IsWriteLocked);
+    // The lock is usable again: a double EndWrite would have raised in
+    // the guard's finalization or corrupted the state.
+    AssertTrue('lock usable', RW.TryBeginWrite(0));
+    RW.EndWrite;
+  finally
+    RW.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestLockGuardCopy;
+var
+  S: TCountingSynchro;
+
+  procedure Scope;
+  var
+    A, B: TCountingGuard;
+    Raised: Boolean;
+  begin
+    A.Init(S);
+    Raised := False;
+    try
+      TakeLockGuardByValue(A);
+    except
+      on ELockException do
+        Raised := True;
+    end;
+    AssertTrue('copy by value rejected', Raised);
+    Raised := False;
+    try
+      B := A;
+    except
+      on ELockException do
+        Raised := True;
+    end;
+    AssertTrue('assignment rejected', Raised);
+    AssertEquals('not released by copies', 0, S.Released);
+  end;
+
+  procedure EmptyCopy;
+  var
+    A, B: TCountingGuard;
+  begin
+    B := A;
+    TakeLockGuardByValue(A);
+  end;
+
+begin
+  S := TCountingSynchro.Create;
+  try
+    Scope;
+    AssertEquals('acquired once', 1, S.Acquired);
+    AssertEquals('released once', 1, S.Released);
+    EmptyCopy;
+    AssertEquals('empty guards do not release', 1, S.Released);
+  finally
+    S.Free;
   end;
 end;
 

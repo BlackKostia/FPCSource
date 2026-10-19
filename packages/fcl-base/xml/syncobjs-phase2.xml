@@ -81,10 +81,27 @@
 
 <element name="TSlimReadLockGuard">
   <short>Managed record RAII guard for automatic <var>BeginRead</var> / <var>EndRead</var> on <var>TSlimReaderWriterLock</var>.</short>
+  <descr>
+    <p>A guard that holds the lock cannot be copied: assignment, passing by value and copying of arrays or records that contain it raise <var>ELockException</var> without releasing anything, because the copy would release the lock a second time. Copying an empty guard is allowed. Pass guards as <var>var</var> or <var>const</var>.</p>
+  </descr>
 </element>
 
 <element name="TSlimWriteLockGuard">
   <short>Managed record RAII guard for automatic <var>BeginWrite</var> / <var>EndWrite</var> on <var>TSlimReaderWriterLock</var>.</short>
+  <descr>
+    <p>Like <var>TSlimReadLockGuard</var>, a guard that holds the lock cannot be copied; copying raises <var>ELockException</var>.</p>
+  </descr>
+</element>
+
+<element name="TLockGuard">
+  <short>RAII guard that calls <var>Release</var> on a <var>TSynchroObject</var> when finalized.</short>
+  <descr>
+    <p>A guard that holds an object cannot be copied: the copy would call <var>Release</var> a second time. Copying raises <var>ELockException</var>; copying an empty guard is allowed.</p>
+  </descr>
+</element>
+
+<element name="LockGuardCopyError">
+  <short>Internal helper used by <var>TLockGuard</var>; do not call.</short>
 </element>
 
 <element name="TChannel">
