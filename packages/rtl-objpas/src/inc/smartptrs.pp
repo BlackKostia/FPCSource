@@ -141,6 +141,17 @@ type
     function Expired: Boolean; inline;
   end;
 
+{ Factories that infer T from the argument (with
+  {$modeswitch implicitfunctionspecialization} in the calling unit):
+    S := MakeScoped(TStringList.Create);
+    A := MakeArc(TMyCache.Create);
+  As with TScoped.Create/TArc.Create, the object or reference previously
+  held by the destination is released. }
+{$IFDEF FPC_HAS_CONSTRAINED_GENERIC_FORWARD}
+generic function MakeScoped<T: class>(AObj: T): specialize TScoped<T>;
+generic function MakeArc<T: class>(AObj: T): specialize TArc<T>;
+{$ENDIF FPC_HAS_CONSTRAINED_GENERIC_FORWARD}
+
 { Implementation helpers. They are in the interface only because the
   generic code above is specialized in other units; do not call directly. }
 procedure ScopedCopyError;
@@ -218,6 +229,22 @@ begin
   if InterlockedDecrement(ABlock^.Weak) = 0 then
     Dispose(ABlock);
 end;
+
+{ Factories }
+
+{$IFDEF FPC_HAS_CONSTRAINED_GENERIC_FORWARD}
+generic function MakeScoped<T>(AObj: T): specialize TScoped<T>;
+begin
+  { Result may be the destination variable, see TScoped.Create }
+  Result.Reset(AObj);
+end;
+
+generic function MakeArc<T>(AObj: T): specialize TArc<T>;
+begin
+  { Result may be the destination variable, see TArc.Create }
+  Result.Reset(AObj);
+end;
+{$ENDIF FPC_HAS_CONSTRAINED_GENERIC_FORWARD}
 
 { TScoped }
 

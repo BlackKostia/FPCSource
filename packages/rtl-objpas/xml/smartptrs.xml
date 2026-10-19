@@ -173,6 +173,22 @@
   <descr><p>A snapshot: in multi-threaded code use <var>TryLock</var> to both check and use the object.</p></descr>
 </element>
 
+<element name="MakeScoped">
+  <short>Returns a TScoped that owns AObj; T is inferred from the argument.</short>
+  <descr>
+    <p>With <var>{$modeswitch implicitfunctionspecialization}</var>: <var>S := MakeScoped(TStringList.Create)</var>. Same semantics as <var>TScoped.Create</var>: the object previously owned by the destination is freed. Available when the compiler defines <var>FPC_HAS_CONSTRAINED_GENERIC_FORWARD</var>.</p>
+  </descr>
+  <seealso><link id="TScoped.Create"/></seealso>
+</element>
+
+<element name="MakeArc">
+  <short>Returns a TArc that owns AObj; T is inferred from the argument.</short>
+  <descr>
+    <p>Same semantics as <var>TArc.Create</var>. Available when the compiler defines <var>FPC_HAS_CONSTRAINED_GENERIC_FORWARD</var>.</p>
+  </descr>
+  <seealso><link id="TArc.Create"/></seealso>
+</element>
+
 <element name="ScopedCopyError">
   <short>Internal helper; do not call.</short>
 </element>

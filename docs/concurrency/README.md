@@ -46,7 +46,18 @@ fpdoc-опис API, приклад у `examples/`, запис у `CHANGELOG-conc
 ## Збірка
 
 ```sh
-make clean all PP=<шлях до ppcx64 3.2.2> FPMAKEOPT="-T 12" -j12
+make clean PP=<шлях до ppcx64 3.2.2>
+make all PP=<шлях до ppcx64 3.2.2> FPMAKEOPT="-T 12" -j12
+```
+
+`clean` і `all` — окремими командами: у `make clean all -j12` цілі
+виконуються паралельно, і `all` може вирішити, що все вже зібрано
+(stamp-файл), коли `clean` уже все видалив — у результаті немає навіть
+`compiler/ppcx64`. Не компілюйте модулі пакетів вручну без `-FU`: `.ppu`
+у `packages/*/src` перекривають результат fpmake (`Can't find unit
+contnrs` під час `make all`).
+
+```sh
 ```
 
 **Важливо:** шлях до дерева джерел не повинен містити пробілів — makefile-и FPC

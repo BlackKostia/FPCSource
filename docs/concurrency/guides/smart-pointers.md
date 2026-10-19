@@ -65,6 +65,7 @@ end;
 | Член | Опис |
 |---|---|
 | `class function Create(AObj: T): TScoped` | Бере `AObj` у володіння. `S := TScoped.Create(X)` звільняє те, чим `S` володів раніше. |
+| `generic function MakeScoped<T>(AObj: T): TScoped<T>` | Те саме з виведенням типу: `S := MakeScoped(TStringList.Create)` (див. розділ 6). |
 | `procedure Reset(AObj: T = nil)` | Звільняє поточний об'єкт і бере `AObj` (`nil` — просто звільнити). Повторний `Reset` тим самим об'єктом нічого не робить. |
 | `function Release: T` | Віддає об'єкт без звільнення; відповідальність переходить до викликача. |
 | `function Move: TScoped` | Передає володіння: `B := A.Move` — `A` порожній, старий об'єкт `B` звільнено. |
@@ -124,6 +125,7 @@ end;
 | Член | Опис |
 |---|---|
 | `class function Create(AObj: T): TArc` | Бере `AObj` у володіння, лічильник = 1. |
+| `generic function MakeArc<T>(AObj: T): TArc<T>` | Те саме з виведенням типу: `A := MakeArc(TCatalog.Create)`. |
 | `procedure Reset(AObj: T = nil)` | Відпускає поточне посилання (останнє — звільняє об'єкт); з `AObj` починає володіти новим. |
 | `function IsAssigned: Boolean` | Чи є об'єкт. |
 | `function Get: T`, `property Obj: T` | Доступ до об'єкта. |
@@ -248,23 +250,64 @@ type
    одразу після `Future := nil`, а пізніше. Витоку немає (перевірено
    heaptrc), але не покладайтеся на точний момент.
 
-## 6. Обмеження компілятора
+## 6. Фабрики з виведенням типу й рішення щодо компілятора
 
-- Оператор `Implicit` між записом і параметром-типом `T` компілятор не
-  дозволяє перевантажити (`It is not possible to overload this operator`),
-  тому доступ до об'єкта — через `.Obj`/`.Get`, а створення — через
-  `Create`/`Reset`, а не `S := TStringList.Create`.
-- Глобальна узагальнена функція з обмеженням `T: class`, що повертає
-  `specialize TScoped<T>` (`MakeScoped(X)` з виведенням типу), не
-  компілюється: forward-оголошення в `interface` і реалізація отримують
-  різні CRC спеціалізації (`Forward declaration not solved`). Без
-  обмеження `T: class` помилки немає. Після виправлення в компіляторі
-  такі фабрики можна буде додати.
-- `Copy`/`AddRef` не можуть заборонити копіювання статично; див. п. 2.
+### `MakeScoped` / `MakeArc`
+
+```pascal
+{$modeswitch implicitfunctionspecialization}   // у модулі, що викликає
+var
+  L: specialize TScoped<TStringList>;
+  C: specialize TArc<TCatalog>;
+begin
+  L := MakeScoped(TStringList.Create);   // T = TStringList виводиться
+  C := MakeArc(TCatalog.Create);
+end;
+```
+
+Семантика та сама, що в `TScoped.Create`/`TArc.Create`: попередній об'єкт
+(посилання) змінної-приймача звільняється. Без перемикача режиму —
+`specialize MakeScoped<TStringList>(...)`.
+
+Фабрики потребують компілятора з виправленням forward-оголошень обмежених
+дженериків (макрос `FPC_HAS_CONSTRAINED_GENERIC_FORWARD`, ця гілка). Раніше
+реалізація функції, оголошеної в `interface` як `<T: class>`, не могла мати
+в заголовку `specialize TScoped<T>`: у реалізації обмеження не повторюються,
+і необмежений `T` не проходив перевірку `T: class` (`Class type expected`).
+Тепер така перевірка заголовка відкладається до зіставлення з оголошенням
+(`proc_add_definition`); якщо оголошення не знайдено — повторюється з тими
+самими помилками. На старому компіляторі модуль компілюється без фабрик.
+
+Відоме обмеження виведення типу (не пов'язане з `smartptrs`): виведення `T`
+з параметра типу `specialize TXxx<T>` для функції з **іншого модуля** не
+підтримується (`Wrong number of parameters`), а після попередньої неявної
+спеціалізації в тому самому виразі/підпрограмі дає `Internal error
+2021020905` — навіть без обмежень. Виведення з параметра типу `T`
+(як у `MakeScoped(X)`) працює.
+
+### Чому немає неявних перетворень
+
+Оператор неявного перетворення між записом і `T: class` технічно можливий
+(`class operator :=` у `{$mode objfpc}`, `Implicit` у `{$mode delphi}`;
+див. тести `tgenconstraint56/57`), але в модулі його **свідомо немає**:
+
+- `S := TStringList.Create` приховувало б передачу володіння;
+- `S2 := S1.Obj` тихо компілювалося б і давало подвійний `Free`;
+- неявне `L: TStringList := S` видавало б сирий вказівник поза контролем
+  власника.
+
+Тому доступ — через `.Obj`/`.Get`, створення — через `Create`/`Reset`/
+`MakeScoped`/`MakeArc`.
+
+### Копіювання `TScoped`
+
+`Copy`/`AddRef` не можуть заборонити копіювання статично; заборона діє під
+час виконання (див. п. 2). Статична заборона потребує розширення мови
+(некопійовані типи) — див. план у ADR-0007.
 
 ## 7. Тести й приклад
 
-- fpcunit: `packages/rtl-objpas/tests/utcsmartptrs.pp` (40 тестів:
+- fpcunit: `packages/rtl-objpas/tests/utcsmartptrs.pp` (44 тести:
   `TTestScoped`, `TTestArc`, `TTestWeak`, `TTestArcStress`), входять до
   `testrunner.rtlobjpas.pp`. Окремий запуск:
   ```sh

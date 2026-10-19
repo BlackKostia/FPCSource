@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### Виправлено
+- Компілятор: forward-оголошення дженерик-підпрограми з обмеженнями в
+  implementation/програмі (де обмеження треба повторювати) з параметром
+  типу `T` не зіставлялося з реалізацією: «Function is already declared»
+  і **внутрішній збій компілятора**. Тести `tests/test/tgenconstraint41`–`58`
+  (18 нових; повний набір `tests/` — без нових падінь відносно baseline).
+- RAII-гарди `SyncObjs` (`TLockGuard<T>`, `TSlimReadLockGuard`,
+  `TSlimWriteLockGuard`) не мали операторів `AddRef`/`Copy`: копія гарда
+  (присвоєння, передача за значенням) при фіналізації **відпускала
+  блокування вдруге**. Для `TSlimReadLockGuard` це тихо знімало чуже
+  читацьке блокування, для write-гарда — `ELockException` у фіналізації.
+  Тепер копія гарда, що тримає блокування, піднімає `ELockException` і нічого
+  не відпускає; копія порожнього гарда дозволена. Регресійні тести
+  `TTestSyncObjsPhase2.TestSlimReadGuardCopy`, `TestSlimWriteGuardCopy`,
+  `TestLockGuardCopy` (на старому коді падають усі три).
 - `TThreadPool` (`System.Threading`): задача, поставлена в глобальну чергу саме
   тоді, коли робочий потік ішов у сон, чекала **40 с** (`IdleTimeout`), хоча
   вільні потоки були. Потік перевіряв глобальну чергу до `FQueueEvent.ResetEvent`,
@@ -208,6 +222,16 @@
   `eventloop.promise`.
 
 ### Додано
+- Компілятор: реалізація дженерик-підпрограми, оголошеної з обмеженнями
+  в `interface` чи в записі/класі, може мати в заголовку дженерики, що
+  вимагають ці обмеження (`function MakeBox<T>(...): specialize TBox<T>`
+  при `TBox<T: class>`). Раніше реалізація не повторює обмежень, і
+  заголовок падав з `Class type expected`; тепер такі перевірки
+  відкладаються до зіставлення з оголошенням, а без нього повторюються з
+  тими самими помилками. Нова ознака `FPC_HAS_CONSTRAINED_GENERIC_FORWARD`.
+- `smartptrs`: фабрики `MakeScoped<T: class>`/`MakeArc<T: class>` з
+  виведенням типу (`S := MakeScoped(TStringList.Create)`), під
+  `FPC_HAS_CONSTRAINED_GENERIC_FORWARD`.
 - Розумні вказівники на керованих записах — модуль `smartptrs`
   (`System.SmartPtrs`) у `rtl-objpas` (розділ 3.1 дорожньої карти):
   `TScoped<T>` — одноосібне володіння, `Free` на виході з області видимості

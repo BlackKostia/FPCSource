@@ -2,6 +2,7 @@ unit utcsmartptrs;
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
+{$modeswitch implicitfunctionspecialization}
 
 interface
 
@@ -45,6 +46,8 @@ type
     procedure TestDynArrayCopyRaises;
     procedure TestFieldOfClass;
     procedure TestStringList;
+    procedure TestMakeScoped;
+    procedure TestMakeScopedOverExistingFreesOld;
   end;
 
   TTestArc = class(TTestCase)
@@ -63,6 +66,8 @@ type
     procedure TestEquality;
     procedure TestDynArray;
     procedure TestFreesOnException;
+    procedure TestMakeArc;
+    procedure TestMakeArcOverExistingReleasesOld;
   end;
 
   TTestWeak = class(TTestCase)
@@ -409,6 +414,31 @@ begin
   AssertEquals('second', 'b', L.Obj[1]);
 end;
 
+procedure TTestScoped.TestMakeScoped;
+var
+  S: TScopedTracked;
+  L: specialize TScoped<TStringList>;
+begin
+  { explicit and inferred specialization }
+  S := specialize MakeScoped<TTracked>(TTracked.Create(3));
+  AssertEquals('explicit', 3, S.Obj.Value);
+  L := MakeScoped(TStringList.Create);
+  L.Obj.Add('x');
+  AssertEquals('inferred', 1, L.Obj.Count);
+  S.Reset;
+  AssertEquals('freed', 1, Destroyed);
+end;
+
+procedure TTestScoped.TestMakeScopedOverExistingFreesOld;
+var
+  S: TScopedTracked;
+begin
+  S := MakeScoped(TTracked.Create(1));
+  S := MakeScoped(TTracked.Create(2));
+  AssertEquals('old freed', 1, Destroyed);
+  AssertEquals('new kept', 2, S.Obj.Value);
+end;
+
 { TTestArc }
 
 procedure TTestArc.SetUp;
@@ -595,6 +625,34 @@ begin
     on EAbort do ;
   end;
   AssertEquals('local copy released', 1, A.UseCount);
+end;
+
+procedure TTestArc.TestMakeArc;
+var
+  A, B: TArcTracked;
+begin
+  A := specialize MakeArc<TTracked>(TTracked.Create(5));
+  B := MakeArc(TTracked.Create(6));
+  AssertEquals('explicit', 5, A.Obj.Value);
+  AssertEquals('inferred', 6, B.Obj.Value);
+  AssertEquals('one owner', 1, B.UseCount);
+  A.Reset;
+  B.Reset;
+  AssertEquals('both freed', 2, Destroyed);
+end;
+
+procedure TTestArc.TestMakeArcOverExistingReleasesOld;
+var
+  A, Keep: TArcTracked;
+begin
+  A := MakeArc(TTracked.Create(1));
+  Keep := A;
+  A := MakeArc(TTracked.Create(2));
+  AssertEquals('old kept alive by Keep', 0, Destroyed);
+  AssertEquals('Keep is sole owner', 1, Keep.UseCount);
+  Keep.Reset;
+  AssertEquals('old freed', 1, Destroyed);
+  AssertEquals('new', 2, A.Obj.Value);
 end;
 
 { TTestWeak }

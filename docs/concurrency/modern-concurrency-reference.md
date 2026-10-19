@@ -1001,8 +1001,8 @@ end.
 
 | Тип | Призначення | Ключові члени |
 |---|---|---|
-| `generic TScoped<T: class>` | Одноосібне володіння, `Free` на виході з області видимості (і при винятку) | `Create`, `Reset`, `Release`, `Move`, `Swap`, `Obj`, `IsAssigned` |
-| `generic TArc<T: class>` | Спільне володіння з атомарним лічильником | `Create`, `Reset`, `Obj`, `UseCount`, `=`/`<>` |
+| `generic TScoped<T: class>` | Одноосібне володіння, `Free` на виході з області видимості (і при винятку) | `Create`/`MakeScoped`, `Reset`, `Release`, `Move`, `Swap`, `Obj`, `IsAssigned` |
+| `generic TArc<T: class>` | Спільне володіння з атомарним лічильником | `Create`/`MakeArc`, `Reset`, `Obj`, `UseCount`, `=`/`<>` |
 | `generic TWeak<T: class>` | Спостереження без володіння, розрив циклів | `Create`/`Assign`, `Lock`, `TryLock`, `Expired`, `Reset` |
 | `ESmartPtrError` | Спроба скопіювати `TScoped`, що володіє об'єктом | нащадок `EInvalidOpException` |
 
