@@ -73,6 +73,19 @@ type
     procedure TestBuilderTaskSurvivesCompletion;
   end;
 
+  { await, IFuture.Value and ITask.Wait suspend a fiber instead of blocking }
+  TTestNonBlockingAwait = class(TTestCase)
+  published
+    procedure TestAsyncReturnsAtFirstAwait;
+    // 1000 coroutines wait 100 ms each on one loop thread: done in ~100 ms
+    procedure TestManyCoroutinesOnOneLoopThread;
+    procedure TestWaitForAllSuspends;
+    procedure TestExceptionThroughAwait;
+    procedure TestSpawnProcedure;
+    procedure TestAwaitOutsideFiberBlocks;
+    procedure TestGeneratorWaitStillBlocks;
+  end;
+
 implementation
 
 { TTestFibers }
@@ -823,9 +836,209 @@ begin
   AssertEquals('Task after completion is the same', 7, LBuilder.Task.Value);
 end;
 
+{ TTestNonBlockingAwait }
+
+type
+  { A future completed by a loop timer: waiting for it needs no thread. }
+  TLoopDelay = class
+  private
+    FSource: specialize TTaskCompletionSource<Integer>;
+    FValue: Integer;
+    procedure OnTimer(ATimerId: Int64);
+  public
+    class function Start(const ALoop: IEventLoop; AMs: Cardinal; AValue: Integer): specialize IFuture<Integer>; static;
+  end;
+
+procedure TLoopDelay.OnTimer(ATimerId: Int64);
+begin
+  FSource.SetResult(FValue);
+  FSource.Free;
+  Free;
+end;
+
+class function TLoopDelay.Start(const ALoop: IEventLoop; AMs: Cardinal; AValue: Integer): specialize IFuture<Integer>;
+var
+  D: TLoopDelay;
+begin
+  D := TLoopDelay.Create;
+  D.FValue := AValue;
+  D.FSource := specialize TTaskCompletionSource<Integer>.Create;
+  Result := D.FSource.Task;
+  ALoop.SetTimer(AMs, @D.OnTimer, False);
+end;
+
+function SlowFuture(AMs, AValue: Integer): specialize IFuture<Integer>;
+begin
+  Result := TTask.specialize Future<Integer>(
+    function: Integer
+    begin
+      Sleep(AMs);
+      Result := AValue;
+    end);
+end;
+
+procedure TTestNonBlockingAwait.TestAsyncReturnsAtFirstAwait;
+var
+  F: specialize IFuture<Integer>;
+  T0, Took: QWord;
+  Before: Boolean;
+begin
+  Before := False;
+  T0 := GetTickCount64;
+  F := TFiber.specialize Async<Integer>(
+    function: Integer
+    begin
+      Before := True; { runs synchronously up to the first await }
+      Result := (await SlowFuture(200, 41)) + 1;
+    end);
+  Took := GetTickCount64 - T0;
+  AssertTrue('Code before the first await ran in the call', Before);
+  AssertTrue('Async returned at the first await (took ' + IntToStr(Took) + ' ms)', Took < 150);
+  AssertFalse('Result not ready yet', F.Status = TTaskStatus.Completed);
+  AssertEquals('Result after the await', 42, F.Value);
+end;
+
+procedure TTestNonBlockingAwait.TestManyCoroutinesOnOneLoopThread;
+const
+  N = 1000;
+var
+  Loop: IEventLoop;
+  Done: Integer;
+  Sum: Int64;
+  I: Integer;
+  T0, Took: QWord;
+begin
+  Loop := TEventLoop.Create(bkAuto);
+  Loop.RunOnce(0); { this thread is now the loop thread }
+  Done := 0;
+  Sum := 0;
+  T0 := GetTickCount64;
+  for I := 1 to N do
+    TFiber.Spawn(
+      procedure
+      var
+        V: Integer;
+      begin
+        { If await blocked, the first coroutine would block this thread
+          and no timer could ever fire. }
+        V := await TLoopDelay.Start(Loop, 100, 1);
+        Inc(Sum, V);
+        Inc(Done);
+      end, Loop, 32 * 1024);
+  AssertTrue('All coroutines are suspended', Done = 0);
+  while (Done < N) and (GetTickCount64 - T0 < 10000) do
+    Loop.RunOnce(10);
+  Took := GetTickCount64 - T0;
+  AssertEquals('All coroutines finished', N, Done);
+  AssertEquals('Every coroutine got its value', N, Sum);
+  AssertTrue(Format('%d waits of 100 ms overlapped (took %d ms)', [N, Took]), Took < 2000);
+end;
+
+procedure TTestNonBlockingAwait.TestWaitForAllSuspends;
+var
+  F: specialize IFuture<Integer>;
+  T0: QWord;
+begin
+  T0 := GetTickCount64;
+  F := TFiber.specialize Async<Integer>(
+    function: Integer
+    var
+      A, B: specialize IFuture<Integer>;
+    begin
+      A := SlowFuture(150, 1);
+      B := SlowFuture(150, 2);
+      TTask.WaitForAll([A, B]);
+      Result := A.Value + B.Value;
+    end);
+  AssertTrue('WaitForAll suspended the coroutine', GetTickCount64 - T0 < 100);
+  AssertEquals('Both results', 3, F.Value);
+end;
+
+procedure TTestNonBlockingAwait.TestExceptionThroughAwait;
+var
+  F: specialize IFuture<Integer>;
+  Msg: string;
+begin
+  F := TFiber.specialize Async<Integer>(
+    function: Integer
+    begin
+      Result := await TTask.specialize Future<Integer>(
+        function: Integer
+        begin
+          Sleep(20);
+          raise EFiberTestError.Create('awaited failure');
+        end);
+    end);
+  Msg := '';
+  try
+    F.Value;
+  except
+    on E: EAggregateException do
+      Msg := E.InnerExceptions[0].Message;
+  end;
+  AssertEquals('The awaited exception reaches the Async future', 'awaited failure', Msg);
+end;
+
+procedure TTestNonBlockingAwait.TestSpawnProcedure;
+var
+  T: ITask;
+  Flag: Boolean;
+begin
+  Flag := False;
+  T := TFiber.Spawn(
+    procedure
+    begin
+      await SlowFuture(50, 0);
+      Flag := True;
+    end);
+  AssertTrue('Procedure coroutine finished', T.Wait(5000));
+  AssertTrue('Its body ran to the end', Flag);
+end;
+
+procedure TTestNonBlockingAwait.TestAwaitOutsideFiberBlocks;
+var
+  T0: QWord;
+  V: Integer;
+begin
+  T0 := GetTickCount64;
+  V := await SlowFuture(100, 7);
+  AssertEquals('Value', 7, V);
+  AssertTrue('Outside a fiber await waits in place', GetTickCount64 - T0 >= 90);
+end;
+
+procedure WaitingProducer(const Yield: specialize TGenerator<Integer>.TYieldProc);
+var
+  I: Integer;
+begin
+  for I := 1 to 3 do
+    Yield(SlowFuture(10, I * 10).Value); { must block, not switch }
+end;
+
+procedure TTestNonBlockingAwait.TestGeneratorWaitStillBlocks;
+var
+  Gen: specialize TGenerator<Integer>;
+  V, Sum, Count: Integer;
+begin
+  Gen := specialize TGenerator<Integer>.Create(@WaitingProducer);
+  try
+    Sum := 0;
+    Count := 0;
+    for V in Gen do
+    begin
+      Inc(Sum, V);
+      Inc(Count);
+    end;
+    AssertEquals('All values produced', 3, Count);
+    AssertEquals('Sum', 60, Sum);
+  finally
+    Gen.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTestFibers);
   RegisterTest(TTestGenerators);
   RegisterTest(TTestStateMachines);
   RegisterTest(TTestAsyncRobustness);
+  RegisterTest(TTestNonBlockingAwait);
 end.

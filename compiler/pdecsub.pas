@@ -3167,7 +3167,15 @@ var
              begin
                consume(_ID);
                if assigned(pd) and (pd.typ=procdef) then
-                 include(tprocdef(pd).implprocoptions,pio_async);
+                 begin
+                   include(tprocdef(pd).implprocoptions,pio_async);
+                   if assigned(tprocdef(pd).returndef) and
+                      not is_void(tprocdef(pd).returndef) and
+                      not (is_interface(tprocdef(pd).returndef) or
+                           is_class(tprocdef(pd).returndef) or
+                           (tprocdef(pd).returndef.typ = recorddef)) then
+                     Message(parser_e_async_must_return_task_or_future);
+                 end;
                parse_proc_direc:=true;
                exit;
              end;

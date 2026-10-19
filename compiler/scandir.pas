@@ -311,6 +311,22 @@ unit scandir;
           end;
       end;
 
+    procedure dir_asyncmode;
+      var
+        s : string;
+      begin
+        current_scanner.skipspace;
+        s:=current_scanner.readid;
+        if (s='AUTO') or (s='DEFAULT') then
+          current_module.asyncmode:=0
+        else if s='FIBER' then
+          current_module.asyncmode:=1
+        else if s='STATEMACHINE' then
+          current_module.asyncmode:=2
+        else
+          Message1(scan_e_illegal_asyncmode,s);
+      end;
+
     procedure dir_asmmode;
       var
         s : string;
@@ -2203,6 +2219,7 @@ unit scandir;
         AddDirective('APPTYPE',directive_all, @dir_apptype);
         AddDirective('ASMCPU',directive_all, @dir_asmcpu);
         AddDirective('ASMMODE',directive_all, @dir_asmmode);
+        AddDirective('ASYNCMODE',directive_all, @dir_asyncmode);
         AddDirective('ASSERTIONS',directive_all, @dir_assertions);
         AddDirective('BOOLEVAL',directive_all, @dir_booleval);
         AddDirective('BITPACKING',directive_all, @dir_bitpacking);

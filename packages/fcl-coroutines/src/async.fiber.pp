@@ -22,9 +22,19 @@ uses
   SysUtils, Classes, SyncObjs,
   System.Threading,
   eventloop.types, eventloop.core, eventloop.sockets,
-  async.types;
+  async.types, async.statemachine;
 
 type
+  { Internal: body of a TFiber.Async coroutine. A class rather than an
+    anonymous function, which FPC cannot compile inside a generic method
+    that is specialized in another unit. }
+  generic TFiberAsyncBody<T> = class
+  public
+    Func: specialize TFunc<T>;
+    Source: specialize TTaskCompletionSource<T>;
+    procedure Execute;
+  end;
+
   TFiber = class
   private
     FStackBase: Pointer;
@@ -34,6 +44,9 @@ type
     FState: TFiberState;
     FProc: TFiberProc;
     FMethod: TFiberMethod;
+    FProcRef: TProc;
+    FSuspendOnWait: Boolean;
+    FFreeOnFinish: Boolean;
     FException: Exception;
     FEventLoop: IEventLoop;
     FUserData: Pointer;
@@ -49,12 +62,17 @@ type
     procedure InitStack;
     procedure WaitParked;
     class procedure ResumeFromOtherThread(AFiber: TFiber); static;
+    procedure Init(AStackSize: Cardinal; ALoop: IEventLoop);
     procedure Run;
     procedure OnSleepTimer(ATimerId: Int64);
     procedure OnContinuation(ATask: ITask);
+    procedure ScheduleResume;
+    procedure SuspendUntil(const ATask: ITask);
+    class procedure Start(AFiber: TFiber); static;
   public
     constructor Create(AProc: TFiberProc; AStackSize: Cardinal = 128 * 1024; ALoop: IEventLoop = nil); overload;
     constructor Create(AMethod: TFiberMethod; AStackSize: Cardinal = 128 * 1024; ALoop: IEventLoop = nil); overload;
+    constructor Create(const AProc: TProc; AStackSize: Cardinal = 128 * 1024; ALoop: IEventLoop = nil); overload;
     destructor Destroy; override;
 
     { Execute / resume fiber execution }
@@ -73,6 +91,19 @@ type
     { Non-blocking sleep: yields fiber to event loop until timer expiry }
     class procedure Sleep(AMilliseconds: Cardinal; ALoop: IEventLoop = nil); static;
 
+    { Runs AFunc as a coroutine and returns a future for its result, like an
+      async method: AFunc runs in the calling thread (or, with ALoop, in the
+      loop's thread) until it first waits for an unfinished task - with
+      await, IFuture.Value, ITask.Wait or TTask.WaitForAll - and the call
+      returns then. The coroutine continues when the task has finished: in
+      ALoop's thread, or without a loop in a pool thread. The fiber frees
+      itself when AFunc returns. }
+    generic class function Async<T>(const AFunc: specialize TFunc<T>; ALoop: IEventLoop = nil;
+      AStackSize: Cardinal = 128 * 1024): specialize IFuture<T>; static;
+    { The same for a procedure; the task completes when AProc returns. }
+    class function Spawn(const AProc: TProc; ALoop: IEventLoop = nil;
+      AStackSize: Cardinal = 128 * 1024): ITask; static;
+
     { Non-blocking socket read/write inside fibers }
     class function AwaitRead(ASocket: IAsyncSocket; ABuffer: Pointer; ACount: NativeInt): NativeInt; static;
     class function AwaitWrite(ASocket: IAsyncSocket; ABuffer: Pointer; ACount: NativeInt): NativeInt; static;
@@ -81,6 +112,11 @@ type
     property EventLoop: IEventLoop read FEventLoop write FEventLoop;
     property FatalException: Exception read FException;
     property UserData: Pointer read FUserData write FUserData;
+    { True (the default): a wait without timeout for an unfinished task in
+      this fiber (await, IFuture.Value, ITask.Wait, TTask.WaitForAll)
+      suspends the fiber instead of blocking the thread. Generators set it
+      to False: their fiber must only switch at Yield. }
+    property SuspendOnWait: Boolean read FSuspendOnWait write FSuspendOnWait;
   end;
 
 implementation
@@ -201,25 +237,28 @@ constructor TFiber.Create(AProc: TFiberProc; AStackSize: Cardinal; ALoop: IEvent
 begin
   inherited Create;
   FProc := AProc;
-  FMethod := nil;
-  FParked := 1;
-  FStackSize := (AStackSize + 4095) and not 4095; { Round to 4KB page }
-  if FStackSize < 16384 then
-    FStackSize := 16384;
-  FState := fsCreated;
-  FEventLoop := ALoop;
-  FException := nil;
-  FUserData := nil;
-  InitStack;
+  Init(AStackSize, ALoop);
 end;
 
 constructor TFiber.Create(AMethod: TFiberMethod; AStackSize: Cardinal; ALoop: IEventLoop);
 begin
   inherited Create;
-  FProc := nil;
   FMethod := AMethod;
+  Init(AStackSize, ALoop);
+end;
+
+constructor TFiber.Create(const AProc: TProc; AStackSize: Cardinal; ALoop: IEventLoop);
+begin
+  inherited Create;
+  FProcRef := AProc;
+  Init(AStackSize, ALoop);
+end;
+
+procedure TFiber.Init(AStackSize: Cardinal; ALoop: IEventLoop);
+begin
   FParked := 1;
-  FStackSize := (AStackSize + 4095) and not 4095;
+  FSuspendOnWait := True;
+  FStackSize := (AStackSize + 4095) and not 4095; { Round to 4KB page }
   if FStackSize < 16384 then
     FStackSize := 16384;
   FState := fsCreated;
@@ -259,7 +298,9 @@ begin
     if Assigned(FProc) then
       FProc
     else if Assigned(FMethod) then
-      FMethod;
+      FMethod
+    else if Assigned(FProcRef) then
+      FProcRef();
     FState := fsCompleted;
   except
     on E: Exception do
@@ -327,6 +368,13 @@ begin
   WriteBarrier;
   InterlockedExchange(FParked, 1);
 
+  if FFreeOnFinish and (FState in [fsCompleted, fsFaulted]) then
+  begin
+    { An Async fiber has passed its outcome on to its future. }
+    Free;
+    Exit;
+  end;
+
   if (FState = fsFaulted) and (FException <> nil) then
   begin
     { FatalException stays owned by the fiber; raise a new exception of the
@@ -374,14 +422,115 @@ begin
 end;
 
 procedure TFiber.OnContinuation(ATask: ITask);
+begin
+  ScheduleResume;
+end;
+
+procedure TFiber.ScheduleResume;
 var
   LFiber: TFiber;
 begin
   LFiber := Self;
+  { A plain work item, not a task: a task created here would inherit the
+    cancellation token of whatever task runs in this thread, and a canceled
+    resume would leave the fiber suspended for ever. }
   if FEventLoop <> nil then
     FEventLoop.Post(procedure begin TFiber.ResumeFromOtherThread(LFiber); end)
   else
-    TTask.Run(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
+    TThreadPool.Default.QueueWorkItem(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
+end;
+
+procedure TFiber.SuspendUntil(const ATask: ITask);
+var
+  LFiber: TFiber;
+begin
+  LFiber := Self;
+  FState := fsSuspended;
+  { The completion callback runs in the thread that completes the task, or
+    at once if it is already complete; ScheduleResume waits until the fiber
+    has really switched out. }
+  TaskOnComplete(ATask,
+    procedure
+    begin
+      LFiber.ScheduleResume;
+    end);
+  Yield;
+end;
+
+class procedure TFiber.Start(AFiber: TFiber);
+var
+  LFiber: TFiber;
+begin
+  LFiber := AFiber;
+  if (LFiber.FEventLoop <> nil) and not LFiber.FEventLoop.InLoopThread then
+    LFiber.FEventLoop.Post(procedure begin LFiber.Resume; end)
+  else
+    LFiber.Resume;
+end;
+
+procedure TFiberAsyncBody.Execute;
+begin
+  try
+    Source.SetResult(Func());
+  except
+    Source.SetException(Exception(AcquireExceptionObject));
+  end;
+  Source.Free; { the task stays valid }
+  Free;
+end;
+
+generic class function TFiber.Async<T>(const AFunc: specialize TFunc<T>; ALoop: IEventLoop;
+  AStackSize: Cardinal): specialize IFuture<T>;
+var
+  LBody: specialize TFiberAsyncBody<T>;
+  LFiber: TFiber;
+begin
+  { Without a loop, a coroutine started from a coroutine stays on that
+    coroutine's loop (like an async call inside an async method). }
+  if (ALoop = nil) and (Current <> nil) then
+    ALoop := Current.EventLoop;
+  LBody := specialize TFiberAsyncBody<T>.Create;
+  LBody.Func := AFunc;
+  LBody.Source := specialize TTaskCompletionSource<T>.Create;
+  Result := LBody.Source.Task;
+  LFiber := TFiber.Create(@LBody.Execute, AStackSize, ALoop);
+  LFiber.FFreeOnFinish := True;
+  Start(LFiber);
+end;
+
+class function TFiber.Spawn(const AProc: TProc; ALoop: IEventLoop; AStackSize: Cardinal): ITask;
+var
+  LSource: specialize TTaskCompletionSource<Boolean>;
+  LFiber: TFiber;
+begin
+  if (ALoop = nil) and (GCurrentFiber <> nil) then
+    ALoop := GCurrentFiber.FEventLoop;
+  LSource := specialize TTaskCompletionSource<Boolean>.Create;
+  Result := LSource.Task;
+  LFiber := TFiber.Create(
+    procedure
+    begin
+      try
+        AProc();
+        LSource.SetResult(True);
+      except
+        LSource.SetException(Exception(AcquireExceptionObject));
+      end;
+      LSource.Free;
+    end, AStackSize, ALoop);
+  LFiber.FFreeOnFinish := True;
+  Start(LFiber);
+end;
+
+{ Installed as System.Threading.TaskAwaitHook }
+function FiberAwaitHook(const aTask: ITask): Boolean;
+var
+  LFiber: TFiber;
+begin
+  LFiber := GCurrentFiber;
+  Result := (LFiber <> nil) and LFiber.FSuspendOnWait and (aTask <> nil);
+  if Result then
+    LFiber.SuspendUntil(aTask);
 end;
 
 generic class function TFiber.Await<T>(const AFuture: specialize IFuture<T>): T;
@@ -401,10 +550,7 @@ begin
   if LFiber = nil then
     raise EFiberException.Create('TFiber.Await must be called from inside an active fiber');
 
-  LFiber.FState := fsSuspended;
-  AFuture.ContinueWith(@LFiber.OnContinuation);
-
-  Yield;
+  LFiber.SuspendUntil(AFuture);
 
   Result := AFuture.Value;
 end;
@@ -429,10 +575,7 @@ begin
   if LFiber = nil then
     raise EFiberException.Create('TFiber.Await must be called from inside an active fiber');
 
-  LFiber.FState := fsSuspended;
-  ATask.ContinueWith(@LFiber.OnContinuation);
-
-  Yield;
+  LFiber.SuspendUntil(ATask);
 
   if ATask.Status in [TTaskStatus.Canceled, TTaskStatus.Exception] then
     ATask.Wait;
@@ -462,7 +605,7 @@ begin
   end
   else
   begin
-    TTask.Run(
+    TThreadPool.Default.QueueWorkItem(
       procedure
       begin
         SysUtils.Sleep(AMilliseconds);
@@ -496,7 +639,7 @@ begin
       if LFiber.FEventLoop <> nil then
         LFiber.FEventLoop.Post(procedure begin TFiber.ResumeFromOtherThread(LFiber); end)
       else
-        TTask.Run(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
+        TThreadPool.Default.QueueWorkItem(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
     end);
 
   Yield;
@@ -530,7 +673,7 @@ begin
       if LFiber.FEventLoop <> nil then
         LFiber.FEventLoop.Post(procedure begin TFiber.ResumeFromOtherThread(LFiber); end)
       else
-        TTask.Run(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
+        TThreadPool.Default.QueueWorkItem(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
     end);
 
   Yield;
@@ -540,4 +683,9 @@ begin
   Result := LBytesWritten;
 end;
 
+initialization
+  TaskAwaitHook := @FiberAwaitHook;
+finalization
+  if TaskAwaitHook = @FiberAwaitHook then
+    TaskAwaitHook := nil;
 end.

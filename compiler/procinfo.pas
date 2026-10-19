@@ -115,6 +115,9 @@ unit procinfo;
 
           { label for nested exits }
           nestedexitlabel : tlabelsym;
+          { async routines (unit pasync): the role of this routine in an async
+            routine and the related state; owned by this procinfo }
+          asyncinfo : TObject;
 
           { The code for the routine itself, excluding entry and
             exit code. This is a linked list of tai classes.
@@ -273,6 +276,8 @@ implementation
          localrefsyms := nil;
          localrefdefs.free;
          localrefdefs := nil;
+         asyncinfo.free;
+         asyncinfo := nil;
       end;
 
     procedure tprocinfo.destroy_tree;

@@ -872,6 +872,91 @@ type
     destructor Destroy; override;
   end;
 
+  { TCompletionState }
+
+  { Holds the outcome of a TTaskCompletionSource until its task reads it. }
+  TCompletionState = class(TInterfacedObject)
+  private
+    FError: Exception;
+  public
+    destructor Destroy; override;
+    procedure RaiseStoredError;
+  end;
+
+  { TTaskCompletionSource }
+
+  { Manual completion source for a typed future.
+
+    Task is a future that is not started until SetResult, SetException or
+    SetCanceled is called: waiting for it does not occupy a pool thread.
+    The task stays valid after the source is freed. Freeing a source that
+    was never completed cancels its task, so that nobody waits forever. }
+  generic TTaskCompletionSource<TResult> = class
+  public type
+    TFutureT = specialize IFuture<TResult>;
+  private type
+    TValueState = class(TCompletionState)
+    public
+      Value: TResult;
+      function Take: TResult;
+    end;
+  private
+    FTask: TFutureT;
+    FState: TValueState;
+    FStateRef: IInterface;
+    FCompleted: LongInt;
+    function Claim: Boolean;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function SetResult(const AResult: TResult): Boolean;
+    { Takes ownership of AException, also when it returns False. }
+    function SetException(const AException: Exception): Boolean;
+    function SetCanceled: Boolean;
+    property Task: TFutureT read FTask;
+  end;
+
+  { TAsyncStateMachine }
+
+  TAsyncStepFunc = reference to function: Boolean;
+
+  { Internal: drives an async routine that the compiler translated into a
+    state machine ($ASYNCMODE STATEMACHINE). The step function returns True
+    when it has suspended at an await, False when the routine has finished.
+    Not intended for direct use. }
+  TAsyncStateMachine = class
+  private
+    FStep: TAsyncStepFunc;
+    procedure Run;
+  protected
+    procedure Complete; virtual; abstract;
+    procedure Fail(aError: Exception); virtual; abstract;
+  public
+    { Runs the first step in the calling thread. }
+    procedure Start(const aStep: TAsyncStepFunc);
+    { Called by the step at an await: returns False if aTask has already
+      finished (the step continues), otherwise arranges for the next step to
+      run in a pool thread once aTask has finished and returns True. }
+    function AwaitTask(const aTask: ITask): Boolean;
+  end;
+
+  generic TAsyncStateMachineOf<T> = class(TAsyncStateMachine)
+  public type
+    TResultFunc = specialize TFunc<T>;
+    TSourceT = specialize TTaskCompletionSource<T>;
+    TFutureT = specialize IFuture<T>;
+  private
+    FSource: TSourceT;
+    FGetResult: TResultFunc;
+  protected
+    procedure Complete; override;
+    procedure Fail(aError: Exception); override;
+  public
+    constructor Create(const aGetResult: TResultFunc);
+    destructor Destroy; override;
+    function Task: TFutureT;
+  end;
+
   { TITaskHelper }
 
   TITaskHelper = type helper for ITask
@@ -1212,6 +1297,24 @@ type
 function GetThreadPoolInteractive(APool: TThreadPool): Boolean;
 procedure SetThreadPoolInteractive(APool: TThreadPool; AValue: Boolean);
 
+type
+  { Suspends the calling coroutine until aTask has finished and returns True,
+    or returns False at once when the caller does not run in a coroutine that
+    can be suspended; the caller then blocks as usual. }
+  TTaskAwaitHook = function(const aTask: ITask): Boolean;
+
+var
+  { Installed by a coroutine library (fcl-coroutines installs one for
+    TFiber). Waits without a timeout - ITask.Wait, IFuture.Value, the await
+    operator, TTask.WaitForAll - call it, so that they suspend the coroutine
+    instead of blocking its operating-system thread. }
+  TaskAwaitHook: TTaskAwaitHook = nil;
+
+{ Calls aProc once aTask has finished, in the thread that completes it, or at
+  once in the calling thread if it already has. Unlike ContinueWith it
+  creates no task, so it is never canceled and needs no pool thread. }
+procedure TaskOnComplete(const aTask: ITask; const aProc: TProcRef);
+
 {
   These must be exposed, otherwise they cannot be used inside generic methods :/
 
@@ -1293,6 +1396,20 @@ procedure SetThreadPoolInteractive(APool: TThreadPool; AValue: Boolean);
 
 begin
   aPool.FInteractive:=aValue;
+end;
+
+procedure TaskOnComplete(const aTask: ITask; const aProc: TProcRef);
+
+var
+  Proc: TProcRef;
+
+begin
+  Proc:=aProc;
+  (aTask as TTask).AddCompleteEvent(
+    procedure(aCompleted: ITask)
+    begin
+      Proc();
+    end);
 end;
 
 { *********************************************************************
@@ -4272,6 +4389,16 @@ begin
     Runchecks;
     Exit;
     end;
+  // Inside a coroutine: suspend it instead of blocking the thread.
+  if (aTimeout=INFINITE) and Assigned(TaskAwaitHook) and TaskAwaitHook(Self) then
+    begin
+    Result:=IsComplete;
+    if Result then
+      begin
+      RunChecks;
+      Exit;
+      end;
+    end;
   NeedSync:=(TThread.CurrentThread.ThreadID=MainThreadID) and FParams.Pool.Interactive;
   if Not NeedSync then
     begin
@@ -4627,6 +4754,13 @@ begin
   Result:=True;
   if Length(aTasks)=0 then
     Exit;
+  // Inside a coroutine: suspend it until each task has finished; the code
+  // below then only collects the results.
+  if (aTimeout=INFINITE) and Assigned(TaskAwaitHook) then
+    for TaskI in aTasks do
+      if not (TaskI as TTask).IsComplete then
+        if not TaskAwaitHook(TaskI) then
+          Break;
   Watch:=TStopWatch.StartNew;
   ExceptionCount:=0;
   CompletedCount:=0;
@@ -6752,6 +6886,179 @@ end;
 { *********************************************************************
   Auxiliary
   *********************************************************************}
+
+{ *********************************************************************
+  TCompletionState, TTaskCompletionSource
+  *********************************************************************}
+
+destructor TCompletionState.Destroy;
+begin
+  FreeAndNil(FError);
+  inherited Destroy;
+end;
+
+procedure TCompletionState.RaiseStoredError;
+var
+  LError: Exception;
+begin
+  LError:=FError;
+  if LError=nil then
+    Exit;
+  // The task takes over the exception object.
+  FError:=nil;
+  raise LError;
+end;
+
+function TTaskCompletionSource.TValueState.Take: TResult;
+begin
+  RaiseStoredError;
+  Result:=Value;
+end;
+
+constructor TTaskCompletionSource.Create;
+var
+  LState: TValueState;
+  LRef: IInterface;
+begin
+  inherited Create;
+  LState:=TValueState.Create;
+  LRef:=LState;
+  FState:=LState;
+  FStateRef:=LRef;
+  // The body runs only once the source has been completed. It refers to the
+  // shared state, not to the source, which may already be freed by then.
+  FTask:=specialize TFuture<TResult>.Create(nil,nil,
+    function: TResult
+    begin
+      if LRef=nil then;
+      Result:=LState.Take;
+    end,
+    TThreadPool.Default);
+end;
+
+destructor TTaskCompletionSource.Destroy;
+begin
+  if Claim then
+    FTask.Cancel;
+  FTask:=nil;
+  FStateRef:=nil;
+  inherited Destroy;
+end;
+
+function TTaskCompletionSource.Claim: Boolean;
+begin
+  Result:=InterlockedCompareExchange(FCompleted,1,0)=0;
+end;
+
+function TTaskCompletionSource.SetResult(const AResult: TResult): Boolean;
+begin
+  Result:=Claim;
+  if not Result then
+    Exit;
+  FState.Value:=AResult;
+  FTask.Start;
+end;
+
+function TTaskCompletionSource.SetException(const AException: Exception): Boolean;
+begin
+  Result:=Claim;
+  if not Result then
+    begin
+    AException.Free;
+    Exit;
+    end;
+  FState.FError:=AException;
+  FTask.Start;
+end;
+
+function TTaskCompletionSource.SetCanceled: Boolean;
+begin
+  Result:=Claim;
+  if not Result then
+    Exit;
+  // A task that has not been started completes as Canceled at once.
+  FTask.Cancel;
+end;
+
+{ *********************************************************************
+  TAsyncStateMachine
+  *********************************************************************}
+
+procedure TAsyncStateMachine.Start(const aStep: TAsyncStepFunc);
+begin
+  FStep:=aStep;
+  Run;
+end;
+
+procedure TAsyncStateMachine.Run;
+begin
+  try
+    // After a suspending step another thread may already run the next one
+    // and free this object: touch nothing once the step returned True.
+    if FStep() then
+      Exit;
+    Complete;
+  except
+    Fail(Exception(AcquireExceptionObject));
+  end;
+  // Drop the step (and with it the routine's captured variables).
+  FStep:=nil;
+  Free;
+end;
+
+function TAsyncStateMachine.AwaitTask(const aTask: ITask): Boolean;
+var
+  LSelf: TAsyncStateMachine;
+begin
+  Result:=not (aTask.Status in [TTaskStatus.Completed,TTaskStatus.Canceled,TTaskStatus.Exception]);
+  if not Result then
+    Exit;
+  LSelf:=Self;
+  // Always continue in a pool thread: if aTask finishes while it is being
+  // subscribed, the callback runs at once in this thread, which is still
+  // inside the step.
+  TaskOnComplete(aTask,
+    procedure
+    begin
+      TThreadPool.Default.QueueWorkItem(
+        procedure
+        begin
+          LSelf.Run;
+        end);
+    end);
+end;
+
+constructor TAsyncStateMachineOf.Create(const aGetResult: TResultFunc);
+begin
+  inherited Create;
+  FGetResult:=aGetResult;
+  FSource:=TSourceT.Create;
+end;
+
+destructor TAsyncStateMachineOf.Destroy;
+begin
+  FGetResult:=nil;
+  FreeAndNil(FSource);
+  inherited Destroy;
+end;
+
+function TAsyncStateMachineOf.Task: TFutureT;
+begin
+  Result:=FSource.Task;
+end;
+
+procedure TAsyncStateMachineOf.Complete;
+begin
+  if Assigned(FGetResult) then
+    FSource.SetResult(FGetResult())
+  else
+    FSource.SetResult(Default(T));
+end;
+
+procedure TAsyncStateMachineOf.Fail(aError: Exception);
+begin
+  FSource.SetException(aError);
+end;
 
 Procedure InitThreading;
 

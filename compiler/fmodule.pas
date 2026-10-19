@@ -177,6 +177,7 @@ interface
         longversion   : cardinal;  { longer version than what fits in the ppu header }
         moduleflags   : tmoduleflags; { ppu flags that do not need to be known by just reading the ppu header }
         islibrary     : boolean;  { if it is a library (win32 dll) }
+        asyncmode     : byte;     { $ASYNCMODE: 0 auto, 1 fiber, 2 statemachine }
         IsPackage     : boolean;
         change_endian : boolean;  { if the unit is loaded on a system with a different endianess than it was compiled on }
         bytesizeofppureal : byte; { size of real constants embedded inside PPU }

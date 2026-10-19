@@ -494,6 +494,9 @@ scan_f_unterminated_multiline_string=02119_F_Unterminated multi-line string star
 scan_e_improperly_indented_multiline_string=02120_E_Incorrectly indented multi-line string (need $1 whitespace chars) starting at line $2, column $3.
 % The multi-line string does not have the proper indentation, every line
 % must have at least the number of spaces as in the last line.
+scan_e_illegal_asyncmode=02123_E_Illegal async mode specified "$1"
+% When you specify an async mode with the \var{\{\$ASYNCMODE xxx\}} directive,
+% the compiler didn't recognize the mode you specified. Valid values are AUTO, FIBER, STATEMACHINE.
 %\end{description}
 #
 # Parser
@@ -1732,6 +1735,10 @@ parser_e_stmt_expr_no_finally=03378_E_try..finally cannot be used as an expressi
 parser_e_stmt_expr_anon_needs_type=03379_E_Anonymous functions in a statement expression require a procedural variable or function reference type
 % A statement expression with anonymous functions as values can only be assigned or passed
 % to a procedural variable or a function reference.
+parser_e_async_must_return_task_or_future=03380_E_Async function must return ITask or IFuture<T>
+% An async function must have a return type of ITask or IFuture<T>, or be a procedure.
+parser_e_await_only_in_async=03381_E_Await can only be used inside an async routine or active fiber
+% The await operator suspends execution until the awaited task is complete. It can only be used within routines declared as async or executing within a fiber.
 %
 % \end{description}
 %

@@ -9,12 +9,18 @@
     for details about the copyright.
 }
 {$mode objfpc}{$H+}
+{$modeswitch functionreferences}
+{$modeswitch anonymousfunctions}
 
 unit fclasync;
 
 interface
 
 uses
+  SysUtils,
+  System.Threading,
+  eventloop.types,
+  eventloop.core,
   async.types,
   async.fiber,
   async.generator,
@@ -26,10 +32,37 @@ type
   EFiberException = async.types.EFiberException;
   EAsyncException = async.types.EAsyncException;
   IAsyncStateMachine = async.types.IAsyncStateMachine;
+  TProc = async.types.TProc;
 
   TFiber = async.fiber.TFiber;
   TAsyncTaskBuilder = async.statemachine.TAsyncTaskBuilder;
 
+{ Ergonomic modern async helper functions }
+
+{ Run asynchronous function returning IFuture<T> without blocking caller thread }
+generic function RunAsync<T>(const AFunc: specialize TFunc<T>; ALoop: IEventLoop = nil; AStackSize: Cardinal = 128 * 1024): specialize IFuture<T>;
+
+{ Run asynchronous procedure returning ITask without blocking caller thread }
+function SpawnAsync(const AProc: TProc; ALoop: IEventLoop = nil; AStackSize: Cardinal = 128 * 1024): ITask;
+
+{ Non-blocking sleep: yields fiber to event loop / pool until timer expiry }
+procedure AsyncSleep(AMilliseconds: Cardinal; ALoop: IEventLoop = nil);
+
 implementation
+
+generic function RunAsync<T>(const AFunc: specialize TFunc<T>; ALoop: IEventLoop; AStackSize: Cardinal): specialize IFuture<T>;
+begin
+  Result := TFiber.specialize Async<T>(AFunc, ALoop, AStackSize);
+end;
+
+function SpawnAsync(const AProc: TProc; ALoop: IEventLoop; AStackSize: Cardinal): ITask;
+begin
+  Result := TFiber.Spawn(AProc, ALoop, AStackSize);
+end;
+
+procedure AsyncSleep(AMilliseconds: Cardinal; ALoop: IEventLoop);
+begin
+  TFiber.Sleep(AMilliseconds, ALoop);
+end;
 
 end.

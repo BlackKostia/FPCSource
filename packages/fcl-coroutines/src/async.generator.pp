@@ -93,6 +93,8 @@ begin
   FHasValue := False;
   FException := nil;
   FFiber := TFiber.Create(@FiberProc, AStackSize);
+  { The fiber may only switch at Yield: a wait in the producer blocks. }
+  FFiber.SuspendOnWait := False;
 end;
 
 constructor TGenerator.Create(const AProducer: TMethodProducer; AStackSize: Cardinal);
@@ -104,6 +106,8 @@ begin
   FHasValue := False;
   FException := nil;
   FFiber := TFiber.Create(@FiberProc, AStackSize);
+  { The fiber may only switch at Yield: a wait in the producer blocks. }
+  FFiber.SuspendOnWait := False;
 end;
 
 destructor TGenerator.Destroy;

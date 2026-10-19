@@ -23,45 +23,8 @@ uses
   async.types;
 
 type
-  { Holds the outcome of a TTaskCompletionSource until its task reads it. }
-  TCompletionState = class(TInterfacedObject)
-  private
-    FError: Exception;
-  public
-    destructor Destroy; override;
-    procedure RaiseStoredError;
-  end;
-
-  { Manual Task Completion Source for typed results.
-
-    Task is a future that is not started until SetResult, SetException or
-    SetCanceled is called: waiting for it does not occupy a pool thread.
-    The task stays valid after the source is freed. Freeing a source that
-    was never completed cancels its task, so that nobody waits forever. }
-  generic TTaskCompletionSource<TResult> = class
-  public type
-    TFutureT = specialize IFuture<TResult>;
-  private type
-    TValueState = class(TCompletionState)
-    public
-      Value: TResult;
-      function Take: TResult;
-    end;
-  private
-    FTask: TFutureT;
-    FState: TValueState;
-    FStateRef: IInterface;
-    FCompleted: LongInt;
-    function Claim: Boolean;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    function SetResult(const AResult: TResult): Boolean;
-    { Takes ownership of AException, also when it returns False. }
-    function SetException(const AException: Exception): Boolean;
-    function SetCanceled: Boolean;
-    property Task: TFutureT read FTask;
-  end;
+  { TTaskCompletionSource<T> now lives in System.Threading, which the
+    compiler's state-machine async routines need on every platform. }
 
   { State machine method builder for typed futures }
   generic TAsyncTaskMethodBuilder<TResult> = record
@@ -99,101 +62,6 @@ type
   end;
 
 implementation
-
-{ TCompletionState }
-
-destructor TCompletionState.Destroy;
-begin
-  FreeAndNil(FError);
-  inherited Destroy;
-end;
-
-procedure TCompletionState.RaiseStoredError;
-var
-  LError: Exception;
-begin
-  LError := FError;
-  if LError = nil then
-    Exit;
-  { The task takes over the exception object. }
-  FError := nil;
-  raise LError;
-end;
-
-{ TTaskCompletionSource<TResult>.TValueState }
-
-function TTaskCompletionSource.TValueState.Take: TResult;
-begin
-  RaiseStoredError;
-  Result := Value;
-end;
-
-{ TTaskCompletionSource<TResult> }
-
-constructor TTaskCompletionSource.Create;
-var
-  LState: TValueState;
-  LRef: IInterface;
-begin
-  inherited Create;
-  LState := TValueState.Create;
-  LRef := LState;
-  FState := LState;
-  FStateRef := LRef;
-  { The body runs only once the source has been completed. It refers to the
-    shared state, not to the source, which may already be freed by then. }
-  FTask := specialize TFuture<TResult>.Create(nil, nil,
-    function: TResult
-    begin
-      if LRef = nil then;
-      Result := LState.Take;
-    end,
-    TThreadPool.Default);
-end;
-
-destructor TTaskCompletionSource.Destroy;
-begin
-  if Claim then
-    FTask.Cancel;
-  FTask := nil;
-  FStateRef := nil;
-  inherited Destroy;
-end;
-
-function TTaskCompletionSource.Claim: Boolean;
-begin
-  Result := InterlockedCompareExchange(FCompleted, 1, 0) = 0;
-end;
-
-function TTaskCompletionSource.SetResult(const AResult: TResult): Boolean;
-begin
-  Result := Claim;
-  if not Result then
-    Exit;
-  FState.Value := AResult;
-  FTask.Start;
-end;
-
-function TTaskCompletionSource.SetException(const AException: Exception): Boolean;
-begin
-  Result := Claim;
-  if not Result then
-  begin
-    AException.Free;
-    Exit;
-  end;
-  FState.FError := AException;
-  FTask.Start;
-end;
-
-function TTaskCompletionSource.SetCanceled: Boolean;
-begin
-  Result := Claim;
-  if not Result then
-    Exit;
-  { A task that has not been started completes as Canceled at once. }
-  FTask.Cancel;
-end;
 
 { TAsyncTaskMethodBuilder<TResult> }
 

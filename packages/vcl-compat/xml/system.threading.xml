@@ -251,6 +251,24 @@ if not Pool.SetMaxWorkerThreads(4) then
 <short>Changes the <link id="TThreadPool.Interactive"/> setting of a pool</short>
 </element>
 
+<element name="TTaskAwaitHook">
+<short>Function type of <link id="TaskAwaitHook"/>: suspends the calling coroutine until a task has finished, or returns <var>False</var> if the caller is not a suspendable coroutine</short>
+</element>
+
+<element name="TaskAwaitHook">
+<short>Hook through which waits without timeout suspend a coroutine instead of blocking its thread; installed by <file>fcl-coroutines</file></short>
+<descr>
+<p><link id="ITask.Wait"/> and <link id="TTask.WaitForAll"/> without a timeout, and therefore <link id="IFuture.Value"/> and the <var>await</var> operator, call the hook before blocking. When it returns <var>True</var> the task has finished and the wait completes without blocking the thread. The unit <file>async.fiber</file> installs a hook that suspends the current <var>TFiber</var>.</p>
+</descr>
+</element>
+
+<element name="TaskOnComplete">
+<short>Calls a procedure once a task has finished, without creating a continuation task</short>
+<descr>
+<p>The procedure runs in the thread that completes the task, or at once in the calling thread if the task is already finished. Unlike <link id="ITask.ContinueWith"/> it never runs on the pool, is not affected by cancellation tokens and cannot be canceled. Keep it short: it delays the thread that completed the task.</p>
+</descr>
+</element>
+
 <!-- ================= TThreadPoolStats ================= -->
 
 <element name="TThreadPoolStats">
@@ -552,7 +570,7 @@ if not Pool.SetMaxWorkerThreads(4) then
 <li><var>EOperationCancelled</var> if the task was canceled or its cancellation token has been canceled (also when the token is canceled after the task completed);</li>
 <li><link id="EAggregateException"/> with all collected exceptions if the task or one of its child tasks raised an exception. The exceptions are handed over to the raised object, so a second <var>Wait</var> on the same task does not raise them again.</li>
 </ul>
-<p>Calling <var>Wait</var> from a pool thread blocks that thread. Waiting in many tasks for other tasks of the same pool can use up all its workers; prefer <link id="ITask.ContinueWith"/> or <link id="TITaskHelper.ThenBy"/> there. In the main thread of an <link id="TThreadPool.Interactive">Interactive</link> pool, <var>Wait</var> keeps processing <var>TThread.Synchronize</var> requests.</p>
+<p>Inside a coroutine (see <link id="TaskAwaitHook"/>), <var>Wait</var> without a timeout suspends the coroutine instead of blocking. Elsewhere, calling <var>Wait</var> from a pool thread blocks that thread. Waiting in many tasks for other tasks of the same pool can use up all its workers; prefer <link id="ITask.ContinueWith"/> or <link id="TITaskHelper.ThenBy"/> there. In the main thread of an <link id="TThreadPool.Interactive">Interactive</link> pool, <var>Wait</var> keeps processing <var>TThread.Synchronize</var> requests.</p>
 </descr>
 </element>
 
