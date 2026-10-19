@@ -56,6 +56,23 @@ type
     procedure TestAsyncStateMachineExecution;
   end;
 
+  { Regression tests for fibers, generators and completion sources }
+  TTestAsyncRobustness = class(TTestCase)
+  published
+    // A future that completes while the fiber is still switching out must
+    // not resume the fiber on another thread before it has yielded.
+    procedure TestAwaitWithoutLoopUnderRace;
+    procedure TestFiberExceptionClassPreserved;
+    procedure TestFiberCannotResumeItself;
+    procedure TestGeneratorExceptionIsNotFreedTwice;
+    // Pending completion sources must not occupy pool threads.
+    procedure TestManyPendingCompletionSources;
+    procedure TestCompletionSourceFreedBeforeCompletion;
+    procedure TestCompletionSourceKeepsExceptionClass;
+    procedure TestCompletionSourceCompletesOnce;
+    procedure TestBuilderTaskSurvivesCompletion;
+  end;
+
 implementation
 
 { TTestFibers }
@@ -549,8 +566,266 @@ begin
   AssertEquals('Async State Machine result', 60, LFut.Value);
 end;
 
+{ TTestAsyncRobustness }
+
+type
+  EFiberTestError = class(Exception);
+
+  TAwaitRunner = class
+  public
+    Value: Integer;
+    procedure Run;
+  end;
+
+procedure TAwaitRunner.Run;
+begin
+  { The future is usually done by the time ContinueWith is attached, so the
+    continuation races with the fiber's Yield. }
+  Value := TFiber.specialize Await<Integer>(TTask.specialize Future<Integer>(
+    function: Integer
+    begin
+      Result := 42;
+    end));
+end;
+
+procedure TTestAsyncRobustness.TestAwaitWithoutLoopUnderRace;
+const
+  Rounds = 2000;
+var
+  LRunner: TAwaitRunner;
+  LFiber: TFiber;
+  I: Integer;
+  LStart: QWord;
+begin
+  LRunner := TAwaitRunner.Create;
+  try
+    for I := 1 to Rounds do
+    begin
+      LRunner.Value := 0;
+      { No event loop: the fiber is resumed by a pool task. }
+      LFiber := TFiber.Create(@LRunner.Run, 64 * 1024, nil);
+      try
+        LFiber.Resume;
+        LStart := GetTickCount64;
+        while (LFiber.State <> fsCompleted) and (LFiber.State <> fsFaulted) do
+        begin
+          if GetTickCount64 - LStart > 5000 then
+            Fail('Fiber did not finish in round ' + IntToStr(I));
+          ThreadSwitch;
+        end;
+        AssertEquals('Fiber finished normally in round ' + IntToStr(I), Ord(fsCompleted), Ord(LFiber.State));
+        AssertEquals('Awaited value in round ' + IntToStr(I), 42, LRunner.Value);
+      finally
+        LFiber.Free;
+      end;
+    end;
+  finally
+    LRunner.Free;
+  end;
+end;
+
+procedure RaiseTestError;
+begin
+  raise EFiberTestError.Create('typed failure');
+end;
+
+procedure TTestAsyncRobustness.TestFiberExceptionClassPreserved;
+var
+  LFiber: TFiber;
+  LCaught: Boolean;
+begin
+  LFiber := TFiber.Create(@RaiseTestError);
+  try
+    LCaught := False;
+    try
+      LFiber.Resume;
+    except
+      on E: EFiberTestError do
+      begin
+        LCaught := True;
+        AssertEquals('Message', 'typed failure', E.Message);
+      end;
+    end;
+    AssertTrue('The exception keeps its class', LCaught);
+    AssertNotNull('FatalException is kept by the fiber', LFiber.FatalException);
+    AssertEquals('FatalException class', EFiberTestError, LFiber.FatalException.ClassType);
+  finally
+    LFiber.Free;
+  end;
+end;
+
+var
+  GSelfResumeRaised: Boolean;
+
+procedure ResumeCurrentFiber;
+begin
+  try
+    TFiber.Current.Resume;
+  except
+    on E: EInvalidFiberOperation do
+      GSelfResumeRaised := True;
+  end;
+end;
+
+procedure TTestAsyncRobustness.TestFiberCannotResumeItself;
+var
+  LFiber: TFiber;
+begin
+  GSelfResumeRaised := False;
+  LFiber := TFiber.Create(@ResumeCurrentFiber);
+  try
+    LFiber.Resume;
+    AssertTrue('Resuming the running fiber raises EInvalidFiberOperation', GSelfResumeRaised);
+    AssertEquals('Fiber completed', Ord(fsCompleted), Ord(LFiber.State));
+  finally
+    LFiber.Free;
+  end;
+end;
+
+procedure FailingProducer(const Yield: specialize TGenerator<Integer>.TYieldProc);
+begin
+  Yield(1);
+  Yield(2);
+  raise EFiberTestError.Create('producer failed');
+end;
+
+procedure TTestAsyncRobustness.TestGeneratorExceptionIsNotFreedTwice;
+var
+  LGen: specialize TGenerator<Integer>;
+  LSum: Integer;
+  LCaught: Boolean;
+  V: Integer;
+begin
+  LGen := specialize TGenerator<Integer>.Create(@FailingProducer);
+  try
+    LSum := 0;
+    LCaught := False;
+    try
+      for V in LGen do
+        Inc(LSum, V);
+    except
+      on E: EFiberTestError do
+        LCaught := True; { the handler frees E }
+    end;
+    AssertTrue('Producer exception reaches the consumer', LCaught);
+    AssertEquals('Values before the failure', 3, LSum);
+  finally
+    { Before the fix this freed the same exception object a second time. }
+    LGen.Free;
+  end;
+end;
+
+procedure TTestAsyncRobustness.TestManyPendingCompletionSources;
+var
+  LSources: array of specialize TTaskCompletionSource<Integer>;
+  LCount, I: Integer;
+  LTasks: array of ITask;
+  LCompleter: ITask;
+begin
+  { Far more pending sources than the default pool has threads. }
+  LCount := 4 * TThreadPool.Default.MaxWorkerThreads + 16;
+  SetLength(LSources, LCount);
+  SetLength(LTasks, LCount);
+  for I := 0 to LCount - 1 do
+  begin
+    LSources[I] := specialize TTaskCompletionSource<Integer>.Create;
+    LTasks[I] := LSources[I].Task;
+  end;
+  try
+    { Completing them needs a pool thread; with every thread blocked in a
+      pending source this used to deadlock. }
+    LCompleter := TTask.Run(
+      procedure
+      var
+        K: Integer;
+      begin
+        for K := 0 to LCount - 1 do
+          LSources[K].SetResult(K);
+      end);
+    AssertTrue('Completer ran', LCompleter.Wait(10000));
+    AssertTrue('All tasks completed', TTask.WaitForAll(LTasks, 10000));
+    for I := 0 to LCount - 1 do
+      AssertEquals('Value ' + IntToStr(I), I, specialize IFuture<Integer>(LTasks[I]).Value);
+  finally
+    for I := 0 to LCount - 1 do
+      LSources[I].Free;
+  end;
+end;
+
+procedure TTestAsyncRobustness.TestCompletionSourceFreedBeforeCompletion;
+var
+  LTcs: specialize TTaskCompletionSource<string>;
+  LFut: specialize IFuture<string>;
+  LCanceled: Boolean;
+begin
+  LTcs := specialize TTaskCompletionSource<string>.Create;
+  LFut := LTcs.Task;
+  LTcs.Free;
+  AssertTrue('Task of a freed source is finished', LFut.Status = TTaskStatus.Canceled);
+  LCanceled := False;
+  try
+    LFut.Value;
+  except
+    on E: EOperationCancelled do
+      LCanceled := True;
+  end;
+  AssertTrue('Waiting raises EOperationCancelled instead of hanging', LCanceled);
+end;
+
+procedure TTestAsyncRobustness.TestCompletionSourceKeepsExceptionClass;
+var
+  LTcs: specialize TTaskCompletionSource<Integer>;
+  LFut: specialize IFuture<Integer>;
+  LClass: TClass;
+begin
+  LTcs := specialize TTaskCompletionSource<Integer>.Create;
+  try
+    LFut := LTcs.Task;
+    LTcs.SetException(EFiberTestError.Create('typed'));
+    LClass := nil;
+    try
+      LFut.Value;
+    except
+      on E: EAggregateException do
+        LClass := E.InnerExceptions[0].ClassType;
+    end;
+    AssertEquals('Inner exception keeps its class', EFiberTestError, LClass);
+  finally
+    LTcs.Free;
+  end;
+end;
+
+procedure TTestAsyncRobustness.TestCompletionSourceCompletesOnce;
+var
+  LTcs: specialize TTaskCompletionSource<Integer>;
+begin
+  LTcs := specialize TTaskCompletionSource<Integer>.Create;
+  try
+    AssertTrue('First SetResult', LTcs.SetResult(1));
+    AssertFalse('Second SetResult', LTcs.SetResult(2));
+    AssertFalse('SetCanceled after completion', LTcs.SetCanceled);
+    AssertFalse('SetException after completion (frees the exception)', LTcs.SetException(Exception.Create('late')));
+    AssertEquals('First value wins', 1, LTcs.Task.Value);
+  finally
+    LTcs.Free;
+  end;
+end;
+
+procedure TTestAsyncRobustness.TestBuilderTaskSurvivesCompletion;
+var
+  LBuilder: specialize TAsyncTaskMethodBuilder<Integer>;
+  LTask: specialize IFuture<Integer>;
+begin
+  LBuilder := specialize TAsyncTaskMethodBuilder<Integer>.Create;
+  LTask := LBuilder.Task;
+  LBuilder.SetResult(7);
+  AssertEquals('Result through the task taken before', 7, LTask.Value);
+  AssertEquals('Task after completion is the same', 7, LBuilder.Task.Value);
+end;
+
 initialization
   RegisterTest(TTestFibers);
   RegisterTest(TTestGenerators);
   RegisterTest(TTestStateMachines);
+  RegisterTest(TTestAsyncRobustness);
 end.

@@ -4211,7 +4211,11 @@ implementation
                consume(_ID);
                again:=true;
              end
-           else if (current_scanner.pattern='AWAIT') then
+           { await is a contextual keyword: an identifier named "await" that is
+             in scope (a variable, function, ...) keeps its normal meaning, so
+             existing code using that name still compiles }
+           else if (current_scanner.pattern='AWAIT') and
+                   not searchsym(current_scanner.pattern,srsym,srsymtable) then
              begin
                consume(_ID);
                p1:=factor(false,[]);

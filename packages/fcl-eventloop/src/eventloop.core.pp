@@ -89,6 +89,9 @@ type
   TEventLoopBase = class(TInterfacedObject, IEventLoop)
   private
     FRunning: Boolean;
+    { Set by Stop, cleared when Run returns: a Stop that comes before Run
+      makes Run return at once instead of being lost. }
+    FStopRequested: Boolean;
     FLoopThreadId: TThreadID;
     FBackendKind: TEventLoopBackendKind;
 
@@ -97,9 +100,11 @@ type
     FRegCapacity: Integer;
     FRegLock: TCriticalSection;
 
-    { Timers }
+    { Timers: binary min-heap ordered by deadline. Cancelled entries stay in
+      the heap until they reach the top or the heap is compacted. }
     FTimers: array of TTimerEntry;
     FTimerCount: Integer;
+    FCancelledTimers: Integer;
     FNextTimerId: Int64;
     FTimerLock: TCriticalSection;
 
@@ -109,6 +114,12 @@ type
     FDeferredLock: TCriticalSection;
 
     procedure EnsureCapacity(AHandle: TLoopHandle);
+    function TimerBefore(I, J: Integer): Boolean; inline;
+    procedure TimerSiftUp(I: Integer);
+    procedure TimerSiftDown(I: Integer);
+    procedure TimerPush(const AEntry: TTimerEntry);
+    procedure TimerPopTop;
+    procedure TimerCompact;
   protected
     procedure DoRegisterHandle(AHandle: TLoopHandle; AEvents: TEventLoopEvents; const ACallback: TAsyncIOCompletion; AUserData: Pointer); virtual; abstract;
     procedure DoModifyHandle(AHandle: TLoopHandle; AEvents: TEventLoopEvents); virtual; abstract;
@@ -161,6 +172,7 @@ type
     FThreads: array of TEventLoopWorkerThread;
     FCount: Integer;
     FRoundRobinIndex: Integer;
+    FStarted: Boolean;
   public
     constructor Create(ALoops: array of IEventLoop);
     destructor Destroy; override;
@@ -314,7 +326,12 @@ begin
   begin
     { Intersect with requested events unless error/hangup occurred }
     if (AEvents * [eleError, eleHangup] <> []) or (AEvents * LReg.Events <> []) then
-      LReg.Callback(AHandle, AEvents, LReg.UserData);
+      try
+        LReg.Callback(AHandle, AEvents, LReg.UserData);
+      except
+        { Like timers and posted procedures: an exception in one handler
+          must not end Run for every other handle of the loop. }
+      end;
   end;
 end;
 
@@ -396,26 +413,107 @@ begin
   end;
 end;
 
+function TEventLoopBase.TimerBefore(I, J: Integer): Boolean;
+begin
+  if FTimers[I].DeadlineMs <> FTimers[J].DeadlineMs then
+    Result := FTimers[I].DeadlineMs < FTimers[J].DeadlineMs
+  else
+    Result := FTimers[I].Id < FTimers[J].Id; { equal deadlines fire in creation order }
+end;
+
+procedure TEventLoopBase.TimerSiftUp(I: Integer);
+var
+  LParent: Integer;
+  LTmp: TTimerEntry;
+begin
+  while I > 0 do
+  begin
+    LParent := (I - 1) div 2;
+    if not TimerBefore(I, LParent) then
+      Break;
+    LTmp := FTimers[I];
+    FTimers[I] := FTimers[LParent];
+    FTimers[LParent] := LTmp;
+    I := LParent;
+  end;
+end;
+
+procedure TEventLoopBase.TimerSiftDown(I: Integer);
+var
+  LChild: Integer;
+  LTmp: TTimerEntry;
+begin
+  while True do
+  begin
+    LChild := 2 * I + 1;
+    if LChild >= FTimerCount then
+      Break;
+    if (LChild + 1 < FTimerCount) and TimerBefore(LChild + 1, LChild) then
+      Inc(LChild);
+    if not TimerBefore(LChild, I) then
+      Break;
+    LTmp := FTimers[I];
+    FTimers[I] := FTimers[LChild];
+    FTimers[LChild] := LTmp;
+    I := LChild;
+  end;
+end;
+
+procedure TEventLoopBase.TimerPush(const AEntry: TTimerEntry);
+begin
+  if FTimerCount >= Length(FTimers) then
+    SetLength(FTimers, (FTimerCount * 3) div 2 + 8);
+  FTimers[FTimerCount] := AEntry;
+  Inc(FTimerCount);
+  TimerSiftUp(FTimerCount - 1);
+end;
+
+procedure TEventLoopBase.TimerPopTop;
+begin
+  Dec(FTimerCount);
+  if FTimerCount > 0 then
+  begin
+    FTimers[0] := FTimers[FTimerCount];
+    TimerSiftDown(0);
+  end;
+  FTimers[FTimerCount].Callback := nil;
+end;
+
+procedure TEventLoopBase.TimerCompact;
+var
+  I, J: Integer;
+begin
+  J := 0;
+  for I := 0 to FTimerCount - 1 do
+    if not FTimers[I].Cancelled then
+    begin
+      if I <> J then
+        FTimers[J] := FTimers[I];
+      Inc(J);
+    end;
+  for I := J to FTimerCount - 1 do
+    FTimers[I].Callback := nil;
+  FTimerCount := J;
+  FCancelledTimers := 0;
+  for I := FTimerCount div 2 - 1 downto 0 do
+    TimerSiftDown(I);
+end;
+
 function TEventLoopBase.SetTimer(ADelayMs: Cardinal; const ACallback: TAsyncTimerCallback; APeriodic: Boolean): Int64;
 var
-  LNow: QWord;
-  LIdx: Integer;
+  LEntry: TTimerEntry;
 begin
-  LNow := GetTickCount64;
   FTimerLock.Acquire;
   try
     Result := FNextTimerId;
     Inc(FNextTimerId);
-    LIdx := FTimerCount;
-    Inc(FTimerCount);
-    if FTimerCount > Length(FTimers) then
-      SetLength(FTimers, (FTimerCount * 3) div 2 + 4);
-    FTimers[LIdx].Id := Result;
-    FTimers[LIdx].DeadlineMs := LNow + ADelayMs;
-    FTimers[LIdx].IntervalMs := ADelayMs;
-    FTimers[LIdx].Callback := ACallback;
-    FTimers[LIdx].Periodic := APeriodic;
-    FTimers[LIdx].Cancelled := False;
+    LEntry.Id := Result;
+    LEntry.DeadlineMs := GetTickCount64 + ADelayMs;
+    LEntry.IntervalMs := ADelayMs;
+    LEntry.Callback := ACallback;
+    LEntry.Periodic := APeriodic;
+    LEntry.Cancelled := False;
+    TimerPush(LEntry);
   finally
     FTimerLock.Release;
   end;
@@ -429,9 +527,14 @@ begin
   FTimerLock.Acquire;
   try
     for I := 0 to FTimerCount - 1 do
-      if FTimers[I].Id = ATimerId then
+      if (FTimers[I].Id = ATimerId) and not FTimers[I].Cancelled then
       begin
         FTimers[I].Cancelled := True;
+        Inc(FCancelledTimers);
+        { Many idle-timeout timers get cancelled long before they expire:
+          drop them instead of letting the heap grow. }
+        if (FCancelledTimers > 64) and (FCancelledTimers > FTimerCount div 2) then
+          TimerCompact;
         Exit;
       end;
   finally
@@ -444,48 +547,44 @@ var
   LNow: QWord;
   LFired: array of TTimerEntry;
   LFiredCount: Integer;
-  LMinNext: QWord;
-  I, J: Integer;
+  I: Integer;
   LDiff: Int64;
+  LTop: TTimerEntry;
 begin
   LNow := GetTickCount64;
   LFiredCount := 0;
-  LMinNext := High(QWord);
+  LFired := nil;
 
   FTimerLock.Acquire;
   try
-    { First pass: collect expired timers }
-    for I := 0 to FTimerCount - 1 do
+    while FTimerCount > 0 do
     begin
-      if FTimers[I].Cancelled then
+      LTop := FTimers[0];
+      if LTop.Cancelled then
+      begin
+        TimerPopTop;
+        Dec(FCancelledTimers);
         Continue;
-      if FTimers[I].DeadlineMs <= LNow then
-      begin
-        Inc(LFiredCount);
-        if LFiredCount > Length(LFired) then
-          SetLength(LFired, LFiredCount + 4);
-        LFired[LFiredCount - 1] := FTimers[I];
-        if FTimers[I].Periodic then
-          FTimers[I].DeadlineMs := LNow + FTimers[I].IntervalMs
-        else
-          FTimers[I].Cancelled := True;
       end;
+      if LTop.DeadlineMs > LNow then
+        Break;
+      TimerPopTop;
+      if LFiredCount >= Length(LFired) then
+        SetLength(LFired, LFiredCount * 2 + 4);
+      LFired[LFiredCount] := LTop;
+      Inc(LFiredCount);
     end;
-
-    { Compact cancelled timers and find smallest upcoming deadline }
-    J := 0;
-    for I := 0 to FTimerCount - 1 do
-    begin
-      if not FTimers[I].Cancelled then
+    { Re-arm periodic timers after the loop: an interval of 0 would
+      otherwise expire again at once and never let the loop end. }
+    for I := 0 to LFiredCount - 1 do
+      if LFired[I].Periodic then
       begin
-        if I <> J then
-          FTimers[J] := FTimers[I];
-        if FTimers[J].DeadlineMs < LMinNext then
-          LMinNext := FTimers[J].DeadlineMs;
-        Inc(J);
+        LTop := LFired[I];
+        LTop.DeadlineMs := LNow + LTop.IntervalMs;
+        if LTop.IntervalMs = 0 then
+          LTop.DeadlineMs := LNow + 1;
+        TimerPush(LTop);
       end;
-    end;
-    FTimerCount := J;
   finally
     FTimerLock.Release;
   end;
@@ -503,18 +602,27 @@ begin
     end;
   end;
 
-  if LMinNext = High(QWord) then
-    Result := -1
-  else
-  begin
-    LNow := GetTickCount64;
-    LDiff := Int64(LMinNext) - Int64(LNow);
-    if LDiff <= 0 then
-      Result := 0
-    else if LDiff > High(Integer) then
-      Result := High(Integer)
+  FTimerLock.Acquire;
+  try
+    while (FTimerCount > 0) and FTimers[0].Cancelled do
+    begin
+      TimerPopTop;
+      Dec(FCancelledTimers);
+    end;
+    if FTimerCount = 0 then
+      Result := -1
     else
-      Result := Integer(LDiff);
+    begin
+      LDiff := Int64(FTimers[0].DeadlineMs) - Int64(GetTickCount64);
+      if LDiff <= 0 then
+        Result := 0
+      else if LDiff > High(Integer) then
+        Result := High(Integer)
+      else
+        Result := Integer(LDiff);
+    end;
+  finally
+    FTimerLock.Release;
   end;
 end;
 
@@ -544,16 +652,17 @@ begin
   FRunning := True;
   FLoopThreadId := GetCurrentThreadId;
   try
-    while FRunning do
+    while not FStopRequested do
       RunOnce(-1);
   finally
     FRunning := False;
+    FStopRequested := False;
   end;
 end;
 
 procedure TEventLoopBase.Stop;
 begin
-  FRunning := False;
+  FStopRequested := True;
   Wakeup;
 end;
 
@@ -633,6 +742,9 @@ procedure TEventLoopGroup.Start;
 var
   I: Integer;
 begin
+  if FStarted then
+    Exit;
+  FStarted := True;
   for I := 0 to FCount - 1 do
     FThreads[I].Start;
 end;
@@ -650,6 +762,8 @@ procedure TEventLoopGroup.Wait;
 var
   I: Integer;
 begin
+  if not FStarted then
+    Exit; { threads that were never started would be waited for forever }
   for I := 0 to FCount - 1 do
     if FThreads[I] <> nil then
       FThreads[I].WaitFor;

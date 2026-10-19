@@ -440,6 +440,7 @@ type
     // Getting work.
     function CheckShouldTerminate(aThread: TQueueWorkerThread): Boolean;
     function GetWorkItemForThread(aThread: TQueueWorkerThread; out Itm: IThreadPoolWorkItem): Boolean;
+    function TryDequeueGlobal(out Itm: IThreadPoolWorkItem): Boolean;
     function GetWorkItemFromQueues(aSkip: TWorkStealingQueueThreadPoolWorkItem; out Itm: IThreadPoolWorkItem): Boolean;
     function TryGetStolenWorkItem(aThread: TQueueWorkerThread; out Itm: IThreadPoolWorkItem): Boolean;
     // Notification when work was queued
@@ -2807,6 +2808,27 @@ begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TryGetStolenWorkItem','Got work: %s',[BToS(Result)]);{$ENDIF USE_THREADLOG}
 end;
 
+// Takes an item from the global queue, if there is one.
+
+function TThreadPool.TryDequeueGlobal(out Itm: IThreadPoolWorkItem): Boolean;
+
+begin
+  Result:=False;
+  Itm:=Nil;
+  {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TryDequeueGlobal','locking queue');{$ENDIF USE_THREADLOG}
+  LockQueue;
+  try
+    // FWorkQueue access is guarded by LockQueue.
+    if (FWorkQueue.Count > 0) then
+      begin
+      Itm:=FWorkQueue.Dequeue;
+      Result:=Assigned(Itm);
+      end;
+  finally
+    UnLockQueue;
+  end;
+end;
+
 // if there is work, return it in Itm.
 // If there is no work, return True if the thread should continue, False if it should terminate.
 
@@ -2822,24 +2844,8 @@ begin
     {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Shutting down, no work -> quit');{$ENDIF USE_THREADLOG}
     Exit(False);
     end;
-  {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','locking queue');{$ENDIF USE_THREADLOG}
-  LockQueue;
-  try
-    if (FWorkQueue.Count > 0) then
-      begin
-      // FWorkQueue access is guarded by LockQueue.
-      {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Have global work');{$ENDIF USE_THREADLOG}
-      Itm:=FWorkQueue.Dequeue;
-      if assigned(Itm) then
-        begin
-        {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Global work, -> no quit');{$ENDIF USE_THREADLOG}
-        Exit(True); // We got work, do not stop thread
-        end;
-      end;
-  finally
-    {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','unlocking queue');{$ENDIF USE_THREADLOG}
-    UnLockQueue;
-  end;
+  if TryDequeueGlobal(Itm) then
+    Exit(True); // We got work, do not stop thread
   // No local work, check global
   if not aThread.Idle then
     begin
@@ -2860,6 +2866,12 @@ begin
     FQueueEvent.SetEvent;
     Exit(False); // Stop thread
     end;
+  // Look at the global queue again: an item queued between the check above
+  // and ResetEvent signalled the event, and the reset has just cleared that
+  // signal. Without this check the item waited until CheckWaitTime (up to
+  // IdleTimeout, 40 s) expired.
+  if TryDequeueGlobal(Itm) then
+    Exit(True); // We got work, do not stop thread
   if TryGetStolenWorkItem(aThread,Itm) then
     Exit(True); // We got work, do not stop thread
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Waiting for queue event (%d ms.)',[aThread.CheckWaitTime]);{$ENDIF USE_THREADLOG}

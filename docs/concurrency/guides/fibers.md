@@ -1,7 +1,7 @@
 # Посібник користувача: Корутини, Файбери та async / await (Фаза 1.4)
 
 Цей посібник документує нововведення **Фази 1.4** у гілці `feature/concurrency`:
-1. **Крок 1 (Бібліотечний)**: легковагові корутини/файбери (`TFiber`), генератори (`TGenerator<T>`) та будівельники скінченних автоматів (`TTaskCompletionSource<T>`, `TAsyncTaskMethodBuilder<T>`) у новому пакеті `packages/fcl-async/`.
+1. **Крок 1 (Бібліотечний)**: легковагові корутини/файбери (`TFiber`), генератори (`TGenerator<T>`) та будівельники скінченних автоматів (`TTaskCompletionSource<T>`, `TAsyncTaskMethodBuilder<T>`) у новому пакеті `packages/fcl-coroutines/`.
 2. **Крок 2 (Компіляторний)**: синтаксичний модифікатор/директива `async` для процедур та функцій, що повертають `ITask` або `specialize IFuture<T>`, та оператор `await` для трансформації очікування результату в неблокувальне виконання.
 
 ---
@@ -21,7 +21,7 @@
 +-----------------------------------+-------------------------------------------+
                                     |
 +-----------------------------------+-------------------------------------------+
-|                   Пакет fcl-async (packages/fcl-async/)                       |
+|                   Пакет fcl-coroutines (packages/fcl-coroutines/)                    |
 |   - TFiber (стекові корутини)     |   - TGenerator<T> (for..in генератори)    |
 |   - TFiber.Await<T> / Sleep       |   - TTaskCompletionSource<T> (стейт-машини)|
 +-----------------------------------+-------------------------------------------+
@@ -238,14 +238,14 @@ end;
 
 Для перевірки роботи функціоналу Фази 1.4:
 ```sh
-# Збірка і прогін модульних тестів fcl-async (12/12 тестів)
+# Збірка і прогін модульних тестів fcl-coroutines
 ./tests/concurrency/build-async.sh
 ./tests/concurrency/out-async/testasync -a --format=plain
 
 # Збірка і прогін демонстраційного прикладу coroutine_showcase
 . tests/concurrency/fpcenv.sh
 $FPC_TRUNK @"$FPC_CFG" -FE./tests/concurrency/out-async -FU./tests/concurrency/out-async \
-  -Fi./packages/fcl-async/src -Fu./packages/fcl-async/src -Fu./packages/fcl-async/tests \
+  -Fi./packages/fcl-coroutines/src -Fu./packages/fcl-coroutines/src -Fu./packages/fcl-coroutines/tests \
   docs/concurrency/examples/coroutine_showcase.pp
 ./tests/concurrency/out-async/coroutine_showcase
 ```

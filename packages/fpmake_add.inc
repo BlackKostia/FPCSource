@@ -14,10 +14,12 @@
   add_dts(ADirectory+IncludeTrailingPathDelimiter('dts'));
   add_fastcgi(ADirectory+IncludeTrailingPathDelimiter('fastcgi'));
   add_fcl_async(ADirectory+IncludeTrailingPathDelimiter('fcl-async'));
+  add_fcl_coroutines(ADirectory+IncludeTrailingPathDelimiter('fcl-coroutines'));
   add_fcl_base(ADirectory+IncludeTrailingPathDelimiter('fcl-base'));
   add_fcl_css(ADirectory+IncludeTrailingPathDelimiter('fcl-css'));
   add_fcl_db(ADirectory+IncludeTrailingPathDelimiter('fcl-db'));
   add_fcl_ebnf(ADirectory+IncludeTrailingPathDelimiter('fcl-ebnf'));
+  add_fcl_eventloop(ADirectory+IncludeTrailingPathDelimiter('fcl-eventloop'));
   add_fcl_extra(ADirectory+IncludeTrailingPathDelimiter('fcl-extra'));
   add_fcl_fpcunit(ADirectory+IncludeTrailingPathDelimiter('fcl-fpcunit'));
   add_fcl_fpterm(ADirectory+IncludeTrailingPathDelimiter('fcl-fpterm'));

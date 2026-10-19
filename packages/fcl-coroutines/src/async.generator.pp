@@ -114,6 +114,8 @@ begin
 end;
 
 function TGenerator.MoveNext: Boolean;
+var
+  LError: Exception;
 begin
   if FDone then
     Exit(False);
@@ -122,7 +124,13 @@ begin
   FFiber.Resume;
 
   if FException <> nil then
-    raise FException;
+  begin
+    { The handler that catches the exception frees it: the generator must
+      not keep (and later free) the same object. }
+    LError := FException;
+    FException := nil;
+    raise LError;
+  end;
 
   Result := FHasValue and not FDone;
 end;

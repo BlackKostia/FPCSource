@@ -94,6 +94,12 @@ begin
 {$include fcl-async/fpmake.pp}
 end;
 
+procedure add_fcl_coroutines(const ADirectory: string);
+begin
+  with Installer do
+{$include fcl-coroutines/fpmake.pp}
+end;
+
 procedure add_fcl_base(const ADirectory: string);
 begin
   with Installer do
@@ -112,6 +118,12 @@ procedure add_fcl_ebnf(const ADirectory: string);
 begin
   with Installer do
 {$include fcl-ebnf/fpmake.pp}
+end;
+
+procedure add_fcl_eventloop(const ADirectory: string);
+begin
+  with Installer do
+{$include fcl-eventloop/fpmake.pp}
 end;
 
 procedure add_fcl_extra(const ADirectory: string);

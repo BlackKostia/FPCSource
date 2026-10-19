@@ -324,6 +324,11 @@ type
     procedure TestFreeWithNewThreads;
     // Pool.Free must return only when its threads have really ended
     procedure TestFreeJoinsThreads;
+    // A task queued while a worker goes idle must start at once, not when the
+    // worker's IdleTimeout (40 s) expires
+    procedure TestQueuedTaskStartsPromptly;
+    // Same race seen through ContinueWith on a future that completes at once
+    procedure TestContinuationOfFastFutureRuns;
     // A failed ThreadCheck in a worker thread must be recorded
     procedure TestThreadCheckRecordsFailure;
   end;
@@ -456,6 +461,23 @@ type
     procedure TestSlimReaderWriterLockConcurrent;
     procedure TestChannelUnboundedMultiProducer;
     procedure TestChannelBoundedBackpressure;
+    procedure TestCountdownEventErrors;
+    procedure TestTimeSpanNegativeDoesNotWait;
+    procedure TestBarrierSignalAndWaitTimeout;
+    procedure TestBarrierZeroParticipants;
+    procedure TestBarrierRemoveCompletesPhase;
+    procedure TestSlimRWLockExclusion;
+    // Readers queued behind a writer must all get the lock as soon as the
+    // writer leaves, also when no other writer comes along to wake them.
+    procedure TestSlimRWLockNoLostWakeup;
+    procedure TestSlimRWLockMisuse;
+    procedure TestSlimRWLockTryTimeout;
+    procedure TestSlimRWGuards;
+    procedure TestChannelCloseWakesReceiver;
+    procedure TestChannelCloseWakesSender;
+    procedure TestChannelDrainAfterClose;
+    procedure TestChannelWrapAroundManaged;
+    procedure TestChannelMPMC;
   end;
 
   { TTestContinuationsAndCancellation }
@@ -1846,6 +1868,53 @@ begin
   Sleep(1500);
 end;
 
+procedure TTestThreading.TestQueuedTaskStartsPromptly;
+const
+  Rounds = 3000;
+var
+  Hit: LongInt;
+  I: Integer;
+  T0, Slowest: QWord;
+  T: ITask;
+begin
+  Slowest := 0;
+  for I := 1 to Rounds do
+    begin
+    Hit := 0;
+    T0 := GetTickCount64;
+    T := TTask.Run(procedure begin InterlockedExchange(Hit, 1); end);
+    while InterlockedCompareExchange(Hit, 0, 0) = 0 do
+      begin
+      if GetTickCount64 - T0 > 5000 then
+        Fail(Format('Task of round %d did not start within 5 s', [I]));
+      ThreadSwitch;
+      end;
+    if GetTickCount64 - T0 > Slowest then
+      Slowest := GetTickCount64 - T0;
+    AssertTrue('Task finished', T.Wait(5000));
+    end;
+  AssertTrue(Format('Slowest start took %d ms', [Slowest]), Slowest < 2000);
+end;
+
+procedure TTestThreading.TestContinuationOfFastFutureRuns;
+const
+  Rounds = 3000;
+var
+  Hit: LongInt;
+  I: Integer;
+  F: specialize IFuture<Integer>;
+  C: ITask;
+begin
+  for I := 1 to Rounds do
+    begin
+    Hit := 0;
+    F := TTask.specialize Future<Integer>(function: Integer begin Result := I; end);
+    C := F.ContinueWith(procedure(A: ITask) begin InterlockedExchange(Hit, 1); end);
+    AssertTrue(Format('Continuation of round %d ran', [I]), C.Wait(5000));
+    AssertEquals('Continuation body ran', 1, Hit);
+    end;
+end;
+
 procedure TTestThreading.TestFreeJoinsThreads;
 // Regression test: worker and monitor threads were FreeOnTerminate and left
 // the pool's list in their destructor, so Destroy returned while they were
@@ -3140,6 +3209,601 @@ begin
         Raised := True;
     end;
     AssertTrue('Receive on closed & empty channel raises EChannelClosedException', Raised);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestCountdownEventErrors;
+var
+  CDE: TCountdownEvent;
+  Raised: Boolean;
+begin
+  Raised := False;
+  try
+    TCountdownEvent.Create(-1).Free;
+  except
+    on E: ESyncObjectException do
+      Raised := True;
+  end;
+  AssertTrue('Negative initial count raises', Raised);
+
+  CDE := TCountdownEvent.Create(0);
+  try
+    AssertTrue('Count 0 is set', CDE.IsSet);
+    AssertTrue('WaitFor on a set event', CDE.WaitFor(0) = wrSignaled);
+    Raised := False;
+    try
+      CDE.Signal;
+    except
+      on E: ESyncObjectException do
+        Raised := True;
+    end;
+    AssertTrue('Signal below zero raises', Raised);
+
+    CDE.Reset(2);
+    Raised := False;
+    try
+      CDE.Signal(3);
+    except
+      on E: ESyncObjectException do
+        Raised := True;
+    end;
+    AssertTrue('Signal(3) on count 2 raises', Raised);
+    AssertEquals('Failed Signal leaves the count', 2, CDE.CurrentCount);
+
+    Raised := False;
+    try
+      CDE.Signal(0);
+    except
+      on E: ESyncObjectException do
+        Raised := True;
+    end;
+    AssertTrue('Signal(0) raises', Raised);
+
+    CDE.Reset(0);
+    AssertTrue('Reset(0) sets the event', CDE.IsSet);
+    CDE.Reset;
+    AssertTrue('Reset to InitialCount 0 stays set', CDE.IsSet);
+  finally
+    CDE.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestTimeSpanNegativeDoesNotWait;
+var
+  CDE: TCountdownEvent;
+  Barrier: TBarrier;
+  RW: TSlimReaderWriterLock;
+  Ch: specialize TChannel<Integer>;
+  Neg: TTimeSpan;
+  T0: QWord;
+  V: Integer;
+begin
+  Neg := TTimeSpan.FromMilliseconds(-10);
+  CDE := TCountdownEvent.Create(1);
+  Barrier := TBarrier.Create(2);
+  RW := TSlimReaderWriterLock.Create;
+  Ch := specialize TChannel<Integer>.Create(1);
+  try
+    T0 := GetTickCount64;
+    AssertTrue('Countdown WaitFor(-10ms) times out', CDE.WaitFor(Neg) = wrTimeout);
+    AssertFalse('Barrier SignalAndWait(-10ms) returns False', Barrier.SignalAndWait(Neg));
+    RW.BeginWrite;
+    AssertFalse('TryBeginRead(-10ms) fails', RW.TryBeginRead(Neg));
+    AssertFalse('TryBeginWrite(-10ms) fails', RW.TryBeginWrite(Neg));
+    RW.EndWrite;
+    AssertTrue('TrySend fills the channel', Ch.TrySend(1));
+    AssertFalse('TrySend(-10ms) on a full channel fails', Ch.TrySend(2, Neg));
+    AssertTrue('TryReceive', Ch.TryReceive(V));
+    AssertFalse('TryReceive(-10ms) on an empty channel fails', Ch.TryReceive(V, Neg));
+    AssertTrue('Negative timeouts return at once (took ' + IntToStr(GetTickCount64 - T0) + ' ms)',
+      GetTickCount64 - T0 < 1000);
+  finally
+    Ch.Free;
+    RW.Free;
+    Barrier.Free;
+    CDE.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestBarrierSignalAndWaitTimeout;
+var
+  Barrier: TBarrier;
+  Other: ITask;
+begin
+  Barrier := TBarrier.Create(2);
+  try
+    AssertFalse('SignalAndWait times out without the other participant', Barrier.SignalAndWait(30));
+    AssertEquals('Timed-out participant is withdrawn', 2, Barrier.ParticipantsRemaining);
+    AssertEquals('Phase did not advance', 0, Barrier.CurrentPhaseNumber);
+
+    Other := TTask.Run(
+      procedure
+      begin
+        ThreadCheck(Barrier.SignalAndWait(5000), 'Other participant passes the barrier');
+      end);
+    AssertTrue('Both participants pass', Barrier.SignalAndWait(5000));
+    AssertTrue('Other participant finished', Other.Wait(5000));
+    AssertEquals('Phase advanced once', 1, Barrier.CurrentPhaseNumber);
+  finally
+    Barrier.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestBarrierZeroParticipants;
+var
+  Barrier: TBarrier;
+  Raised: Boolean;
+begin
+  Barrier := TBarrier.Create(0);
+  try
+    Raised := False;
+    try
+      Barrier.SignalAndWait(0);
+    except
+      on E: ESyncObjectException do
+        Raised := True;
+    end;
+    AssertTrue('SignalAndWait without participants raises', Raised);
+
+    Raised := False;
+    try
+      Barrier.RemoveParticipant;
+    except
+      on E: ESyncObjectException do
+        Raised := True;
+    end;
+    AssertTrue('Removing more participants than registered raises', Raised);
+
+    AssertEquals('AddParticipant returns the current phase', 0, Barrier.AddParticipant);
+    AssertTrue('Single participant passes at once', Barrier.SignalAndWait(0));
+    AssertEquals('Phase 1', 1, Barrier.CurrentPhaseNumber);
+  finally
+    Barrier.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestBarrierRemoveCompletesPhase;
+var
+  Barrier: TBarrier;
+  Waiter: ITask;
+begin
+  Barrier := TBarrier.Create(2);
+  try
+    Waiter := TTask.Run(
+      procedure
+      begin
+        ThreadCheck(Barrier.SignalAndWait(5000), 'Waiter is released by RemoveParticipant');
+      end);
+    // Wait until the waiter has arrived at the barrier.
+    while Barrier.ParticipantsRemaining <> 1 do
+      Sleep(1);
+    Barrier.RemoveParticipant;
+    AssertTrue('Waiter finished', Waiter.Wait(5000));
+    AssertEquals('Phase advanced', 1, Barrier.CurrentPhaseNumber);
+    AssertEquals('One participant left', 1, Barrier.ParticipantCount);
+  finally
+    Barrier.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimRWLockExclusion;
+const
+  Workers = 8;
+  Iterations = 20000;
+var
+  RW: TSlimReaderWriterLock;
+  Readers, Writers, Violations, Shared: Integer;
+  Tasks: array of ITask;
+  I: Integer;
+begin
+  RW := TSlimReaderWriterLock.Create;
+  Readers := 0;
+  Writers := 0;
+  Violations := 0;
+  Shared := 0;
+  SetLength(Tasks, Workers);
+  try
+    for I := 0 to Workers - 1 do
+      Tasks[I] := TTask.Run(
+        procedure
+        var
+          K: Integer;
+        begin
+          for K := 1 to Iterations do
+            if K mod 8 = 0 then
+            begin
+              RW.BeginWrite;
+              if (AtomicIncrement(Writers) <> 1) or (Readers <> 0) then
+                AtomicIncrement(Violations);
+              Inc(Shared);
+              AtomicDecrement(Writers);
+              RW.EndWrite;
+            end
+            else
+            begin
+              RW.BeginRead;
+              AtomicIncrement(Readers);
+              if Writers <> 0 then
+                AtomicIncrement(Violations);
+              AtomicDecrement(Readers);
+              RW.EndRead;
+            end;
+        end);
+    AssertTrue('All workers finished', TTask.WaitForAll(Tasks, 60000));
+    AssertEquals('No reader saw a writer and no two writers overlapped', 0, Violations);
+    AssertEquals('Every write was counted once', Workers * (Iterations div 8), Shared);
+    AssertEquals('Lock is free', 0, RW.ReaderCount);
+    AssertFalse('No writer left', RW.IsWriteLocked);
+  finally
+    RW.Free;
+  end;
+end;
+
+type
+  TRWRoundReader = class(TThread)
+  public
+    Lock: TSlimReaderWriterLock;
+    Go: TEvent;
+    Done: TCountdownEvent;
+    Quit: Boolean;
+    MaxWaitMs: QWord;
+    procedure Execute; override;
+  end;
+
+procedure TRWRoundReader.Execute;
+var
+  T0, D: QWord;
+begin
+  while True do
+  begin
+    Go.WaitFor(INFINITE);
+    Go.ResetEvent;
+    if Quit then
+      Break;
+    T0 := GetTickCount64;
+    if Lock.TryBeginRead(2000) then
+      Lock.EndRead;
+    D := GetTickCount64 - T0;
+    if D > MaxWaitMs then
+      MaxWaitMs := D;
+    Done.Signal;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimRWLockNoLostWakeup;
+const
+  NumReaders = 4;
+var
+  RW: TSlimReaderWriterLock;
+  Done: TCountdownEvent;
+  Readers: array[0..NumReaders - 1] of TRWRoundReader;
+  I: Integer;
+  T0, MaxWait: QWord;
+begin
+  RW := TSlimReaderWriterLock.Create;
+  Done := TCountdownEvent.Create(NumReaders);
+  for I := 0 to NumReaders - 1 do
+  begin
+    Readers[I] := TRWRoundReader.Create(True);
+    Readers[I].Lock := RW;
+    Readers[I].Go := TEvent.Create(nil, True, False, '');
+    Readers[I].Done := Done;
+    Readers[I].Start;
+  end;
+  try
+    T0 := GetTickCount64;
+    while GetTickCount64 - T0 < 1500 do
+    begin
+      Done.Reset(NumReaders);
+      RW.BeginWrite;
+      for I := 0 to NumReaders - 1 do
+        Readers[I].Go.SetEvent;
+      ThreadSwitch;
+      RW.EndWrite;
+      AssertTrue('Readers of the round got the lock', Done.WaitFor(10000) = wrSignaled);
+    end;
+  finally
+    MaxWait := 0;
+    for I := 0 to NumReaders - 1 do
+    begin
+      Readers[I].Quit := True;
+      Readers[I].Go.SetEvent;
+      Readers[I].WaitFor;
+      if Readers[I].MaxWaitMs > MaxWait then
+        MaxWait := Readers[I].MaxWaitMs;
+      Readers[I].Go.Free;
+      Readers[I].Free;
+    end;
+    Done.Free;
+    RW.Free;
+  end;
+  // A missed wake-up shows as a reader that slept for the whole 2 s timeout.
+  AssertTrue('No reader waited for the timeout (max ' + IntToStr(MaxWait) + ' ms)', MaxWait < 1000);
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimRWLockMisuse;
+var
+  RW: TSlimReaderWriterLock;
+  Raised: Boolean;
+begin
+  RW := TSlimReaderWriterLock.Create;
+  try
+    Raised := False;
+    try
+      RW.EndRead;
+    except
+      on E: ELockException do
+        Raised := True;
+    end;
+    AssertTrue('EndRead without a read lock raises', Raised);
+    AssertEquals('State unchanged', 0, RW.ReaderCount);
+
+    Raised := False;
+    try
+      RW.EndWrite;
+    except
+      on E: ELockException do
+        Raised := True;
+    end;
+    AssertTrue('EndWrite without the write lock raises', Raised);
+
+    RW.BeginWrite;
+    Raised := False;
+    try
+      RW.EndRead;
+    except
+      on E: ELockException do
+        Raised := True;
+    end;
+    AssertTrue('EndRead while write-locked raises', Raised);
+    AssertTrue('Write lock still held', RW.IsWriteLocked);
+    RW.EndWrite;
+    AssertFalse('Write lock released', RW.IsWriteLocked);
+    AssertTrue('Lock usable again', RW.TryBeginRead(0));
+    RW.EndRead;
+  finally
+    RW.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimRWLockTryTimeout;
+var
+  RW: TSlimReaderWriterLock;
+  Holder: ITask;
+  Hold, Release: TEvent;
+  T0: QWord;
+begin
+  RW := TSlimReaderWriterLock.Create;
+  Hold := TEvent.Create(nil, True, False, '');
+  Release := TEvent.Create(nil, True, False, '');
+  try
+    Holder := TTask.Run(
+      procedure
+      begin
+        RW.BeginWrite;
+        Hold.SetEvent;
+        Release.WaitFor(10000);
+        RW.EndWrite;
+      end);
+    AssertTrue('Holder took the write lock', Hold.WaitFor(5000) = wrSignaled);
+    T0 := GetTickCount64;
+    AssertFalse('TryBeginRead times out', RW.TryBeginRead(50));
+    AssertFalse('TryBeginWrite times out', RW.TryBeginWrite(50));
+    AssertTrue('Timeouts are honoured', GetTickCount64 - T0 >= 90);
+    Release.SetEvent;
+    AssertTrue('Reader gets the lock after release', RW.TryBeginRead(5000));
+    RW.EndRead;
+    AssertTrue('Holder finished', Holder.Wait(5000));
+  finally
+    Release.Free;
+    Hold.Free;
+    RW.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestSlimRWGuards;
+var
+  RW: TSlimReaderWriterLock;
+
+  procedure ReadScope;
+  var
+    G: TSlimReadLockGuard;
+  begin
+    G.Init(RW);
+    AssertEquals('Read guard holds the lock', 1, RW.ReaderCount);
+  end;
+
+  procedure WriteScope(aRaise: Boolean);
+  var
+    G: TSlimWriteLockGuard;
+  begin
+    G.Init(RW);
+    AssertTrue('Write guard holds the lock', RW.IsWriteLocked);
+    if aRaise then
+      raise ESomeThing.Create('leave the scope with an exception');
+  end;
+
+var
+  G: TSlimReadLockGuard;
+begin
+  RW := TSlimReaderWriterLock.Create;
+  try
+    ReadScope;
+    AssertEquals('Read guard released at scope end', 0, RW.ReaderCount);
+    WriteScope(False);
+    AssertFalse('Write guard released at scope end', RW.IsWriteLocked);
+    try
+      WriteScope(True);
+    except
+      on E: ESomeThing do ;
+    end;
+    AssertFalse('Write guard released on exception', RW.IsWriteLocked);
+
+    G.Init(RW);
+    G.Init(RW);
+    AssertEquals('Init releases the previous lock first', 1, RW.ReaderCount);
+    G.Release;
+    AssertEquals('Release frees the lock', 0, RW.ReaderCount);
+    G.Release;
+    AssertEquals('Second Release does nothing', 0, RW.ReaderCount);
+  finally
+    RW.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelCloseWakesReceiver;
+var
+  Ch: specialize TChannel<Integer>;
+  Receiver: ITask;
+  Got: Boolean;
+begin
+  Ch := specialize TChannel<Integer>.Create(0);
+  try
+    Got := True;
+    Receiver := TTask.Run(
+      procedure
+      var
+        V: Integer;
+      begin
+        Got := Ch.Receive(V);
+      end);
+    Sleep(50);
+    AssertFalse('Receiver is blocked', Receiver.Wait(0));
+    Ch.Close;
+    AssertTrue('Close wakes the receiver', Receiver.Wait(5000));
+    AssertFalse('Receive(out) returns False on a closed empty channel', Got);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelCloseWakesSender;
+var
+  Ch: specialize TChannel<Integer>;
+  Sender: ITask;
+  Sent: Boolean;
+begin
+  Ch := specialize TChannel<Integer>.Create(1);
+  try
+    AssertTrue('Fill the channel', Ch.TrySend(1));
+    Sent := True;
+    Sender := TTask.Run(
+      procedure
+      begin
+        Sent := Ch.TrySend(2, INFINITE);
+      end);
+    Sleep(50);
+    AssertFalse('Sender is blocked on a full channel', Sender.Wait(0));
+    Ch.Close;
+    AssertTrue('Close wakes the sender', Sender.Wait(5000));
+    AssertFalse('TrySend returns False on a closed channel', Sent);
+    AssertEquals('The item sent before Close is still there', 1, Ch.Count);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelDrainAfterClose;
+var
+  Ch: specialize TChannel<string>;
+  S, All: string;
+begin
+  Ch := specialize TChannel<string>.Create(0);
+  try
+    Ch.Send('a');
+    Ch.Send('b');
+    Ch.Send('c');
+    Ch.Close;
+    AssertTrue('IsClosed', Ch.IsClosed);
+    Ch.Close; // second Close does nothing
+    All := '';
+    for S in Ch do
+      All := All + S;
+    AssertEquals('for..in drains the items sent before Close', 'abc', All);
+    AssertEquals('Channel is empty', 0, Ch.Count);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelWrapAroundManaged;
+var
+  Ch: specialize TChannel<string>;
+  I, Next: Integer;
+  S: string;
+begin
+  // The unbounded buffer starts with 16 slots; consuming from the front
+  // before growing makes it grow while the head is in the middle.
+  Ch := specialize TChannel<string>.Create(0);
+  try
+    Next := 0;
+    for I := 0 to 11 do
+      Ch.Send(IntToStr(I));
+    for I := 0 to 7 do
+    begin
+      AssertTrue('TryReceive', Ch.TryReceive(S));
+      AssertEquals('FIFO before growing', IntToStr(Next), S);
+      Inc(Next);
+    end;
+    for I := 12 to 99 do
+      Ch.Send(IntToStr(I));
+    while Ch.TryReceive(S) do
+    begin
+      AssertEquals('FIFO across the wrap-around', IntToStr(Next), S);
+      Inc(Next);
+    end;
+    AssertEquals('All items received', 100, Next);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelMPMC;
+const
+  Producers = 4;
+  Consumers = 4;
+  PerProducer = 5000;
+var
+  Ch: specialize TChannel<Integer>;
+  Tasks: array of ITask;
+  Sum, Count: Int64;
+  Live: Integer;
+  I: Integer;
+begin
+  Ch := specialize TChannel<Integer>.Create(8);
+  Sum := 0;
+  Count := 0;
+  Live := Producers;
+  SetLength(Tasks, Producers + Consumers);
+  try
+    for I := 0 to Consumers - 1 do
+      Tasks[I] := TTask.Run(
+        procedure
+        var
+          V: Integer;
+        begin
+          for V in Ch do
+          begin
+            AtomicIncrement(Sum, V);
+            AtomicIncrement(Count);
+          end;
+        end);
+    for I := 0 to Producers - 1 do
+      Tasks[Consumers + I] := TTask.Run(
+        procedure
+        var
+          K: Integer;
+        begin
+          for K := 1 to PerProducer do
+            Ch.Send(K);
+          if AtomicDecrement(Live) = 0 then
+            Ch.Close;
+        end);
+    AssertTrue('Producers and consumers finished', TTask.WaitForAll(Tasks, 60000));
+    AssertEquals('Every item received once', Int64(Producers) * PerProducer, Count);
+    AssertEquals('Sum of all items', Int64(Producers) * PerProducer * (PerProducer + 1) div 2, Sum);
   finally
     Ch.Free;
   end;

@@ -72,7 +72,11 @@ type
     property Handle: TLoopHandle read GetHandle;
   end;
 
-  { Implementation classes }
+  { Implementation classes.
+
+    All Async* methods and Close must be called in the loop thread (or before
+    the loop runs). The *Async methods that return futures can be called from
+    any thread: they hand the operation over to the loop thread. }
   TAsyncSocket = class(TInterfacedObject, IAsyncSocket)
   private
     FHandle: TLoopHandle;
@@ -81,12 +85,21 @@ type
     FConnected: Boolean;
     FConnecting: Boolean;
     FConnectCallback: TAsyncCallback;
+    FLastError: Integer;
+    FDestroying: Boolean;
+
+    { Registration with the loop: a socket is registered only while an
+      operation is pending, so an idle socket whose peer has gone away does
+      not make a level-triggered poller report hang-up over and over. }
+    FRegistered: Boolean;
+    FInterest: TEventLoopEvents;
 
     { Pending read }
     FReadBuffer: Pointer;
     FReadCount: NativeInt;
     FReadCallback: TAsyncReadCallback;
     FReadProc: TAsyncReadProc;
+    FReadGen: Cardinal;
 
     { Pending write }
     FWriteBuffer: Pointer;
@@ -94,10 +107,20 @@ type
     FWriteOffset: NativeInt;
     FWriteCallback: TAsyncWriteCallback;
     FWriteProc: TAsyncWriteProc;
+    FWriteGen: Cardinal;
 
     procedure HandleIO(AHandle: TLoopHandle; AEvents: TEventLoopEvents; AUserData: Pointer);
     procedure SetNonBlocking(AHandle: TLoopHandle);
+    procedure SetInterest(AEvents: TEventLoopEvents);
     procedure UpdateLoopEvents;
+    function HasPendingRead: Boolean; inline;
+    function HasPendingWrite: Boolean; inline;
+    procedure CompleteRead(ABytes: NativeInt; AStatus: Integer);
+    procedure CompleteWrite(ABytes: NativeInt; AStatus: Integer);
+    procedure DoRecv;
+    procedure DoSend;
+    procedure CancelRead(AGen: Cardinal);
+    procedure CancelWrite(AGen: Cardinal);
   public
     constructor Create(ALoop: IEventLoop; AHandle: TLoopHandle = -1; AConnected: Boolean = False);
     destructor Destroy; override;
@@ -116,6 +139,8 @@ type
     function WriteAsync(ABuffer: Pointer; ACount: NativeInt; constref ACancellationToken: TCancellationToken): specialize IFuture<NativeInt>; overload;
     function WriteAsync(ABuffer: Pointer; ACount: NativeInt): specialize IFuture<NativeInt>; overload;
     procedure Close;
+    { errno of the last failed asynchronous connect, 0 otherwise }
+    property LastError: Integer read FLastError;
   end;
 
   TAsyncServerSocket = class(TInterfacedObject, IAsyncServerSocket)
@@ -124,9 +149,14 @@ type
     FLoop: IEventLoop;
     FAcceptCallback: TAsyncAcceptCallback;
     FAcceptProc: TAsyncAcceptProc;
+    FAcceptGen: Cardinal;
+    FRegistered: Boolean;
+    FDestroying: Boolean;
 
     procedure HandleIO(AHandle: TLoopHandle; AEvents: TEventLoopEvents; AUserData: Pointer);
     procedure SetNonBlocking(AHandle: TLoopHandle);
+    procedure UpdateLoopEvents;
+    procedure CancelAccept(AGen: Cardinal);
   public
     constructor Create(ALoop: IEventLoop);
     destructor Destroy; override;
@@ -144,15 +174,38 @@ type
 
 implementation
 
+uses
+  eventloop.promise;
+
 const
-  {$ifdef UNIX}
+  {$if defined(LINUX) or defined(ANDROID)}
   SO_REUSEPORT_CONST = 15;
-  TCP_NODELAY_CONST = 1;
-  {$endif}
-  {$ifdef MSWINDOWS}
+  { Report EPIPE instead of raising SIGPIPE, which would end the process }
+  SEND_FLAGS = $4000; { MSG_NOSIGNAL }
+  {$elseif defined(FREEBSD) or defined(DRAGONFLY)}
+  SO_REUSEPORT_CONST = $200;
+  SEND_FLAGS = $20000; { MSG_NOSIGNAL }
+  {$elseif defined(OPENBSD) or defined(NETBSD)}
+  SO_REUSEPORT_CONST = $200;
+  SEND_FLAGS = $400; { MSG_NOSIGNAL }
+  {$elseif defined(DARWIN)}
+  SO_REUSEPORT_CONST = $200;
+  SEND_FLAGS = 0; { SO_NOSIGPIPE is set on the socket instead }
+  SO_NOSIGPIPE_CONST = $1022;
+  {$else}
   SO_REUSEPORT_CONST = 0;
-  TCP_NODELAY_CONST = 1;
+  SEND_FLAGS = 0;
   {$endif}
+  TCP_NODELAY_CONST = 1;
+  {$ifdef UNIX}
+  ERR_CANCELED = ESysECANCELED;
+  {$else}
+  ERR_CANCELED = 995; { ERROR_OPERATION_ABORTED }
+  {$endif}
+
+type
+  TSizePromise = specialize TLoopPromise<NativeInt>;
+  TSocketPromise = specialize TLoopPromise<IAsyncSocket>;
 
 { Helper procedures }
 
@@ -164,6 +217,10 @@ begin
   LFlags := fpfcntl(AHandle, F_GETFL, 0);
   if LFlags >= 0 then
     fpfcntl(AHandle, F_SETFL, LFlags or O_NONBLOCK);
+  {$ifdef DARWIN}
+  LFlags := 1;
+  fpsetsockopt(AHandle, SOL_SOCKET, SO_NOSIGPIPE_CONST, @LFlags, SizeOf(LFlags));
+  {$endif}
 end;
 {$endif}
 {$ifdef MSWINDOWS}
@@ -175,6 +232,38 @@ begin
 end;
 {$endif}
 
+function ParseIPv4(const AHost: string; ADefaultLoopback: Boolean): in_addr;
+begin
+  if (AHost = '') or (AHost = 'localhost') then
+  begin
+    if ADefaultLoopback then
+      Result := StrToNetAddr('127.0.0.1')
+    else
+      Result.s_addr := 0;
+    Exit;
+  end;
+  if AHost = '0.0.0.0' then
+  begin
+    Result.s_addr := 0;
+    Exit;
+  end;
+  Result := StrToNetAddr(AHost);
+  { StrToNetAddr returns 0.0.0.0 for anything it cannot parse; connecting
+    there would silently reach the local host. }
+  if Result.s_addr = 0 then
+    raise ESocketException.CreateFmt('"%s" is not an IPv4 address (host names are not resolved)', [AHost]);
+end;
+
+{ Runs AProc in the loop thread: directly when already there, otherwise
+  through Post. }
+procedure RunInLoop(const ALoop: IEventLoop; const AProc: TAsyncProc);
+begin
+  if ALoop.InLoopThread then
+    AProc()
+  else
+    ALoop.Post(AProc);
+end;
+
 { TAsyncSocket }
 
 constructor TAsyncSocket.Create(ALoop: IEventLoop; AHandle: TLoopHandle; AConnected: Boolean);
@@ -183,26 +272,15 @@ begin
   FLoop := ALoop;
   FHandle := AHandle;
   FConnected := AConnected;
-  FConnecting := False;
   FOwnsHandle := True;
-  FReadBuffer := nil;
-  FReadCount := 0;
-  FReadCallback := nil;
-  FWriteBuffer := nil;
-  FWriteCount := 0;
-  FWriteOffset := 0;
-  FWriteCallback := nil;
-
   if FHandle <> InvalidLoopHandle then
-  begin
     SetNonBlocking(FHandle);
-    if FLoop <> nil then
-      FLoop.RegisterHandle(FHandle, [], @HandleIO, Self);
-  end;
 end;
 
 destructor TAsyncSocket.Destroy;
 begin
+  { Pending callbacks are dropped, not called, when the socket goes away. }
+  FDestroying := True;
   Close;
   inherited Destroy;
 end;
@@ -252,24 +330,131 @@ begin
   {$endif}
 end;
 
+function TAsyncSocket.HasPendingRead: Boolean;
+begin
+  Result := Assigned(FReadCallback) or Assigned(FReadProc);
+end;
+
+function TAsyncSocket.HasPendingWrite: Boolean;
+begin
+  Result := Assigned(FWriteCallback) or Assigned(FWriteProc);
+end;
+
+procedure TAsyncSocket.SetInterest(AEvents: TEventLoopEvents);
+begin
+  if (FHandle = InvalidLoopHandle) or (FLoop = nil) then
+    Exit;
+  if (AEvents = FInterest) and (FRegistered = (AEvents <> [])) then
+    Exit;
+  if AEvents = [] then
+  begin
+    if FRegistered then
+      FLoop.UnregisterHandle(FHandle);
+    FRegistered := False;
+  end
+  else if FRegistered then
+    FLoop.ModifyHandle(FHandle, AEvents)
+  else
+  begin
+    FLoop.RegisterHandle(FHandle, AEvents, @HandleIO, Self);
+    FRegistered := True;
+  end;
+  FInterest := AEvents;
+end;
+
 procedure TAsyncSocket.UpdateLoopEvents;
 var
   LEvents: TEventLoopEvents;
 begin
-  if (FHandle = InvalidLoopHandle) or (FLoop = nil) then
-    Exit;
   LEvents := [];
   if FConnecting then
     LEvents := [eleWrite]
   else
   begin
-    if Assigned(FReadCallback) or Assigned(FReadProc) then
+    if HasPendingRead then
       Include(LEvents, eleRead);
-    if Assigned(FWriteCallback) or Assigned(FWriteProc) then
+    if HasPendingWrite then
       Include(LEvents, eleWrite);
   end;
-  FLoop.ModifyHandle(FHandle, LEvents);
+  SetInterest(LEvents);
 end;
+
+procedure TAsyncSocket.CompleteRead(ABytes: NativeInt; AStatus: Integer);
+var
+  LCb: TAsyncReadCallback;
+  LProc: TAsyncReadProc;
+begin
+  { Take the callback first: it may start the next read right away. }
+  LCb := FReadCallback;
+  LProc := FReadProc;
+  FReadCallback := nil;
+  FReadProc := nil;
+  if Assigned(LCb) then
+    LCb(ABytes, AStatus)
+  else if Assigned(LProc) then
+    LProc(ABytes, AStatus);
+end;
+
+procedure TAsyncSocket.CompleteWrite(ABytes: NativeInt; AStatus: Integer);
+var
+  LCb: TAsyncWriteCallback;
+  LProc: TAsyncWriteProc;
+begin
+  LCb := FWriteCallback;
+  LProc := FWriteProc;
+  FWriteCallback := nil;
+  FWriteProc := nil;
+  if Assigned(LCb) then
+    LCb(ABytes, AStatus)
+  else if Assigned(LProc) then
+    LProc(ABytes, AStatus);
+end;
+
+procedure TAsyncSocket.DoRecv;
+{$ifdef UNIX}
+var
+  LBytes: NativeInt;
+  LErr: cint;
+begin
+  LBytes := fprecv(FHandle, FReadBuffer, FReadCount, 0);
+  if LBytes >= 0 then
+    CompleteRead(LBytes, 0) { 0 bytes: the peer closed the connection }
+  else
+  begin
+    LErr := fpgeterrno;
+    if (LErr <> ESysEAGAIN) and (LErr <> ESysEWOULDBLOCK) and (LErr <> ESysEINTR) then
+      CompleteRead(-1, LErr);
+  end;
+end;
+{$else}
+begin
+end;
+{$endif}
+
+procedure TAsyncSocket.DoSend;
+{$ifdef UNIX}
+var
+  LBytes: NativeInt;
+  LErr: cint;
+begin
+  LBytes := fpsend(FHandle, PByte(FWriteBuffer) + FWriteOffset, FWriteCount - FWriteOffset, SEND_FLAGS);
+  if LBytes >= 0 then
+  begin
+    Inc(FWriteOffset, LBytes);
+    if FWriteOffset >= FWriteCount then
+      CompleteWrite(FWriteOffset, 0);
+  end
+  else
+  begin
+    LErr := fpgeterrno;
+    if (LErr <> ESysEAGAIN) and (LErr <> ESysEWOULDBLOCK) and (LErr <> ESysEINTR) then
+      CompleteWrite(-1, LErr);
+  end;
+end;
+{$else}
+begin
+end;
+{$endif}
 
 procedure TAsyncSocket.AsyncConnect(const AHost: string; APort: Word; const ACallback: TAsyncCallback);
 var
@@ -277,6 +462,11 @@ var
   LRes: cint;
   LErr: cint;
 begin
+  FillChar(LAddr, SizeOf(LAddr), 0);
+  LAddr.sin_family := AF_INET;
+  LAddr.sin_port := htons(APort);
+  LAddr.sin_addr := ParseIPv4(AHost, True);
+
   if FHandle = InvalidLoopHandle then
   begin
     {$ifdef UNIX}
@@ -288,20 +478,11 @@ begin
     if FHandle = InvalidLoopHandle then
       raise ESocketException.Create('Failed to create socket');
     SetNonBlocking(FHandle);
-    if FLoop <> nil then
-      FLoop.RegisterHandle(FHandle, [], @HandleIO, Self);
   end;
 
   FConnectCallback := ACallback;
   FConnecting := True;
-
-  FillChar(LAddr, SizeOf(LAddr), 0);
-  LAddr.sin_family := AF_INET;
-  LAddr.sin_port := htons(APort);
-  if (AHost = '') or (AHost = '127.0.0.1') or (AHost = 'localhost') then
-    LAddr.sin_addr := StrToNetAddr('127.0.0.1')
-  else
-    LAddr.sin_addr := StrToNetAddr(AHost);
+  FLastError := 0;
 
   {$ifdef UNIX}
   LRes := fpconnect(FHandle, @LAddr, SizeOf(LAddr));
@@ -310,8 +491,10 @@ begin
     { Connected synchronously }
     FConnecting := False;
     FConnected := True;
-    if Assigned(FConnectCallback) then
-      FConnectCallback();
+    FConnectCallback := nil;
+    UpdateLoopEvents;
+    if Assigned(ACallback) then
+      ACallback();
   end
   else
   begin
@@ -321,6 +504,8 @@ begin
     else
     begin
       FConnecting := False;
+      FConnectCallback := nil;
+      FLastError := LErr;
       raise ESocketException.CreateFmt('Connect failed: %s (errno=%d)', [SysErrorMessage(LErr), LErr]);
     end;
   end;
@@ -333,6 +518,7 @@ begin
   FReadCount := ACount;
   FReadCallback := ACallback;
   FReadProc := nil;
+  Inc(FReadGen);
   UpdateLoopEvents;
 end;
 
@@ -342,309 +528,207 @@ begin
   FReadCount := ACount;
   FReadCallback := nil;
   FReadProc := AProc;
+  Inc(FReadGen);
   UpdateLoopEvents;
 end;
 
 procedure TAsyncSocket.AsyncWrite(ABuffer: Pointer; ACount: NativeInt; const ACallback: TAsyncWriteCallback);
-{$ifdef UNIX}
-var
-  LBytes: NativeInt;
-{$endif}
 begin
   FWriteBuffer := ABuffer;
   FWriteCount := ACount;
   FWriteOffset := 0;
   FWriteCallback := ACallback;
   FWriteProc := nil;
-
-  {$ifdef UNIX}
+  Inc(FWriteGen);
+  { Eager write: most writes fit into the socket buffer and complete here
+    without a round trip through the poller. }
   if (FHandle <> InvalidLoopHandle) and FConnected and (not FConnecting) then
-  begin
-    LBytes := fpsend(FHandle, ABuffer, ACount, 0);
-    if LBytes > 0 then
-    begin
-      FWriteOffset := LBytes;
-      if FWriteOffset >= FWriteCount then
-      begin
-        if Assigned(FWriteCallback) then
-        begin
-          FWriteCallback := nil;
-          ACallback(FWriteOffset, 0);
-        end;
-        Exit;
-      end;
-    end;
-  end;
-  {$endif}
-
+    DoSend;
   UpdateLoopEvents;
 end;
 
 procedure TAsyncSocket.AsyncWrite(ABuffer: Pointer; ACount: NativeInt; const AProc: TAsyncWriteProc);
-{$ifdef UNIX}
-var
-  LBytes: NativeInt;
-{$endif}
 begin
   FWriteBuffer := ABuffer;
   FWriteCount := ACount;
   FWriteOffset := 0;
   FWriteCallback := nil;
   FWriteProc := AProc;
-
-  {$ifdef UNIX}
+  Inc(FWriteGen);
   if (FHandle <> InvalidLoopHandle) and FConnected and (not FConnecting) then
-  begin
-    LBytes := fpsend(FHandle, ABuffer, ACount, 0);
-    if LBytes > 0 then
-    begin
-      FWriteOffset := LBytes;
-      if FWriteOffset >= FWriteCount then
-      begin
-        if Assigned(FWriteProc) then
-        begin
-          FWriteProc := nil;
-          AProc(FWriteOffset, 0);
-        end;
-        Exit;
-      end;
-    end;
-  end;
-  {$endif}
-
+    DoSend;
   UpdateLoopEvents;
 end;
 
 procedure TAsyncSocket.HandleIO(AHandle: TLoopHandle; AEvents: TEventLoopEvents; AUserData: Pointer);
 var
-  LBytes: NativeInt;
-  LReadCb: TAsyncReadCallback;
-  LReadProc: TAsyncReadProc;
-  LWriteCb: TAsyncWriteCallback;
-  LWriteProc: TAsyncWriteProc;
+  LKeep: IAsyncSocket;
   LConnCb: TAsyncCallback;
-  LErr: cint;
+  {$ifdef UNIX}
   LOptLen: TSockLen;
   LVal: cint;
+  {$endif}
 begin
+  { A callback may drop the last reference to this socket. }
+  LKeep := Self;
   if FConnecting then
   begin
     FConnecting := False;
     {$ifdef UNIX}
     LOptLen := SizeOf(LVal);
     LVal := 0;
-    fpgetsockopt(FHandle, SOL_SOCKET, SO_ERROR, @LVal, @LOptLen);
-    if LVal = 0 then
-    begin
-      FConnected := True;
-      LConnCb := FConnectCallback;
-      FConnectCallback := nil;
-      UpdateLoopEvents;
-      if Assigned(LConnCb) then
-        LConnCb();
-    end
-    else
-    begin
-      Close;
-      raise ESocketException.CreateFmt('Async connect failed with error %d', [LVal]);
-    end;
+    if fpgetsockopt(FHandle, SOL_SOCKET, SO_ERROR, @LVal, @LOptLen) < 0 then
+      LVal := fpgeterrno;
+    FLastError := LVal;
+    FConnected := LVal = 0;
     {$endif}
+    LConnCb := FConnectCallback;
+    FConnectCallback := nil;
+    UpdateLoopEvents;
+    { The callback is called on failure too: Connected is False then and
+      LastError holds the error. Raising here would end the loop's Run. }
+    if Assigned(LConnCb) then
+      LConnCb();
     Exit;
   end;
 
-  { Read handling }
-  if (eleRead in AEvents) and (Assigned(FReadCallback) or Assigned(FReadProc)) then
-  begin
-    {$ifdef UNIX}
-    LBytes := fprecv(FHandle, FReadBuffer, FReadCount, 0);
-    if LBytes > 0 then
-    begin
-      LReadCb := FReadCallback;
-      LReadProc := FReadProc;
-      FReadCallback := nil;
-      FReadProc := nil;
-      UpdateLoopEvents;
-      if Assigned(LReadCb) then
-        LReadCb(LBytes, 0)
-      else if Assigned(LReadProc) then
-        LReadProc(LBytes, 0);
-    end
-    else if LBytes = 0 then
-    begin
-      { Remote EOF }
-      LReadCb := FReadCallback;
-      LReadProc := FReadProc;
-      FReadCallback := nil;
-      FReadProc := nil;
-      UpdateLoopEvents;
-      if Assigned(LReadCb) then
-        LReadCb(0, 0)
-      else if Assigned(LReadProc) then
-        LReadProc(0, 0);
-    end
-    else
-    begin
-      LErr := fpgeterrno;
-      if (LErr <> ESysEAGAIN) and (LErr <> ESysEWOULDBLOCK) and (LErr <> ESysEINTR) then
-      begin
-        LReadCb := FReadCallback;
-        LReadProc := FReadProc;
-        FReadCallback := nil;
-        FReadProc := nil;
-        UpdateLoopEvents;
-        if Assigned(LReadCb) then
-          LReadCb(-1, LErr)
-        else if Assigned(LReadProc) then
-          LReadProc(-1, LErr);
-      end;
-    end;
-    {$endif}
-  end;
+  { Hang-up and error are delivered to pending operations: recv/send then
+    return end-of-file or the error, so they complete instead of waiting
+    for an event that never comes. }
+  if HasPendingRead and (AEvents * [eleRead, eleHangup, eleError] <> []) and (FHandle <> InvalidLoopHandle) then
+    DoRecv;
+  if HasPendingWrite and (AEvents * [eleWrite, eleHangup, eleError] <> []) and (FHandle <> InvalidLoopHandle) then
+    DoSend;
+  UpdateLoopEvents;
+end;
 
-  { Write handling }
-  if (eleWrite in AEvents) and (Assigned(FWriteCallback) or Assigned(FWriteProc)) then
+procedure TAsyncSocket.CancelRead(AGen: Cardinal);
+begin
+  if (FReadGen = AGen) and HasPendingRead then
   begin
-    {$ifdef UNIX}
-    LBytes := fpsend(FHandle, PByte(FWriteBuffer) + FWriteOffset, FWriteCount - FWriteOffset, 0);
-    if LBytes > 0 then
-    begin
-      Inc(FWriteOffset, LBytes);
-      if FWriteOffset >= FWriteCount then
-      begin
-        LWriteCb := FWriteCallback;
-        LWriteProc := FWriteProc;
-        FWriteCallback := nil;
-        FWriteProc := nil;
-        UpdateLoopEvents;
-        if Assigned(LWriteCb) then
-          LWriteCb(FWriteOffset, 0)
-        else if Assigned(LWriteProc) then
-          LWriteProc(FWriteOffset, 0);
-      end;
-    end
-    else
-    begin
-      LErr := fpgeterrno;
-      if (LErr <> ESysEAGAIN) and (LErr <> ESysEWOULDBLOCK) and (LErr <> ESysEINTR) then
-      begin
-        LWriteCb := FWriteCallback;
-        LWriteProc := FWriteProc;
-        FWriteCallback := nil;
-        FWriteProc := nil;
-        UpdateLoopEvents;
-        if Assigned(LWriteCb) then
-          LWriteCb(-1, LErr)
-        else if Assigned(LWriteProc) then
-          LWriteProc(-1, LErr);
-      end;
-    end;
-    {$endif}
+    FReadCallback := nil;
+    FReadProc := nil;
+    UpdateLoopEvents;
   end;
+end;
 
-  if (eleHangup in AEvents) or (eleError in AEvents) then
+procedure TAsyncSocket.CancelWrite(AGen: Cardinal);
+begin
+  if (FWriteGen = AGen) and HasPendingWrite then
   begin
-    if Assigned(FReadCallback) or Assigned(FReadProc) then
-    begin
-      LReadCb := FReadCallback;
-      LReadProc := FReadProc;
-      FReadCallback := nil;
-      FReadProc := nil;
-      if Assigned(LReadCb) then
-        LReadCb(0, 0)
-      else if Assigned(LReadProc) then
-        LReadProc(0, 0);
-    end;
+    FWriteCallback := nil;
+    FWriteProc := nil;
+    UpdateLoopEvents;
   end;
 end;
 
 type
-  { Helper class for Future Read/Write adapters }
-  TReadAsyncHelper = class
-  private
-    FBytes: NativeInt;
-    FStatus: Integer;
-    FDone: Boolean;
-    FLock: TCriticalSection;
-    FCond: PRTLEvent;
-    procedure OnComplete(ABytes: NativeInt; AStatus: Integer);
+  { State shared by a future-based operation, its completion callback and
+    its cancellation callback. }
+  TSocketOp = class(TInterfacedObject)
   public
-    constructor Create;
-    destructor Destroy; override;
-    function WaitResult: NativeInt;
+    Promise: TSizePromise;
+    PromiseRef: IInterface;
+    Socket: TAsyncSocket;
+    SocketRef: IAsyncSocket; { keeps Socket alive }
+    Loop: IEventLoop;
+    Gen: Cardinal;
+    Registration: TCancellationTokenRegistration;
+    procedure Complete(ABytes: NativeInt; AStatus: Integer);
   end;
 
-constructor TReadAsyncHelper.Create;
+procedure TSocketOp.Complete(ABytes: NativeInt; AStatus: Integer);
 begin
-  inherited Create;
-  FBytes := 0;
-  FStatus := 0;
-  FDone := False;
-  FLock := TCriticalSection.Create;
-  FCond := RTLEventCreate;
+  Registration.Unregister;
+  if AStatus = ERR_CANCELED then
+    Promise.TrySetCanceled
+  else if AStatus <> 0 then
+    Promise.TrySetException(ESocketException.CreateFmt('Async socket error %d: %s', [AStatus, SysErrorMessage(AStatus)]))
+  else
+    Promise.TrySetResult(ABytes);
 end;
 
-destructor TReadAsyncHelper.Destroy;
+function StartSocketOp(ASocket: TAsyncSocket; ABuffer: Pointer; ACount: NativeInt;
+  constref AToken: TCancellationToken; AWrite: Boolean): specialize IFuture<NativeInt>;
+var
+  LOp: TSocketOp;
+  LOpRef: IInterface;
 begin
-  RTLEventDestroy(FCond);
-  FreeAndNil(FLock);
-  inherited Destroy;
-end;
-
-procedure TReadAsyncHelper.OnComplete(ABytes: NativeInt; AStatus: Integer);
-begin
-  FLock.Acquire;
-  try
-    FBytes := ABytes;
-    FStatus := AStatus;
-    FDone := True;
-    RTLEventSetEvent(FCond);
-  finally
-    FLock.Release;
+  LOp := TSocketOp.Create;
+  LOpRef := LOp;
+  LOp.Promise := TSizePromise.Create;
+  LOp.PromiseRef := LOp.Promise;
+  LOp.Socket := ASocket;
+  LOp.SocketRef := ASocket;
+  LOp.Loop := ASocket.FLoop;
+  Result := LOp.Promise.Future;
+  if AToken.IsCancellationRequested then
+  begin
+    LOp.Promise.TrySetCanceled;
+    Exit;
   end;
-end;
+  if LOp.Loop = nil then
+  begin
+    LOp.Promise.TrySetException(ESocketException.Create('Socket has no event loop'));
+    Exit;
+  end;
 
-function TReadAsyncHelper.WaitResult: NativeInt;
-begin
-  FLock.Acquire;
-  try
-    while not FDone do
+  RunInLoop(LOp.Loop,
+    procedure
+    var
+      LSock: TAsyncSocket;
     begin
-      FLock.Release;
-      RTLEventWaitFor(FCond);
-      FLock.Acquire;
-    end;
-    if FStatus <> 0 then
-      raise ESocketException.CreateFmt('Async socket error %d', [FStatus]);
-    Result := FBytes;
-  finally
-    FLock.Release;
-  end;
+      if LOpRef = nil then;
+      if not LOp.Promise.IsPending then
+        Exit; { canceled before it could start }
+      LSock := LOp.Socket;
+      { The completion closure holds the operation until it has run. }
+      if AWrite then
+      begin
+        LSock.AsyncWrite(ABuffer, ACount,
+          procedure(ABytes: NativeInt; AStatus: Integer)
+          begin
+            if LOpRef = nil then;
+            LOp.Complete(ABytes, AStatus);
+          end);
+        LOp.Gen := LSock.FWriteGen;
+      end
+      else
+      begin
+        LSock.AsyncRead(ABuffer, ACount,
+          procedure(ABytes: NativeInt; AStatus: Integer)
+          begin
+            if LOpRef = nil then;
+            LOp.Complete(ABytes, AStatus);
+          end);
+        LOp.Gen := LSock.FReadGen;
+      end;
+    end);
+
+  if AToken.CanBeCanceled then
+    LOp.Registration := AToken.Register(
+      procedure
+      begin
+        { Cancellation can come from any thread; the socket is only
+          touched in the loop thread. }
+        LOp.Loop.Post(
+          procedure
+          begin
+            if LOpRef = nil then;
+            if not LOp.Promise.IsPending then
+              Exit;
+            if AWrite then
+              LOp.Socket.CancelWrite(LOp.Gen)
+            else
+              LOp.Socket.CancelRead(LOp.Gen);
+            LOp.Promise.TrySetCanceled;
+          end);
+      end);
 end;
 
 function TAsyncSocket.ReadAsync(ABuffer: Pointer; ACount: NativeInt; constref ACancellationToken: TCancellationToken): specialize IFuture<NativeInt>;
-var
-  LSelf: IAsyncSocket;
 begin
-  LSelf := Self;
-  Result := TTask.specialize Future<NativeInt>(
-    function: NativeInt
-    var
-      LHelper: TReadAsyncHelper;
-    begin
-      if ACancellationToken.IsCancellationRequested then
-        ACancellationToken.ThrowIfCancellationRequested;
-
-      LHelper := TReadAsyncHelper.Create;
-      try
-        LSelf.AsyncRead(ABuffer, ACount, @LHelper.OnComplete);
-        Result := LHelper.WaitResult;
-      finally
-        LHelper.Free;
-      end;
-    end,
-    ACancellationToken,
-    nil
-  );
+  Result := StartSocketOp(Self, ABuffer, ACount, ACancellationToken, False);
 end;
 
 function TAsyncSocket.ReadAsync(ABuffer: Pointer; ACount: NativeInt): specialize IFuture<NativeInt>;
@@ -653,29 +737,8 @@ begin
 end;
 
 function TAsyncSocket.WriteAsync(ABuffer: Pointer; ACount: NativeInt; constref ACancellationToken: TCancellationToken): specialize IFuture<NativeInt>;
-var
-  LSelf: IAsyncSocket;
 begin
-  LSelf := Self;
-  Result := TTask.specialize Future<NativeInt>(
-    function: NativeInt
-    var
-      LHelper: TReadAsyncHelper;
-    begin
-      if ACancellationToken.IsCancellationRequested then
-        ACancellationToken.ThrowIfCancellationRequested;
-
-      LHelper := TReadAsyncHelper.Create;
-      try
-        LSelf.AsyncWrite(ABuffer, ACount, @LHelper.OnComplete);
-        Result := LHelper.WaitResult;
-      finally
-        LHelper.Free;
-      end;
-    end,
-    ACancellationToken,
-    nil
-  );
+  Result := StartSocketOp(Self, ABuffer, ACount, ACancellationToken, True);
 end;
 
 function TAsyncSocket.WriteAsync(ABuffer: Pointer; ACount: NativeInt): specialize IFuture<NativeInt>;
@@ -684,21 +747,69 @@ begin
 end;
 
 procedure TAsyncSocket.Close;
+var
+  LKeep: IAsyncSocket;
+  LHadRead, LHadWrite: Boolean;
+  LReadCb: TAsyncReadCallback;
+  LReadProc: TAsyncReadProc;
+  LWriteCb: TAsyncWriteCallback;
+  LWriteProc: TAsyncWriteProc;
+  LConnCb: TAsyncCallback;
 begin
-  if (FHandle <> InvalidLoopHandle) and FOwnsHandle then
+  if not FDestroying then
+    LKeep := Self;
+  LReadCb := FReadCallback;
+  LReadProc := FReadProc;
+  LWriteCb := FWriteCallback;
+  LWriteProc := FWriteProc;
+  LConnCb := FConnectCallback;
+  LHadRead := HasPendingRead;
+  LHadWrite := HasPendingWrite;
+  FReadCallback := nil;
+  FReadProc := nil;
+  FWriteCallback := nil;
+  FWriteProc := nil;
+  FConnectCallback := nil;
+
+  if FHandle <> InvalidLoopHandle then
   begin
-    if FLoop <> nil then
+    if FRegistered and (FLoop <> nil) then
       FLoop.UnregisterHandle(FHandle);
-    {$ifdef UNIX}
-    fpclose(FHandle);
-    {$endif}
-    {$ifdef MSWINDOWS}
-    closesocket(FHandle);
-    {$endif}
+    FRegistered := False;
+    FInterest := [];
+    if FOwnsHandle then
+    begin
+      {$ifdef UNIX}
+      fpclose(FHandle);
+      {$endif}
+      {$ifdef MSWINDOWS}
+      closesocket(FHandle);
+      {$endif}
+    end;
     FHandle := InvalidLoopHandle;
   end;
   FConnected := False;
   FConnecting := False;
+
+  if FDestroying then
+    Exit;
+  { Operations still pending complete with ECANCELED, so that futures and
+    fibers waiting for them do not hang. }
+  if LHadRead then
+    if Assigned(LReadCb) then
+      LReadCb(-1, ERR_CANCELED)
+    else
+      LReadProc(-1, ERR_CANCELED);
+  if LHadWrite then
+    if Assigned(LWriteCb) then
+      LWriteCb(-1, ERR_CANCELED)
+    else
+      LWriteProc(-1, ERR_CANCELED);
+  if Assigned(LConnCb) then
+  begin
+    FLastError := ERR_CANCELED;
+    LConnCb();
+  end;
 end;
 
 { TAsyncServerSocket }
@@ -708,11 +819,13 @@ begin
   inherited Create;
   FLoop := ALoop;
   FHandle := InvalidLoopHandle;
-  FAcceptCallback := nil;
 end;
 
 destructor TAsyncServerSocket.Destroy;
 begin
+  FDestroying := True;
+  FAcceptCallback := nil;
+  FAcceptProc := nil;
   Close;
   inherited Destroy;
 end;
@@ -747,6 +860,24 @@ begin
   SetSocketNonBlocking(AHandle);
 end;
 
+procedure TAsyncServerSocket.UpdateLoopEvents;
+var
+  LWant: Boolean;
+begin
+  if (FHandle = InvalidLoopHandle) or (FLoop = nil) then
+    Exit;
+  { Listen only while somebody accepts; otherwise a pending connection
+    would make a level-triggered poller report the socket again and again. }
+  LWant := Assigned(FAcceptCallback) or Assigned(FAcceptProc);
+  if LWant = FRegistered then
+    Exit;
+  if LWant then
+    FLoop.RegisterHandle(FHandle, [eleRead], @HandleIO, Self)
+  else
+    FLoop.UnregisterHandle(FHandle);
+  FRegistered := LWant;
+end;
+
 procedure TAsyncServerSocket.Listen(const AHost: string; APort: Word; ABacklog: Integer; AReusePort: Boolean);
 var
   LAddr: TInetSockAddr;
@@ -754,34 +885,41 @@ var
 begin
   Close;
 
+  FillChar(LAddr, SizeOf(LAddr), 0);
+  LAddr.sin_family := AF_INET;
+  LAddr.sin_port := htons(APort);
+  LAddr.sin_addr := ParseIPv4(AHost, False);
+
   {$ifdef UNIX}
   FHandle := fpsocket(AF_INET, SOCK_STREAM, 0);
   if FHandle < 0 then
+  begin
+    FHandle := InvalidLoopHandle;
     raise ESocketException.CreateFmt('Socket creation failed: %s (errno=%d)', [SysErrorMessage(fpgeterrno), fpgeterrno]);
+  end;
 
   LOpt := 1;
   fpsetsockopt(FHandle, SOL_SOCKET, SO_REUSEADDR, @LOpt, SizeOf(LOpt));
-  if AReusePort then
+  if AReusePort and (SO_REUSEPORT_CONST <> 0) then
     fpsetsockopt(FHandle, SOL_SOCKET, SO_REUSEPORT_CONST, @LOpt, SizeOf(LOpt));
 
   SetNonBlocking(FHandle);
 
-  FillChar(LAddr, SizeOf(LAddr), 0);
-  LAddr.sin_family := AF_INET;
-  LAddr.sin_port := htons(APort);
-  if (AHost = '') or (AHost = '0.0.0.0') then
-    LAddr.sin_addr.s_addr := 0
-  else
-    LAddr.sin_addr := StrToNetAddr(AHost);
-
   if fpbind(FHandle, @LAddr, SizeOf(LAddr)) < 0 then
-    raise ESocketException.CreateFmt('Bind to %s:%d failed: %s (errno=%d)', [AHost, APort, SysErrorMessage(fpgeterrno), fpgeterrno]);
+  begin
+    LOpt := fpgeterrno;
+    Close;
+    raise ESocketException.CreateFmt('Bind to %s:%d failed: %s (errno=%d)', [AHost, APort, SysErrorMessage(LOpt), LOpt]);
+  end;
 
   if fplisten(FHandle, ABacklog) < 0 then
-    raise ESocketException.CreateFmt('Listen failed: %s (errno=%d)', [SysErrorMessage(fpgeterrno), fpgeterrno]);
+  begin
+    LOpt := fpgeterrno;
+    Close;
+    raise ESocketException.CreateFmt('Listen failed: %s (errno=%d)', [SysErrorMessage(LOpt), LOpt]);
+  end;
 
-  if FLoop <> nil then
-    FLoop.RegisterHandle(FHandle, [eleRead], @HandleIO, Self);
+  UpdateLoopEvents;
   {$endif}
 end;
 
@@ -789,143 +927,155 @@ procedure TAsyncServerSocket.AsyncAccept(const ACallback: TAsyncAcceptCallback);
 begin
   FAcceptCallback := ACallback;
   FAcceptProc := nil;
+  Inc(FAcceptGen);
+  UpdateLoopEvents;
 end;
 
 procedure TAsyncServerSocket.AsyncAccept(const AProc: TAsyncAcceptProc);
 begin
   FAcceptCallback := nil;
   FAcceptProc := AProc;
+  Inc(FAcceptGen);
+  UpdateLoopEvents;
 end;
 
 procedure TAsyncServerSocket.HandleIO(AHandle: TLoopHandle; AEvents: TEventLoopEvents; AUserData: Pointer);
 var
+  LKeep: IAsyncServerSocket;
+  LCb: TAsyncAcceptCallback;
+  LProc: TAsyncAcceptProc;
+  {$ifdef UNIX}
   LClient: cint;
   LAddr: TInetSockAddr;
   LAddrLen: TSockLen;
   LErr: cint;
+  {$endif}
 begin
-  if (eleRead in AEvents) and (Assigned(FAcceptCallback) or Assigned(FAcceptProc)) then
+  LKeep := Self;
+  if not (eleRead in AEvents) then
+    Exit;
+  {$ifdef UNIX}
+  while FHandle <> InvalidLoopHandle do
   begin
-    {$ifdef UNIX}
-    while True do
+    { Copy the handler before calling it: it may replace or clear itself,
+      as AcceptAsync's one-shot handler does. }
+    LCb := FAcceptCallback;
+    LProc := FAcceptProc;
+    if not (Assigned(LCb) or Assigned(LProc)) then
+      Break;
+    LAddrLen := SizeOf(LAddr);
+    LClient := fpaccept(FHandle, @LAddr, @LAddrLen);
+    if LClient >= 0 then
     begin
-      LAddrLen := SizeOf(LAddr);
-      LClient := fpaccept(FHandle, @LAddr, @LAddrLen);
-      if LClient >= 0 then
-      begin
-        SetNonBlocking(LClient);
-        if Assigned(FAcceptCallback) then
-          FAcceptCallback(LClient, NetAddrToStr(LAddr.sin_addr), ntohs(LAddr.sin_port), 0)
-        else if Assigned(FAcceptProc) then
-          FAcceptProc(LClient, NetAddrToStr(LAddr.sin_addr), ntohs(LAddr.sin_port), 0);
-      end
+      SetNonBlocking(LClient);
+      if Assigned(LCb) then
+        LCb(LClient, NetAddrToStr(LAddr.sin_addr), ntohs(LAddr.sin_port), 0)
       else
+        LProc(LClient, NetAddrToStr(LAddr.sin_addr), ntohs(LAddr.sin_port), 0);
+    end
+    else
+    begin
+      LErr := fpgeterrno;
+      if (LErr <> ESysEAGAIN) and (LErr <> ESysEWOULDBLOCK) and (LErr <> ESysEINTR) then
       begin
-        LErr := fpgeterrno;
-        if (LErr = ESysEAGAIN) or (LErr = ESysEWOULDBLOCK) or (LErr = ESysEINTR) then
-          Break
+        if Assigned(LCb) then
+          LCb(InvalidLoopHandle, '', 0, LErr)
         else
-        begin
-          if Assigned(FAcceptCallback) then
-            FAcceptCallback(InvalidLoopHandle, '', 0, LErr)
-          else if Assigned(FAcceptProc) then
-            FAcceptProc(InvalidLoopHandle, '', 0, LErr);
-          Break;
-        end;
+          LProc(InvalidLoopHandle, '', 0, LErr);
       end;
+      Break;
     end;
-    {$endif}
+  end;
+  {$endif}
+  UpdateLoopEvents;
+end;
+
+procedure TAsyncServerSocket.CancelAccept(AGen: Cardinal);
+begin
+  if FAcceptGen = AGen then
+  begin
+    FAcceptCallback := nil;
+    FAcceptProc := nil;
+    UpdateLoopEvents;
   end;
 end;
 
 type
-  { Accept future helper }
-  TAcceptHelper = class
-  private
-    FSocket: IAsyncSocket;
-    FLoop: IEventLoop;
-    FDone: Boolean;
-    FLock: TCriticalSection;
-    FCond: PRTLEvent;
-    procedure OnAccept(AClientHandle: TLoopHandle; const AClientAddr: string; AClientPort: Word; AStatus: Integer);
+  TAcceptOp = class(TInterfacedObject)
   public
-    constructor Create(ALoop: IEventLoop);
-    destructor Destroy; override;
-    function WaitSocket: IAsyncSocket;
+    Promise: TSocketPromise;
+    PromiseRef: IInterface;
+    Server: TAsyncServerSocket;
+    ServerRef: IAsyncServerSocket; { keeps Server alive }
+    Loop: IEventLoop;
+    Gen: Cardinal;
+    Registration: TCancellationTokenRegistration;
   end;
-
-constructor TAcceptHelper.Create(ALoop: IEventLoop);
-begin
-  inherited Create;
-  FLoop := ALoop;
-  FSocket := nil;
-  FDone := False;
-  FLock := TCriticalSection.Create;
-  FCond := RTLEventCreate;
-end;
-
-destructor TAcceptHelper.Destroy;
-begin
-  RTLEventDestroy(FCond);
-  FreeAndNil(FLock);
-  inherited Destroy;
-end;
-
-procedure TAcceptHelper.OnAccept(AClientHandle: TLoopHandle; const AClientAddr: string; AClientPort: Word; AStatus: Integer);
-begin
-  FLock.Acquire;
-  try
-    if AStatus = 0 then
-      FSocket := TAsyncSocket.Create(FLoop, AClientHandle, True);
-    FDone := True;
-    RTLEventSetEvent(FCond);
-  finally
-    FLock.Release;
-  end;
-end;
-
-function TAcceptHelper.WaitSocket: IAsyncSocket;
-begin
-  FLock.Acquire;
-  try
-    while not FDone do
-    begin
-      FLock.Release;
-      RTLEventWaitFor(FCond);
-      FLock.Acquire;
-    end;
-    Result := FSocket;
-  finally
-    FLock.Release;
-  end;
-end;
 
 function TAsyncServerSocket.AcceptAsync(constref ACancellationToken: TCancellationToken): specialize IFuture<IAsyncSocket>;
 var
-  LServer: IAsyncServerSocket;
-  LLoop: IEventLoop;
+  LOp: TAcceptOp;
+  LOpRef: IInterface;
 begin
-  LServer := Self;
-  LLoop := FLoop;
-  Result := TTask.specialize Future<IAsyncSocket>(
-    function: IAsyncSocket
-    var
-      LHelper: TAcceptHelper;
-    begin
-      if ACancellationToken.IsCancellationRequested then
-        ACancellationToken.ThrowIfCancellationRequested;
+  LOp := TAcceptOp.Create;
+  LOpRef := LOp;
+  LOp.Promise := TSocketPromise.Create;
+  LOp.PromiseRef := LOp.Promise;
+  LOp.Server := Self;
+  LOp.ServerRef := Self;
+  LOp.Loop := FLoop;
+  Result := LOp.Promise.Future;
+  if ACancellationToken.IsCancellationRequested then
+  begin
+    LOp.Promise.TrySetCanceled;
+    Exit;
+  end;
+  if FLoop = nil then
+  begin
+    LOp.Promise.TrySetException(ESocketException.Create('Server socket has no event loop'));
+    Exit;
+  end;
 
-      LHelper := TAcceptHelper.Create(LLoop);
-      try
-        LServer.AsyncAccept(@LHelper.OnAccept);
-        Result := LHelper.WaitSocket;
-      finally
-        LHelper.Free;
-      end;
-    end,
-    ACancellationToken,
-    nil
-  );
+  RunInLoop(FLoop,
+    procedure
+    var
+      LServer: TAsyncServerSocket;
+    begin
+      if LOpRef = nil then;
+      if not LOp.Promise.IsPending then
+        Exit;
+      LServer := LOp.Server;
+      { One-shot handler: it removes itself after the first connection. }
+      LServer.AsyncAccept(
+        procedure(AClientHandle: TLoopHandle; const AClientAddr: string; AClientPort: Word; AStatus: Integer)
+        begin
+          if LOpRef = nil then;
+          LServer.CancelAccept(LOp.Gen);
+          LOp.Registration.Unregister;
+          if AStatus = ERR_CANCELED then
+            LOp.Promise.TrySetCanceled
+          else if AStatus <> 0 then
+            LOp.Promise.TrySetException(ESocketException.CreateFmt('Accept failed: %s (errno=%d)', [SysErrorMessage(AStatus), AStatus]))
+          else if not LOp.Promise.TrySetResult(TAsyncSocket.Create(LOp.Loop, AClientHandle, True)) then
+            ; { canceled meanwhile: the new socket is released and closed }
+        end);
+      LOp.Gen := LServer.FAcceptGen;
+    end);
+
+  if ACancellationToken.CanBeCanceled then
+    LOp.Registration := ACancellationToken.Register(
+      procedure
+      begin
+        LOp.Loop.Post(
+          procedure
+          begin
+            if LOpRef = nil then;
+            if not LOp.Promise.IsPending then
+              Exit;
+            LOp.Server.CancelAccept(LOp.Gen);
+            LOp.Promise.TrySetCanceled;
+          end);
+      end);
 end;
 
 function TAsyncServerSocket.AcceptAsync: specialize IFuture<IAsyncSocket>;
@@ -934,11 +1084,26 @@ begin
 end;
 
 procedure TAsyncServerSocket.Close;
+var
+  LKeep: IAsyncServerSocket;
+  LCb: TAsyncAcceptCallback;
+  LProc: TAsyncAcceptProc;
 begin
+  LCb := nil;
+  LProc := nil;
+  if not FDestroying then
+  begin
+    LKeep := Self;
+    LCb := FAcceptCallback;
+    LProc := FAcceptProc;
+  end;
+  FAcceptCallback := nil;
+  FAcceptProc := nil;
   if FHandle <> InvalidLoopHandle then
   begin
-    if FLoop <> nil then
+    if FRegistered and (FLoop <> nil) then
       FLoop.UnregisterHandle(FHandle);
+    FRegistered := False;
     {$ifdef UNIX}
     fpclose(FHandle);
     {$endif}
@@ -947,6 +1112,11 @@ begin
     {$endif}
     FHandle := InvalidLoopHandle;
   end;
+  { A pending accept learns that it will not get a connection. }
+  if Assigned(LCb) then
+    LCb(InvalidLoopHandle, '', 0, ERR_CANCELED)
+  else if Assigned(LProc) then
+    LProc(InvalidLoopHandle, '', 0, ERR_CANCELED);
 end;
 
 end.

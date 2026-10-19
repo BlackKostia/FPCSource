@@ -63,6 +63,32 @@ type
 
 implementation
 
+{ Reads or writes at AOffset, or at the current position when AOffset < 0.
+  Called with the file lock held. }
+function FileIO(AHandle: TLoopHandle; ABuffer: Pointer; ACount: NativeInt; AOffset: Int64;
+  AWrite: Boolean; out AErr: Integer): NativeInt;
+begin
+  AErr := 0;
+  {$ifdef UNIX}
+  if AOffset >= 0 then
+  begin
+    if AWrite then
+      Result := FpPWrite(AHandle, ABuffer, ACount, AOffset)
+    else
+      Result := FpPRead(AHandle, ABuffer, ACount, AOffset);
+  end
+  else if AWrite then
+    Result := fpwrite(AHandle, ABuffer^, ACount)
+  else
+    Result := fpread(AHandle, ABuffer^, ACount);
+  if Result < 0 then
+    AErr := fpgeterrno;
+  {$else}
+  Result := -1;
+  AErr := 0;
+  {$endif}
+end;
+
 constructor TAsyncFile.Open(const AFileName: string; AMode: Integer; ALoop: IEventLoop);
 {$ifdef UNIX}
 var
@@ -75,16 +101,20 @@ begin
   FOwnsHandle := True;
   FLock := TCriticalSection.Create;
 
-  LFlags := 0;
-  if (AMode and fmOpenReadWrite) = fmOpenReadWrite then
-    LFlags := O_RDWR
-  else if (AMode and fmOpenWrite) = fmOpenWrite then
-    LFlags := O_WRONLY
+  case AMode and 3 of
+    fmOpenWrite: LFlags := O_WRONLY;
+    fmOpenReadWrite: LFlags := O_RDWR;
   else
     LFlags := O_RDONLY;
-
+  end;
+  { fmCreate ($FF00) has no access bits of its own; like TFileStream, a
+    created file is opened for reading and writing. }
   if (AMode and fmCreate) = fmCreate then
+  begin
+    if (AMode and 3) = fmOpenRead then
+      LFlags := O_RDWR;
     LFlags := LFlags or O_CREAT or O_TRUNC;
+  end;
 
   FHandle := fpopen(PAnsiChar(AFileName), LFlags, &664);
   if FHandle < 0 then
@@ -132,110 +162,91 @@ end;
 
 procedure TAsyncFile.AsyncRead(ABuffer: Pointer; ACount: NativeInt; AOffset: Int64; const ACallback: TAsyncReadCallback);
 var
+  LKeep: IAsyncFile;
   LLoop: IEventLoop;
-  LRes: NativeInt;
-  LErr: Integer;
 begin
+  { The task holds the file until it has run. }
+  LKeep := Self;
   LLoop := FLoop;
   TTask.Run(
     procedure
+    var
+      LRes: NativeInt;
+      LErr: Integer;
     begin
       FLock.Acquire;
       try
-        {$ifdef UNIX}
-        if AOffset >= 0 then
-          fplseek(FHandle, AOffset, SEEK_SET);
-        LRes := fpread(FHandle, ABuffer^, ACount);
-        if LRes >= 0 then
-          LErr := 0
-        else
-          LErr := fpgeterrno;
-        {$else}
-        LRes := -1;
-        LErr := 0;
-        {$endif}
+        LRes := FileIO(FHandle, ABuffer, ACount, AOffset, False, LErr);
       finally
         FLock.Release;
       end;
-
+      if not Assigned(ACallback) then
+        Exit;
       if LLoop <> nil then
         LLoop.Post(
           procedure
           begin
-            if Assigned(ACallback) then
-              ACallback(LRes, LErr);
-          end
-        )
-      else if Assigned(ACallback) then
+            if LKeep = nil then;
+            ACallback(LRes, LErr);
+          end)
+      else
         ACallback(LRes, LErr);
-    end
-  );
+    end);
 end;
 
 procedure TAsyncFile.AsyncWrite(ABuffer: Pointer; ACount: NativeInt; AOffset: Int64; const ACallback: TAsyncWriteCallback);
 var
+  LKeep: IAsyncFile;
   LLoop: IEventLoop;
-  LRes: NativeInt;
-  LErr: Integer;
 begin
+  LKeep := Self;
   LLoop := FLoop;
   TTask.Run(
     procedure
+    var
+      LRes: NativeInt;
+      LErr: Integer;
     begin
       FLock.Acquire;
       try
-        {$ifdef UNIX}
-        if AOffset >= 0 then
-          fplseek(FHandle, AOffset, SEEK_SET);
-        LRes := fpwrite(FHandle, ABuffer^, ACount);
-        if LRes >= 0 then
-          LErr := 0
-        else
-          LErr := fpgeterrno;
-        {$else}
-        LRes := -1;
-        LErr := 0;
-        {$endif}
+        LRes := FileIO(FHandle, ABuffer, ACount, AOffset, True, LErr);
       finally
         FLock.Release;
       end;
-
+      if not Assigned(ACallback) then
+        Exit;
       if LLoop <> nil then
         LLoop.Post(
           procedure
           begin
-            if Assigned(ACallback) then
-              ACallback(LRes, LErr);
-          end
-        )
-      else if Assigned(ACallback) then
+            if LKeep = nil then;
+            ACallback(LRes, LErr);
+          end)
+      else
         ACallback(LRes, LErr);
-    end
-  );
+    end);
 end;
 
 function TAsyncFile.ReadAsync(ABuffer: Pointer; ACount: NativeInt; AOffset: Int64; constref ACancellationToken: TCancellationToken): specialize IFuture<NativeInt>;
+var
+  LKeep: IAsyncFile;
 begin
+  LKeep := Self;
   Result := TTask.specialize Future<NativeInt>(
     function: NativeInt
+    var
+      LErr: Integer;
     begin
-      if ACancellationToken.IsCancellationRequested then
-        ACancellationToken.ThrowIfCancellationRequested;
-
+      if LKeep = nil then;
+      ACancellationToken.ThrowIfCancellationRequested;
       FLock.Acquire;
       try
-        {$ifdef UNIX}
-        if AOffset >= 0 then
-          fplseek(FHandle, AOffset, SEEK_SET);
-        Result := fpread(FHandle, ABuffer^, ACount);
-        if Result < 0 then
-          raise EEventLoopException.CreateFmt('File read failed: %s (errno=%d)', [SysErrorMessage(fpgeterrno), fpgeterrno]);
-        {$else}
-        Result := 0;
-        {$endif}
+        Result := FileIO(FHandle, ABuffer, ACount, AOffset, False, LErr);
       finally
         FLock.Release;
       end;
+      if Result < 0 then
+        raise EEventLoopException.CreateFmt('File read failed: %s (errno=%d)', [SysErrorMessage(LErr), LErr]);
     end,
     ACancellationToken,
     nil
@@ -248,27 +259,25 @@ begin
 end;
 
 function TAsyncFile.WriteAsync(ABuffer: Pointer; ACount: NativeInt; AOffset: Int64; constref ACancellationToken: TCancellationToken): specialize IFuture<NativeInt>;
+var
+  LKeep: IAsyncFile;
 begin
+  LKeep := Self;
   Result := TTask.specialize Future<NativeInt>(
     function: NativeInt
+    var
+      LErr: Integer;
     begin
-      if ACancellationToken.IsCancellationRequested then
-        ACancellationToken.ThrowIfCancellationRequested;
-
+      if LKeep = nil then;
+      ACancellationToken.ThrowIfCancellationRequested;
       FLock.Acquire;
       try
-        {$ifdef UNIX}
-        if AOffset >= 0 then
-          fplseek(FHandle, AOffset, SEEK_SET);
-        Result := fpwrite(FHandle, ABuffer^, ACount);
-        if Result < 0 then
-          raise EEventLoopException.CreateFmt('File write failed: %s (errno=%d)', [SysErrorMessage(fpgeterrno), fpgeterrno]);
-        {$else}
-        Result := 0;
-        {$endif}
+        Result := FileIO(FHandle, ABuffer, ACount, AOffset, True, LErr);
       finally
         FLock.Release;
       end;
+      if Result < 0 then
+        raise EEventLoopException.CreateFmt('File write failed: %s (errno=%d)', [SysErrorMessage(LErr), LErr]);
     end,
     ACancellationToken,
     nil

@@ -5,7 +5,7 @@ program testeventloop;
 uses
   {$IFDEF FPC_VALGRIND}cmem,{$ENDIF}
   {$IFDEF UNIX}cwstring, cthreads,{$ENDIF}
-  Classes, consoletestrunner, uteventloop;
+  Classes, consoletestrunner, uteventloop, uteventloopbackends;
 
 type
   TEventLoopTestRunner = class(TTestRunner)

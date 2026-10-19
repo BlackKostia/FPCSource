@@ -161,10 +161,13 @@ end;
 
 procedure TKqueueEventLoop.DoRegisterHandle(AHandle: TLoopHandle; AEvents: TEventLoopEvents; const ACallback: TAsyncIOCompletion; AUserData: Pointer);
 begin
+  { Level-triggered (no EV_CLEAR), like the epoll backend: the socket and
+    pipe classes read once per event, so with edge triggering data left in
+    the buffer after a read would never be reported again. }
   if eleRead in AEvents then
-    UpdateFilter(AHandle, EVFILT_READ_CONST, EV_ADD_CONST or EV_ENABLE_CONST or EV_CLEAR_CONST);
+    UpdateFilter(AHandle, EVFILT_READ_CONST, EV_ADD_CONST or EV_ENABLE_CONST);
   if eleWrite in AEvents then
-    UpdateFilter(AHandle, EVFILT_WRITE_CONST, EV_ADD_CONST or EV_ENABLE_CONST or EV_CLEAR_CONST);
+    UpdateFilter(AHandle, EVFILT_WRITE_CONST, EV_ADD_CONST or EV_ENABLE_CONST);
 end;
 
 procedure TKqueueEventLoop.DoModifyHandle(AHandle: TLoopHandle; AEvents: TEventLoopEvents);

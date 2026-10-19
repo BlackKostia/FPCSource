@@ -21,6 +21,7 @@ begin
     P.Dependencies.Add('rtl-objpas');
     P.Dependencies.Add('rtl-extra');
     P.Dependencies.Add('fcl-base');
+    P.Dependencies.Add('vcl-compat'); { System.Threading: IFuture, TCancellationToken }
     P.Dependencies.Add('pthreads',AllUnixOSes);
 
     P.Author := 'Free Pascal development team';
@@ -62,11 +63,13 @@ begin
           AddUnit('eventloop.types');
           AddUnit('eventloop.core');
         end;
+    T:=P.Targets.AddUnit('eventloop.promise.pp');
     T:=P.Targets.AddUnit('eventloop.sockets.pp');
       with T.Dependencies do
         begin
           AddUnit('eventloop.types');
           AddUnit('eventloop.core');
+          AddUnit('eventloop.promise');
         end;
     T:=P.Targets.AddUnit('eventloop.pipes.pp');
       with T.Dependencies do

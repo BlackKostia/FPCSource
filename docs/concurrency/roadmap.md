@@ -167,5 +167,5 @@
 | **2** | Розумні вказівники `TScoped<T>` / `TArc<T>` та `TSpan<T>` | `rtl/objpas` або `packages/rtl-objpas` | Низька–середня | Зникнення шаблонних блоків `try..finally` і витоків пам'яті в багатопоточному коді |
 | **3** | Необов'язковий `specialize` + виведення типів для дженериків [РЕАЛІЗОВАНО] | `compiler/` (`pexpr.pas`, `ptype.pas`, `pgenutil.pas`) | Середня | Суттєве очищення синтаксису `TTask.Future`, колекцій та алгоритмів |
 | **4** | Асинхронний цикл подій `fcl-eventloop` (`epoll`/`kqueue`/`IOCP`) [РЕАЛІЗОВАНО] | `packages/fcl-eventloop` | Висока | Високопродуктивні мережеві сервіси на FPC |
-| **5** | Короткі лямбди `=>` та `async`/`await` [РЕАЛІЗОВАНО] | `compiler/`, `packages/fcl-async` | Висока | Рівень ергономіки сучасних C# / Rust / TypeScript при збереженні нативної швидкості FPC |
+| **5** | Короткі лямбди `=>` та `async`/`await` [РЕАЛІЗОВАНО] | `compiler/`, `packages/fcl-coroutines` | Висока | Рівень ергономіки сучасних C# / Rust / TypeScript при збереженні нативної швидкості FPC |
 

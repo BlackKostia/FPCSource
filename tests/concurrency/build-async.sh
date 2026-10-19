@@ -1,5 +1,5 @@
 #!/bin/sh
-# Збірка модульних тестів fcl-async (Фаза 4)
+# Збірка модульних тестів fcl-coroutines (Фаза 4)
 set -e
 ROOT=$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)
 OUT="${1:-$(dirname "$0")/out-async}"
@@ -9,11 +9,11 @@ set -x
 $FPC_TRUNK @"$FPC_CFG" \
   -FE"$OUT" \
   -FU"$OUT" \
-  -Fi"$ROOT/packages/fcl-async/src" \
-  -Fu"$ROOT/packages/fcl-async/src" \
-  -Fu"$ROOT/packages/fcl-async/tests" \
+  -Fi"$ROOT/packages/fcl-coroutines/src" \
+  -Fu"$ROOT/packages/fcl-coroutines/src" \
+  -Fu"$ROOT/packages/fcl-coroutines/tests" \
   -dDEBUG \
-  "$ROOT/packages/fcl-async/tests/testasync.lpr"
+  "$ROOT/packages/fcl-coroutines/tests/testasync.lpr"
 set +x
 echo "Готово: $OUT/testasync"
 

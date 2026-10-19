@@ -41,8 +41,14 @@ type
     FCallerExceptAddr: Pointer;
     FSavedExceptObj: Pointer;
     FCallerExceptObj: Pointer;
-
+    { 1 while the fiber is not executing on any thread. A resume that comes
+      from another thread (a future's continuation, a pool task) waits for
+      it, because the fiber may not have finished switching out yet. }
+    FParked: LongInt;
+    FStackMapSize: PtrUInt;
     procedure InitStack;
+    procedure WaitParked;
+    class procedure ResumeFromOtherThread(AFiber: TFiber); static;
     procedure Run;
     procedure OnSleepTimer(ATimerId: Int64);
     procedure OnContinuation(ATask: ITask);
@@ -145,21 +151,32 @@ end;
 
 { TFiber }
 
+const
+  FiberGuardSize = 4096;
+
 procedure TFiber.InitStack;
 var
   LSp: PPointer;
 begin
   {$IFDEF UNIX}
-  { Allocate private anonymous memory for fiber stack }
-  FStackBase := Fpmmap(nil, FStackSize, PROT_READ or PROT_WRITE, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+  { Allocate private anonymous memory for the fiber stack, with an
+    inaccessible guard page below it: a stack overflow then faults instead
+    of silently overwriting whatever memory lies below the stack. }
+  FStackMapSize := FStackSize + FiberGuardSize;
+  FStackBase := Fpmmap(nil, FStackMapSize, PROT_READ or PROT_WRITE, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
   if FStackBase = MAP_FAILED then
+  begin
+    FStackBase := nil;
     raise EFiberException.CreateFmt('Failed to allocate fiber stack (%d bytes)', [FStackSize]);
+  end;
+  Fpmprotect(FStackBase, FiberGuardSize, PROT_NONE);
   {$ELSE}
-  GetMem(FStackBase, FStackSize);
+  FStackMapSize := FStackSize + FiberGuardSize;
+  GetMem(FStackBase, FStackMapSize);
   {$ENDIF}
 
   { Setup stack growing downwards, 16-byte aligned }
-  LSp := PPointer(PByte(FStackBase) + FStackSize);
+  LSp := PPointer(PByte(FStackBase) + FStackMapSize);
 
   { 16-byte ABI alignment word: ret pops trampoline, leaving rsp at 8 mod 16 }
   Dec(LSp);
@@ -185,6 +202,7 @@ begin
   inherited Create;
   FProc := AProc;
   FMethod := nil;
+  FParked := 1;
   FStackSize := (AStackSize + 4095) and not 4095; { Round to 4KB page }
   if FStackSize < 16384 then
     FStackSize := 16384;
@@ -200,6 +218,7 @@ begin
   inherited Create;
   FProc := nil;
   FMethod := AMethod;
+  FParked := 1;
   FStackSize := (AStackSize + 4095) and not 4095;
   if FStackSize < 16384 then
     FStackSize := 16384;
@@ -214,11 +233,16 @@ destructor TFiber.Destroy;
 begin
   if FState = fsRunning then
     raise EInvalidFiberOperation.Create('Cannot destroy an actively running fiber');
+  { State becomes fsCompleted (or fsSuspended) just before the fiber switches
+    out. Another thread can see it while the fiber still runs on its stack:
+    wait until the switch is done before unmapping the stack. }
+  if FStackBase <> nil then
+    WaitParked;
 
   if FStackBase <> nil then
   begin
     {$IFDEF UNIX}
-    Fpmunmap(FStackBase, FStackSize);
+    Fpmunmap(FStackBase, FStackMapSize);
     {$ELSE}
     FreeMem(FStackBase);
     {$ENDIF}
@@ -249,13 +273,38 @@ begin
   Yield;
 end;
 
+procedure TFiber.WaitParked;
+var
+  LSpins: Integer;
+begin
+  LSpins := 0;
+  while InterlockedCompareExchange(FParked, 0, 0) = 0 do
+  begin
+    Inc(LSpins);
+    if LSpins > 100 then
+      ThreadSwitch;
+  end;
+  ReadBarrier;
+end;
+
+class procedure TFiber.ResumeFromOtherThread(AFiber: TFiber);
+begin
+  AFiber.WaitParked;
+  AFiber.Resume;
+end;
+
 procedure TFiber.Resume;
 var
   LPrevFiber: TFiber;
   LAddrPtr, LObjPtr: PPointer;
+  LError: Exception;
 begin
   if FState in [fsCompleted, fsFaulted] then
     raise EInvalidFiberOperation.Create('Cannot resume an already completed or faulted fiber');
+  if GCurrentFiber = Self then
+    raise EInvalidFiberOperation.Create('A fiber cannot resume itself');
+  if InterlockedExchange(FParked, 0) = 0 then
+    raise EInvalidFiberOperation.Create('Fiber is already running');
 
   LAddrPtr := GetExceptAddrStackPtr;
   LObjPtr := GetExceptObjectStackPtr;
@@ -274,10 +323,16 @@ begin
 
   { Context has returned to caller; Yield already saved fiber and restored caller context }
   GCurrentFiber := LPrevFiber;
+  { From here on the fiber's stack is not in use: another thread may resume it. }
+  WriteBarrier;
+  InterlockedExchange(FParked, 1);
 
   if (FState = fsFaulted) and (FException <> nil) then
   begin
-    raise Exception.Create(FException.Message);
+    { FatalException stays owned by the fiber; raise a new exception of the
+      same class so that "on E: EMyError do" handlers still match. }
+    LError := ExceptClass(FException.ClassType).Create(FException.Message);
+    raise LError;
   end;
 end;
 
@@ -314,15 +369,19 @@ end;
 
 procedure TFiber.OnSleepTimer(ATimerId: Int64);
 begin
-  Resume;
+  { The loop may run in another thread than the fiber. }
+  TFiber.ResumeFromOtherThread(Self);
 end;
 
 procedure TFiber.OnContinuation(ATask: ITask);
+var
+  LFiber: TFiber;
 begin
+  LFiber := Self;
   if FEventLoop <> nil then
-    FEventLoop.Post(@Resume)
+    FEventLoop.Post(procedure begin TFiber.ResumeFromOtherThread(LFiber); end)
   else
-    TTask.Run(@Resume);
+    TTask.Run(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
 end;
 
 generic class function TFiber.Await<T>(const AFuture: specialize IFuture<T>): T;
@@ -407,7 +466,7 @@ begin
       procedure
       begin
         SysUtils.Sleep(AMilliseconds);
-        LFiber.Resume;
+        TFiber.ResumeFromOtherThread(LFiber);
       end);
     Yield;
   end;
@@ -432,10 +491,12 @@ begin
     begin
       LBytesRead := ABytes;
       LStatus := AStat;
+      { The fiber may be resumed only after it has yielded, so the resume
+        always goes through Post or a pool task. }
       if LFiber.FEventLoop <> nil then
-        LFiber.FEventLoop.Post(@LFiber.Resume)
+        LFiber.FEventLoop.Post(procedure begin TFiber.ResumeFromOtherThread(LFiber); end)
       else
-        TTask.Run(@LFiber.Resume);
+        TTask.Run(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
     end);
 
   Yield;
@@ -464,10 +525,12 @@ begin
     begin
       LBytesWritten := ABytes;
       LStatus := AStat;
+      { The fiber may be resumed only after it has yielded, so the resume
+        always goes through Post or a pool task. }
       if LFiber.FEventLoop <> nil then
-        LFiber.FEventLoop.Post(@LFiber.Resume)
+        LFiber.FEventLoop.Post(procedure begin TFiber.ResumeFromOtherThread(LFiber); end)
       else
-        TTask.Run(@LFiber.Resume);
+        TTask.Run(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
     end);
 
   Yield;

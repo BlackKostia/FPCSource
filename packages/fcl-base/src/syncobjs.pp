@@ -450,6 +450,9 @@ Type
     procedure NotifyItemSent;
     procedure NotifyItemReceived;
     class procedure RaiseChannelClosed; static;
+    {$IFNDEF VER3_2}
+    class function SpanToTimeout(const aTimeout: TTimeSpan): Cardinal; static;
+    {$ENDIF}
     function GetCount: Integer; inline;
     function GetIsClosed: Boolean;
   public
@@ -1664,6 +1667,23 @@ begin
   Result := FIsDismantled;
 end;
 
+{$IFNDEF VER3_2}
+{ Milliseconds for the TTimeSpan overloads: a negative span means no wait,
+  a span too long for Cardinal means INFINITE. }
+function TimeSpanToTimeout(const aTimeout: TTimeSpan): Cardinal;
+var
+  Ms: Double;
+begin
+  Ms := aTimeout.TotalMilliseconds;
+  if Ms <= 0 then
+    Result := 0
+  else if Ms >= INFINITE then
+    Result := INFINITE
+  else
+    Result := Round(Ms);
+end;
+{$ENDIF}
+
 { ---------------------------------------------------------------------
   TCountdownEvent
   ---------------------------------------------------------------------}
@@ -1796,7 +1816,7 @@ end;
 {$IFNDEF VER3_2}
 function TCountdownEvent.WaitFor(const aTimeout: TTimeSpan): TWaitResult;
 begin
-  Result := WaitFor(Cardinal(Round(aTimeout.TotalMilliseconds)));
+  Result := WaitFor(TimeSpanToTimeout(aTimeout));
 end;
 {$ENDIF}
 
@@ -2017,7 +2037,7 @@ end;
 {$IFNDEF VER3_2}
 function TBarrier.SignalAndWait(const aTimeout: TTimeSpan): Boolean;
 begin
-  Result := SignalAndWait(Cardinal(Round(aTimeout.TotalMilliseconds)));
+  Result := SignalAndWait(TimeSpanToTimeout(aTimeout));
 end;
 {$ENDIF}
 
@@ -2130,14 +2150,21 @@ begin
       Exit(True);
     end;
     FReadEvent.ResetEvent;
+    // Register as a waiter before the last check. EndWrite and the writer
+    // timeout path read FWaitingReaders without FLock: if the counter were
+    // raised only after the check, a writer leaving in between would see no
+    // waiting reader and not signal FReadEvent, leaving this reader asleep
+    // while the lock is free.
+    InterlockedIncrement(FWaitingReaders);
+    ReadWriteBarrier;
     if TryAcquireReadFast then
     begin
+      InterlockedDecrement(FWaitingReaders);
       if (FWaitingReaders > 0) and (FWaitingWriters = 0) then
         FReadEvent.SetEvent;
       FLock.Exit;
       Exit(True);
     end;
-    InterlockedIncrement(FWaitingReaders);
     FLock.Exit;
 
     if aTimeout = INFINITE then
@@ -2171,7 +2198,7 @@ end;
 {$IFNDEF VER3_2}
 function TSlimReaderWriterLock.TryBeginRead(const aTimeout: TTimeSpan): Boolean;
 begin
-  Result := TryBeginRead(Cardinal(Round(aTimeout.TotalMilliseconds)));
+  Result := TryBeginRead(TimeSpanToTimeout(aTimeout));
 end;
 {$ENDIF}
 
@@ -2182,9 +2209,14 @@ begin
   {$IFDEF FPC_VALGRIND}
   VgHappensBefore(@FState);
   {$ENDIF}
-  NewState := InterlockedDecrement(FState);
-  if NewState < 0 then
-    raise ELockException.Create(SErrLockNotOwned);
+  // A CAS loop instead of a plain decrement: EndRead without a read lock
+  // must not take the count below zero or eat into WRITER_HELD.
+  repeat
+    NewState := FState;
+    if (NewState and READER_MASK) = 0 then
+      raise ELockException.Create(SErrLockNotOwned);
+  until InterlockedCompareExchange(FState, NewState - 1, NewState) = NewState;
+  Dec(NewState);
   if (NewState = 0) and (FWaitingWriters > 0) then
   begin
     FLock.Enter;
@@ -2264,6 +2296,8 @@ begin
     end;
   finally
     if InterlockedDecrement(FWaitingWriters) = 0 then
+    begin
+      ReadWriteBarrier;
       if FWaitingReaders > 0 then
       begin
         FLock.Enter;
@@ -2274,13 +2308,14 @@ begin
           FLock.Exit;
         end;
       end;
+    end;
   end;
 end;
 
 {$IFNDEF VER3_2}
 function TSlimReaderWriterLock.TryBeginWrite(const aTimeout: TTimeSpan): Boolean;
 begin
-  Result := TryBeginWrite(Cardinal(Round(aTimeout.TotalMilliseconds)));
+  Result := TryBeginWrite(TimeSpanToTimeout(aTimeout));
 end;
 {$ENDIF}
 
@@ -2291,6 +2326,8 @@ begin
   {$ENDIF}
   if InterlockedCompareExchange(FState, 0, WRITER_HELD) <> WRITER_HELD then
     raise ELockException.Create(SErrLockNotOwned);
+  // Pairs with the barrier after a reader registers in TryBeginRead.
+  ReadWriteBarrier;
   if (FWaitingWriters > 0) or (FWaitingReaders > 0) then
   begin
     FLock.Enter;
@@ -2418,6 +2455,13 @@ class procedure TCustomChannel.RaiseChannelClosed;
 begin
   raise EChannelClosedException.Create(SErrChannelClosed);
 end;
+
+{$IFNDEF VER3_2}
+class function TCustomChannel.SpanToTimeout(const aTimeout: TTimeSpan): Cardinal;
+begin
+  Result := TimeSpanToTimeout(aTimeout);
+end;
+{$ENDIF}
 
 function TCustomChannel.GetCount: Integer;
 begin
@@ -2553,7 +2597,7 @@ end;
 {$IFNDEF VER3_2}
 function TChannel.TrySend(const aItem: T; const aTimeout: TTimeSpan): Boolean;
 begin
-  Result := TrySend(aItem, Cardinal(Round(aTimeout.TotalMilliseconds)));
+  Result := TrySend(aItem, SpanToTimeout(aTimeout));
 end;
 {$ENDIF}
 
@@ -2634,7 +2678,7 @@ end;
 {$IFNDEF VER3_2}
 function TChannel.TryReceive(out aItem: T; const aTimeout: TTimeSpan): Boolean;
 begin
-  Result := TryReceive(aItem, Cardinal(Round(aTimeout.TotalMilliseconds)));
+  Result := TryReceive(aItem, SpanToTimeout(aTimeout));
 end;
 {$ENDIF}
 

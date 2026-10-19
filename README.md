@@ -56,7 +56,7 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
     - **FreeBSD / macOS**: `kqueue`
     - **Windows**: `IOCP`
   - Capable of sustaining 100,000+ concurrent connections on a multi-threaded worker pool.
-- **Coroutines & `async` / `await` (`fcl-async`)**:
+- **Coroutines & `async` / `await` (`fcl-coroutines`)**:
   - Stackful fibers (`TFiber`) for AMD64 / POSIX.
   - Generators (`TGenerator<T>`) supporting idiomatic `for Item in Generator do`.
   - Compiler-native `async` procedural directive and `await` operator for state-machine transformations.
@@ -71,7 +71,7 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
   - `packages/vcl-compat/`: `System.Threading` implementation.
   - `packages/fcl-base/`: Core classes, synchronization primitives in `syncobjs.pp`.
   - `packages/fcl-eventloop/`: High-performance asynchronous event loop.
-  - `packages/fcl-async/`: Coroutines, fibers, and async utilities.
+  - `packages/fcl-coroutines/`: Coroutines, fibers, generators and async state machines.
 - `docs/concurrency/`: Detailed architectural documentation, user guides, and roadmaps:
   - [`guide-tuples.md`](docs/concurrency/guide-tuples.md): Tuples & deconstruction reference.
   - [`guide-arrow-functions.md`](docs/concurrency/guide-arrow-functions.md): Arrow functions reference.
