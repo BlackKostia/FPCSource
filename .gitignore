@@ -116,3 +116,4 @@ tests/concurrency/out-async/
 tests/concurrency/comparison/out/
 __pycache__/
 tests/concurrency/python_vs_pascal_server/server_pascal
+tests/concurrency/python_vs_pascal_server/server_pascal_classic

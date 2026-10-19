@@ -4,12 +4,15 @@ import time
 import socket
 import threading
 import statistics
+import struct
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 def send_http_request(host, port, method, path):
     t0 = time.perf_counter()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
     s.settimeout(5.0)
     try:
         s.connect((host, port))

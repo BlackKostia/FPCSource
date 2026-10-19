@@ -38,3 +38,4 @@ begin
   Writeln('Executed ', COUNT, ' coroutines in: ', Took, ' ms');
   Writeln('Counter: ', Counter);
 end.
+
