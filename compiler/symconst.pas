@@ -253,7 +253,9 @@ type
       of the def can not be determined }
     df_has_generic_fields,
     {  never use the typename for this type, always expand full definition }
-    df_llvm_no_typename
+    df_llvm_no_typename,
+    {  the type is a tuple record }
+    df_tuple
   );
   tdefoptions=set of tdefoption;
 

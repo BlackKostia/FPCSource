@@ -2520,7 +2520,8 @@ const
          'm_type_inquiry',         { the compile time operator "type of <operand>" }
          'm_record_composition',   { enables record composition }
          'm_implicit_generics',    { allow omitting specialize in objfpc mode and generic type inference }
-         'm_arrow_functions'       { short lambda syntax (=>) for anonymous functions }
+         'm_arrow_functions',      { short lambda syntax (=>) for anonymous functions }
+         'm_tuples'                { tuples and tuple deconstruction (A, B) := Expr }
        );
        { optimizer }
        optimizerswitchname : array[toptimizerswitch] of string[50] =
@@ -2885,7 +2886,8 @@ const
      (mask:df_internal;       str:'Internal'),
      (mask:df_has_global_ref; str:'Has Global Ref'),
      (mask:df_has_generic_fields; str:'Has generic fields'),
-     (mask:df_llvm_no_typename; str:'LLVM no typename')
+     (mask:df_llvm_no_typename; str:'LLVM no typename'),
+     (mask:df_tuple; str:'Tuple')
   );
   defstate : array[1..ord(high(tdefstate))] of tdefstateinfo=(
      (mask:ds_vmt_written;           str:'VMT Written'),

@@ -564,7 +564,8 @@ interface
          m_type_inquiry,         { compile time operator "type of <operand>" }
          m_record_composition,   { enables record composition }
          m_implicit_generics,    { allow omitting specialize in objfpc mode and generic type inference }
-         m_arrow_functions       { short lambda syntax (=>) for anonymous functions }
+         m_arrow_functions,      { short lambda syntax (=>) for anonymous functions }
+         m_tuples                { tuples and tuple deconstruction (A, B) := Expr }
        );
        tmodeswitches = set of tmodeswitch;
 
@@ -778,7 +779,8 @@ interface
          'TYPEINQUIRY',
          'RECORDCOMPOSITION',
          'IMPLICITGENERICS',
-         'ARROWFUNCTIONS'
+         'ARROWFUNCTIONS',
+         'TUPLES'
          );
 
 

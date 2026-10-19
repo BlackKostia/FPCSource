@@ -4090,6 +4090,7 @@ implementation
     function  searchsym_in_record(recordh:tabstractrecorddef;const s : TIDString;out srsym:tsym;out srsymtable:TSymtable):boolean;
       var
         hashedid : THashedIDString;
+        num, code : integer;
       begin
         result:=false;
         hashedid.id:=s;
@@ -4106,6 +4107,22 @@ implementation
             addsymref(srsym);
             result:=true;
             exit;
+          end;
+        { Fallback for tuple fields: Item1, Item2, etc. when named fields are used }
+        if (df_tuple in recordh.defoptions) and (length(s) > 4) and
+           (copy(s, 1, 4) = 'ITEM') then
+          begin
+            val(copy(s, 5, length(s) - 4), num, code);
+            if (code = 0) and (num >= 1) and (num <= srsymtable.symlist.count) then
+              begin
+                srsym := tsym(srsymtable.symlist[num - 1]);
+                if assigned(srsym) and is_visible_for_object(srsym, recordh) then
+                  begin
+                    addsymref(srsym);
+                    result := true;
+                    exit;
+                  end;
+              end;
           end;
         srsym:=nil;
         srsymtable:=nil;

@@ -468,6 +468,8 @@ implementation
       end;
 
 
+    function parse_tuple_type: tdef; forward;
+
     procedure single_type(out def:tdef;options:TSingleTypeOptions);
 
        function handle_dummysym(sym:tsym):tdef;
@@ -560,6 +562,20 @@ implementation
                          specialization and generic dummy symbol handling
                          below applies }
                        def:=parse_type_inquiry(false);
+                       exit;
+                     end
+                   else
+                     begin
+                       message(type_e_type_id_expected);
+                       def:=generrordef;
+                     end;
+                 end;
+
+               _LKLAMMER:
+                 begin
+                   if m_tuples in current_settings.modeswitches then
+                     begin
+                       def:=parse_tuple_type;
                        exit;
                      end
                    else
@@ -691,6 +707,66 @@ implementation
                 def:=generrordef
               end
           end;
+      end;
+
+
+    function parse_tuple_type: tdef;
+      var
+        recdef: trecorddef;
+        recst: trecordsymtable;
+        fdef: tdef;
+        fname: TIDString;
+        fidx: integer;
+        fieldvs: tfieldvarsym;
+      begin
+        consume(_LKLAMMER);
+        recst:=trecordsymtable.create('',current_settings.packrecords,current_settings.alignment.recordalignmin);
+        recdef:=crecorddef.create('',recst);
+        include(recdef.defoptions,df_tuple);
+        fidx:=1;
+        repeat
+          if (current_scanner.token=_ID) and current_scanner.is_colon_next then
+            begin
+              fname:=current_scanner.orgpattern;
+              consume(_ID);
+              consume(_COLON);
+              single_type(fdef,[]);
+            end
+          else
+            begin
+              fname:='Item'+tostr(fidx);
+              single_type(fdef,[]);
+            end;
+          fieldvs:=cfieldvarsym.create(fname,vs_value,fdef,[]);
+          recst.insertsym(fieldvs);
+          recst.addfield(fieldvs,vis_public);
+          inc(fidx);
+        until not try_to_consume(_COMMA);
+        consume(_RKLAMMER);
+        recst.addalignmentpadding;
+        result:=recdef;
+      end;
+
+
+    function is_tuple_type_check: boolean;
+      var
+        has_colon, has_comma: boolean;
+        first_id: TIDString;
+        sym: tsym;
+        st: tsymtable;
+      begin
+        result := false;
+        if not (m_tuples in current_settings.modeswitches) then
+          exit;
+        if current_scanner.is_tuple_type then
+          exit(true);
+        first_id := current_scanner.peek_first_tuple_element(has_colon, has_comma);
+        if has_colon then
+          exit(true);
+        if not has_comma then
+          exit(false);
+        if searchsym(first_id, sym, st) and assigned(sym) and (sym.typ = typesym) then
+          exit(true);
       end;
 
 
@@ -1871,6 +1947,11 @@ implementation
               end;
            _LKLAMMER:
               begin
+                if is_tuple_type_check then
+                  begin
+                    def:=parse_tuple_type;
+                    exit;
+                  end;
                 consume(_LKLAMMER);
                 first:=true;
                 { allow negativ value_str }

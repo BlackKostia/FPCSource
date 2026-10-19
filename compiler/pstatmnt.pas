@@ -1771,6 +1771,123 @@ implementation
       end;
 
 
+    function tuple_assignment_statement: tnode;
+      type
+        ttarget_entry = record
+          is_var: boolean;
+          name: TIDString;
+          node: tnode;
+          pos: tfileposinfo;
+        end;
+      var
+        has_global_var: boolean;
+        targets: array of ttarget_entry;
+        target_count: integer;
+        target_is_var: boolean;
+        target_name: TIDString;
+        target_pos: tfileposinfo;
+        target_node: tnode;
+        rhs: tnode;
+        rhs_def: tdef;
+        field_count: integer;
+        stmts: tstatementnode;
+        res: tnode;
+        rhs_temp: ttempcreatenode;
+        field_sym: tfieldvarsym;
+        field_ref: tnode;
+        vs: tlocalvarsym;
+        var_def: tdef;
+        i: integer;
+      begin
+        has_global_var:=try_to_consume(_VAR);
+        consume(_LKLAMMER);
+        target_count:=0;
+        SetLength(targets,8);
+        repeat
+          target_pos:=current_tokenpos;
+          target_is_var:=has_global_var or try_to_consume(_VAR);
+          if target_is_var then
+            begin
+              target_name:=current_scanner.orgpattern;
+              consume(_ID);
+              target_node:=nil;
+            end
+          else
+            begin
+              target_name:='';
+              target_node:=factor(false,[]);
+            end;
+          if target_count>=Length(targets) then
+            SetLength(targets,target_count*2);
+          targets[target_count].is_var:=target_is_var;
+          targets[target_count].name:=target_name;
+          targets[target_count].node:=target_node;
+          targets[target_count].pos:=target_pos;
+          inc(target_count);
+        until not try_to_consume(_COMMA);
+        consume(_RKLAMMER);
+
+        consume(_ASSIGNMENT);
+        rhs:=comp_expr([ef_accept_equal]);
+        if not assigned(rhs.resultdef) then
+          do_typecheckpass(rhs);
+
+        rhs_def:=rhs.resultdef;
+        if not assigned(rhs_def) or (rhs_def.typ<>recorddef) then
+          begin
+            Message(type_e_mismatch);
+            result:=cerrornode.create;
+            exit;
+          end;
+
+        field_count:=trecorddef(rhs_def).symtable.SymList.Count;
+        if target_count<>field_count then
+          begin
+            Message(type_e_mismatch);
+            result:=cerrornode.create;
+            exit;
+          end;
+
+        res:=internalstatements(stmts);
+        rhs_temp:=ctempcreatenode.create(rhs_def,rhs_def.size,tt_persistent,true);
+        addstatement(stmts,rhs_temp);
+        addstatement(stmts,cassignmentnode.create(ctemprefnode.create(rhs_temp),rhs));
+
+        for i:=0 to target_count-1 do
+          begin
+            field_sym:=tfieldvarsym(trecorddef(rhs_def).symtable.SymList[i]);
+            field_ref:=csubscriptnode.create(field_sym,ctemprefnode.create(rhs_temp));
+
+            if targets[i].is_var then
+              begin
+                var_def:=field_sym.vardef;
+                if is_conststring_array(var_def) then
+                  begin
+                    if (cs_refcountedstrings in current_settings.localswitches) then
+                      begin
+                        if m_default_unicodestring in current_settings.modeswitches then
+                          var_def:=cunicodestringtype
+                        else
+                          var_def:=cansistringtype;
+                      end
+                    else
+                      var_def:=cshortstringtype;
+                  end;
+                vs:=clocalvarsym.create(targets[i].name,vs_value,var_def,[]);
+                current_procinfo.procdef.localst.insertsym(vs);
+                target_node:=cloadnode.create(vs,vs.owner);
+              end
+            else
+              target_node:=targets[i].node;
+
+            addstatement(stmts,cassignmentnode.create(target_node,field_ref));
+          end;
+
+        addstatement(stmts,ctempdeletenode.create(rhs_temp));
+        result:=res;
+      end;
+
+
     function statement : tnode;
       var
          p,
@@ -1904,6 +2021,14 @@ implementation
                Message(scan_f_end_of_file);
          else
            begin
+             if (current_scanner.token in [_VAR, _LKLAMMER]) and
+                (m_tuples in current_settings.modeswitches) and
+                current_scanner.is_tuple_deconstruction then
+               begin
+                 code:=tuple_assignment_statement;
+                 statement:=code;
+                 exit;
+               end;
              { don't typecheck yet, because that will also simplify, which may
                result in not detecting certain kinds of syntax errors --
                see mantis #15594 }

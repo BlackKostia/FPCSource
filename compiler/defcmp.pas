@@ -307,6 +307,41 @@ implementation
             exit;
           end;
 
+         { Check tuple structural equivalence }
+         if (def_from.typ=recorddef) and (def_to.typ=recorddef) and
+            ((df_tuple in def_from.defoptions) or (df_tuple in def_to.defoptions)) then
+           begin
+             if trecorddef(def_from).symtable.SymList.Count =
+                trecorddef(def_to).symtable.SymList.Count then
+               begin
+                 diff:=false;
+                 for i:=0 to trecorddef(def_from).symtable.SymList.Count-1 do
+                   begin
+                     if not is_normal_fieldvarsym(tsym(trecorddef(def_from).symtable.SymList[i])) or
+                        not is_normal_fieldvarsym(tsym(trecorddef(def_to).symtable.SymList[i])) then
+                       begin
+                         diff:=true;
+                         break;
+                       end;
+                     hd1:=tfieldvarsym(trecorddef(def_from).symtable.SymList[i]).vardef;
+                     hd2:=tfieldvarsym(trecorddef(def_to).symtable.SymList[i]).vardef;
+                     if (hd1<>hd2) and
+                        ((hd1.size<>hd2.size) or
+                         (compare_defs_ext(hd1,hd2,nothingn,hct,hpd,[cdo_check_operator])<te_convert_l1)) then
+                       begin
+                         diff:=true;
+                         break;
+                       end;
+                   end;
+                 if not diff then
+                   begin
+                     doconv:=tc_equal;
+                     compare_defs_ext:=te_equal;
+                     exit;
+                   end;
+               end;
+           end;
+
          if cdo_strict_undefined_check in cdoptions then
            begin
              { two different undefined defs are not considered equal }

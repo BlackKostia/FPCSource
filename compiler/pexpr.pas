@@ -3679,6 +3679,89 @@ implementation
       end;
 
 
+    procedure parse_tuple_literal(var p1: tnode);
+      var
+        expr_list: TFPList;
+        p2: tnode;
+        i: integer;
+        recst: trecordsymtable;
+        recdef: trecorddef;
+        fieldvs: tfieldvarsym;
+        newstatement: tstatementnode;
+        newblock: tnode;
+        temp: ttempcreatenode;
+        fdef: tdef;
+      begin
+        expr_list:=TFPList.Create;
+        expr_list.Add(p1);
+        while try_to_consume(_COMMA) do
+          begin
+            p2:=comp_expr([ef_accept_equal]);
+            expr_list.Add(p2);
+          end;
+        consume(_RKLAMMER);
+
+        for i:=0 to expr_list.Count-1 do
+          begin
+            p2:=tnode(expr_list[i]);
+            if not assigned(p2.resultdef) then
+              do_typecheckpass(p2);
+          end;
+
+        recst:=trecordsymtable.create('',current_settings.packrecords,current_settings.alignment.recordalignmin);
+        recdef:=crecorddef.create('',recst);
+        include(recdef.defoptions,df_tuple);
+        for i:=0 to expr_list.Count-1 do
+          begin
+            p2:=tnode(expr_list[i]);
+            fdef:=p2.resultdef;
+            if is_conststring_array(fdef) then
+              begin
+                if (cs_refcountedstrings in current_settings.localswitches) then
+                  begin
+                    if m_default_unicodestring in current_settings.modeswitches then
+                      fdef:=cunicodestringtype
+                    else
+                      fdef:=cansistringtype;
+                  end
+                else
+                  fdef:=cshortstringtype;
+              end
+            else if (fdef.typ=orddef) and (p2.nodetype=ordconstn) then
+              begin
+                { Default integer constants in tuples to 32-bit Integer (or Int64 if > 32 bits) }
+                if (tordconstnode(p2).value.svalue>=int64(low(longint))) and
+                   (tordconstnode(p2).value.svalue<=int64(high(longint))) then
+                  fdef:=s32inttype
+                else
+                  fdef:=s64inttype;
+              end;
+            fieldvs:=cfieldvarsym.create('Item'+tostr(i+1),vs_value,fdef,[]);
+            recst.insertsym(fieldvs);
+            recst.addfield(fieldvs,vis_public);
+          end;
+        recst.addalignmentpadding;
+
+        newblock:=internalstatements(newstatement);
+        temp:=ctempcreatenode.create(recdef,recdef.size,tt_persistent,true);
+        addstatement(newstatement,temp);
+        for i:=0 to expr_list.Count-1 do
+          begin
+            fieldvs:=tfieldvarsym(recst.symlist[i]);
+            addstatement(newstatement,
+              cassignmentnode.create(
+                csubscriptnode.create(fieldvs,ctemprefnode.create(temp)),
+                tnode(expr_list[i])
+              )
+            );
+          end;
+        addstatement(newstatement,ctemprefnode.create(temp));
+        expr_list.Free;
+        newblock.resultdef:=recdef;
+        p1:=newblock;
+      end;
+
+
     function factor(getaddr:boolean;flags:texprflags) : tnode;
 
          {---------------------------------------------
@@ -4656,7 +4739,10 @@ implementation
                    begin
                      consume(_LKLAMMER);
                      p1:=comp_expr([ef_accept_equal]);
-                     consume(_RKLAMMER);
+                     if (m_tuples in current_settings.modeswitches) and (current_scanner.token=_COMMA) then
+                       parse_tuple_literal(p1)
+                     else
+                       consume(_RKLAMMER);
                      { it's not a good solution
                        but (a+b)^ makes some problems  }
                      if current_scanner.token in postfixoperator_tokens then

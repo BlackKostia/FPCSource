@@ -92,12 +92,43 @@
   ```
   Особливо корисно для складних спеціалізацій дженериків та змінних-лічильників циклів, де область видимості обмежується самим циклом.
 
-### 2.4. Кортежі (Tuples) та структурна декомпозиція
-- Повернення кількох значень із функції (зокрема з `IFuture<...>`) без оголошення одноразових `record`:
+### 2.4. Кортежі (Tuples) та деконструкція `(A, B) := Func()` [РЕАЛІЗОВАНО]
+- **Статус**: Повністю реалізовано в компіляторі (`{$modeswitch tuples}`).
+- **Синтаксис та можливості**:
   ```pascal
-  function CountAndSumPrimes(N: Integer): (Integer, Int64);
+  {$mode objfpc}{$H+}
+  {$modeswitch tuples}
+
+  // 1. Позиційні та іменовані типи кортежів:
+  function DivRem(A, B: Integer): (Integer, Integer);
+  function CountAndSumPrimes(Limit: Integer): (Count: Integer, Sum: Int64);
+
+  // 2. Літерали кортежів:
+  Result := (Integer(A div B), Integer(A mod B));
+  NamedTup := (42, 9999999999);
+
+  // 3. Деконструкція в наявні змінні або з оголошенням локальних змінних:
+  (Q, R) := DivRem(10, 3);
   var (Count, Sum) := CountAndSumPrimes(5000000);
+  var (Greeting, Answer) := ('Hello', 42);
+
+  // 4. Одночасний обмін значеннями без тимчасової змінної (Swap):
+  (X, Y) := (Y, X);
+  (A, B, C) := (C, A, B);
+  (S1, S2) := (S2, S1); // Повна безпека для рядків та керованих типів
+
+  // 5. Доступ до полів: іменований та позиційний фолбек:
+  Writeln(NamedTup.Count); // 42
+  Writeln(NamedTup.Item1); // 42 (позиційний псевдонім)
+
+  // 6. Структурна еквівалентність між типами кортежів:
+  var T1: (X: Integer, Y: Integer);
+  var T2: (Integer, Integer);
+  T2 := T1; // Сумісні за структурою
   ```
+- **Документація та тести**:
+  - Детальний посібник: [`guide-tuples.md`](guide-tuples.md).
+  - Тестовий набір: [`tests/concurrency/test_tuples.pp`](../../tests/concurrency/test_tuples.pp).
 
 ---
 
