@@ -29,8 +29,13 @@ $FPC_TRUNK @"$FPC_CFG" -FE"$SCRIPT_DIR" "$SCRIPT_DIR/bench_classic_pascal.pp" > 
 echo ""
 
 # 3. Python
-echo ">>> [3/3] Running Python (GIL-bound multi-threaded)..."
+echo ">>> [3/4] Running Python (GIL-bound multi-threaded)..."
 python3 "$SCRIPT_DIR/bench_python.py"
+echo ""
+
+# 4. C# (.NET 8)
+echo ">>> [4/4] Running C# (.NET 8)..."
+dotnet "$SCRIPT_DIR/bin/Release/net8.0/bench_csharp.dll"
 echo ""
 
 # 4. Summary LoC

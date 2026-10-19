@@ -32,8 +32,13 @@ $FPC_TRUNK @"$FPC_CFG" -FE"$SCRIPT_DIR" "$SCRIPT_DIR/bench_exchange_classic.pp" 
 echo ""
 
 # 3. Python
-echo ">>> [3/3] Running Python (queue.Queue + 13 threads)..."
+echo ">>> [3/4] Running Python (queue.Queue + 13 threads)..."
 python3 "$SCRIPT_DIR/bench_exchange_python.py"
+echo ""
+
+# 4. C# (.NET 8)
+echo ">>> [4/4] Running C# (.NET 8 System.Threading.Channels)..."
+dotnet "$SCRIPT_DIR/bin/Release/net8.0/bench_exchange_csharp.dll"
 echo ""
 
 # 4. Code complexity comparison

@@ -42,6 +42,7 @@ run_profile() {
 
 run_profile "Modern_Pascal" "$SCRIPT_DIR/bench_exchange_modern"
 run_profile "Classic_Pascal" "$SCRIPT_DIR/bench_exchange_classic"
+run_profile "CSharp_DotNet8" "dotnet $SCRIPT_DIR/bin/Release/net8.0/bench_exchange_csharp.dll"
 run_profile "Python" "python3 $SCRIPT_DIR/bench_exchange_python.py"
 
 echo "======================================================================"

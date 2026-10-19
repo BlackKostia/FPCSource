@@ -1,0 +1,15 @@
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/bin/Release/net8.0/bench_exchange_csharp
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/bin/Release/net8.0/bench_exchange_csharp.deps.json
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/bin/Release/net8.0/bench_exchange_csharp.runtimeconfig.json
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/bin/Release/net8.0/bench_exchange_csharp.dll
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/bin/Release/net8.0/bench_exchange_csharp.pdb
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.GeneratedMSBuildEditorConfig.editorconfig
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.AssemblyInfoInputs.cache
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.AssemblyInfo.cs
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.csproj.CoreCompileInputs.cache
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.sourcelink.json
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.dll
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/refint/bench_exchange_csharp.dll
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.pdb
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/bench_exchange_csharp.genruntimeconfig.cache
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/data_exchange_benchmark/obj/Release/net8.0/ref/bench_exchange_csharp.dll
