@@ -7,10 +7,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 source "$REPO_ROOT/tests/concurrency/fpcenv.sh"
 
 echo "======================================================================"
-echo "          CRUSHING CONCURRENCY BENCHMARK SUITE (500,000 OPS)          "
+echo "         CRUSHING CONCURRENCY BENCHMARK SUITE (2,000,000 OPS)         "
 echo "======================================================================"
 echo "Scenario: Financial Trading & Analytics Cache Pipeline"
-echo "  - 500,000 operations across 12 concurrent workers"
+echo "  - 2,000,000 operations across 12 concurrent workers"
 echo "  - 90% Read queries (cache inspection & portfolio risk valuation)"
 echo "  - 10% Write updates + Event streaming to Consumer queue/channel"
 echo "======================================================================"
@@ -42,3 +42,4 @@ wc -l "$SCRIPT_DIR/bench_modern_pascal.pp" \
       "$SCRIPT_DIR/bench_python.py" \
       "$SCRIPT_DIR/bench_csharp.cs"
 echo "======================================================================"
+

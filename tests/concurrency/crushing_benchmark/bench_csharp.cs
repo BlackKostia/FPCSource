@@ -13,7 +13,7 @@ public struct TradeEvent
 
 public class Program
 {
-    private const int TotalOps = 500000;
+    private const int TotalOps = 2000000;
     private const int KeysCount = 1000;
     private const int NumWorkers = 12;
 

@@ -6,7 +6,7 @@ uses
   SysUtils, Classes, syncobjs;
 
 const
-  TOTAL_OPS = 500000;
+  TOTAL_OPS = 2000000;
   KEYS_COUNT = 1000;
   NUM_WORKERS = 12;
 
