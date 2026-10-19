@@ -208,6 +208,16 @@
   `eventloop.promise`.
 
 ### Додано
+- Неблокувальний `await` у корутинах: усередині файбера `await`,
+  `IFuture.Value`, `ITask.Wait` і `TTask.WaitForAll` без таймауту
+  призупиняють файбер замість блокування потоку ОС (`System.Threading`:
+  `TaskAwaitHook`, `TaskOnComplete`; `fcl-coroutines` встановлює точку
+  підключення для `TFiber`, `TFiber.SuspendOnWait`). Поза файбером і в
+  генераторах очікування блокує, як раніше.
+- `TFiber.Async<T>` і `TFiber.Spawn`: запуск функції чи процедури як
+  корутини з поверненням `IFuture<T>`/`ITask` (синхронно до першого
+  очікування, далі — у потоці циклу подій або пулу). Тест: 1000 корутин по
+  100 мс очікування на одному потоці завершуються за ~140 мс.
 - **Фаза 1.1 (`packages/vcl-compat/src/system.threading.pp`) — неблокувальні продовження задач (`ContinueWith` / `ThenBy`) та кооперативне скасування (`TCancellationToken`):**
   - `TCancellationTokenSource`, `TCancellationToken` та `TCancellationTokenRegistration` —
     легковаговий потокобезпечний механізм кооперативного скасування з підрахунком посилань
@@ -277,10 +287,15 @@
     - Фундамент скінченних автоматів (`async.statemachine.pp`): `generic TTaskCompletionSource<TResult>` (`Task`, `SetResult`, `SetException`, `SetCanceled`), `TAsyncTaskMethodBuilder<TResult>` та `TAsyncTaskBuilder` за контрактом C# Roslyn.
     - Модульні тести `packages/fcl-async/tests/utasync.pp` (12 тестів: `TTestFibers`, `TTestGenerators`, `TTestStateMachines`), скрипт `tests/concurrency/build-async.sh`.
   - **Крок 2 (у компіляторі `compiler/ppcx64`)**:
-    - Додано процедурний модифікатор/директиву `async` (`pio_async` у `timplprocoption` в `compiler/symconst.pas`, парсер `compiler/pdecsub.pas`) для маркування процедур та функцій, що повертають `ITask` або `specialize IFuture<T>`.
-    - Додано контекстний оператор `await` (`compiler/pexpr.pas`) для очікування майбутніх задач у виразах (`Val := await Future;` автоматично читає властивість `.Value`) та задачах (`await Task;` викликає `.Wait`).
+    - Додано процедурний модифікатор/директиву `async` (`pio_async` у `timplprocoption` в `compiler/symconst.pas`, парсер `compiler/pdecsub.pas`) для маркування процедур та функцій.
+    - Реалізовано строгу типізаційну перевірку повернення: функції з `async;` зобов'язані повертати `ITask` або `specialize IFuture<T>` (помилка `parser_e_async_must_return_task_or_future` = 03380 у `compiler/pdecsub.pas`, `compiler/msg/errore.msg`).
+    - Реалізовано нову директиву компілятора `{$ASYNCMODE AUTO|FIBER|STATEMACHINE}` (`compiler/scandir.pas`, `compiler/fmodule.pas`) з діагностикою помилок `scan_e_illegal_asyncmode` (02123).
+    - Інтегровано життєвий цикл стану `asyncinfo` у `tprocinfo.destroy` (`compiler/procinfo.pas`).
+    - Додано контекстний оператор `await` (`compiler/pexpr.pas`) для неблокуючого очікування майбутніх задач у виразах (`Val := await Future;` автоматично читає властивість `.Value`) та задачах (`await Task;` викликає `.Wait`) з підключенням `TaskAwaitHook` для файберів.
+    - Модуль `packages/fcl-coroutines/src/fclasync.pp`: додано ергономічні методи `RunAsync<T>`, `SpawnAsync` та `AsyncSleep(ms)` для сучасного асинхронного стилю програмування.
+    - Створено пакет із 10 порівняльних програм-бенчмарків ModernFreePascal vs C# (.NET) у `tests/concurrency/comparison/` (всі 10/10 тестів успішно пройдено).
     - Збережено 100% сумісність двійкових файлів PPU (`tppuset1` / `tppuset8`) та чинних модулів RTL завдяки контекстному аналізу без додавання зарезервованих слів у загальний лексер.
-  - Демонстраційний приклад `docs/concurrency/examples/coroutine_showcase.pp`, посібник користувача `docs/concurrency/guide-async.md` та оновлений повний довідник `docs/concurrency/modern-concurrency-reference.md`.
+  - Демонстраційний приклад `docs/concurrency/examples/coroutine_showcase.pp`, посібник користувача `docs/concurrency/guide-async.md`, тестовий набір `tests/concurrency/test_modern_async.pp` та оновлений повний довідник `docs/concurrency/modern-concurrency-reference.md`.
 - **Розділ 2.1 (`compiler/ppcx64`) — Виведення типів для узагальнених методів (Generic Type Inference) та необов'язковий `specialize`:**
   - Додано новий перемикач режимів `{$modeswitch implicitgenerics}` (у `globtype.pas`, `scanner.pas`, `ppudump.pp`).
   - У режимі `objfpc` під `{$modeswitch implicitgenerics}` дозволено опускати ключове слово `specialize`:

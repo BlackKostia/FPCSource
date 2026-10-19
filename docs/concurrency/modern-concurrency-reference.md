@@ -755,23 +755,22 @@ end;
 
 `TTaskCompletionSource<T>` створює об'єкт `specialize IFuture<T>`, чий результат може бути виставлений пізніше через `.SetResult(Value)`, `.SetException(Ex)` або `.SetCanceled`.
 
-### 5.4. Компілятор: Директива `async` та оператор `await`
+### 5.4. Компілятор: Директива `async`, оператор `await` та директива `{$ASYNCMODE}`
 
 У компіляторі trunk `compiler/ppcx64`:
-- Процедурна директива `async` маркує процедури та функції, що повертають `ITask` або `specialize IFuture<T>`:
-  ```pascal
-  procedure BackgroundTask; async;
-  begin
-    WriteLn('Асинхронний метод');
-  end;
-
-  function FetchNumberAsync: specialize IFuture<Integer>; async;
-  begin
-    Result := TTask.specialize Future<Integer>(
-      function: Integer begin Result := 42; end);
-  end;
-  ```
-- Оператор `await <expr>` розпаковує типізовані `IFuture<T>` або очікує виконання `ITask`:
+- **Строга валідація сигнатур**: Процедурна директива `async` маркує процедури та функції. Компілятор перевіряє типи повернення:
+  - Функції з `async;` зобов'язані повертати дескриптор задачі (`ITask`, `specialize IFuture<T>`). Спроба повернути примітивний тип (`function Calc: Integer; async;`) призводить до помилки компіляції `parser_e_async_must_return_task_or_future` (03380):
+    ```text
+    Error: Async function must return ITask or IFuture<T>
+    ```
+  - Процедури з `async;` є асинхронними fire-and-forget задачами.
+- **Директива вибору бекенду `{$ASYNCMODE}`**:
+  - `{$ASYNCMODE AUTO}` (за замовчуванням) — компілятор обирає оптимальний режим диспетчеризації.
+  - `{$ASYNCMODE FIBER}` — примусове виконання через контекст файбера.
+  - `{$ASYNCMODE STATEMACHINE}` — трансформація у кінцевий автомат (Roslyn-style state machine).
+- **Оператор `await <expr>`**:
+  - Розпаковує типізовані `IFuture<T>` або очікує виконання `ITask`.
+  - Всередині файбера через внутрішній хук `TaskAwaitHook` очікування є **повністю неблокуючим**: файбер поступається квантом часу, вивільняючи системний потік ОС.
   ```pascal
   var
     V: Integer;
@@ -779,9 +778,32 @@ end;
   begin
     V := await FetchNumberAsync; // V отримує значення Integer безпосередньо
     T := TTask.Run(procedure begin DoWork; end);
-    await T;                     // Очікує завершення задачі
+    await T;                     // Неблокуюче очікування задачі
   end;
   ```
+
+### 5.5. Високорівневі хелпери: модуль `fclasync`
+
+Для максимальної лаконічності та ергономіки модуль `packages/fcl-coroutines/src/fclasync.pp` надає прямі методи запуску:
+- `RunAsync<T>(Func)` — запускає функцію у фоновій асинхронній корутині та повертає `specialize IFuture<T>`.
+- `SpawnAsync(Proc)` — запускає процедуру та повертає `ITask`.
+- `AsyncSleep(ms)` — неблокуючий сон у корутині з вивільненням системного потоку.
+
+```pascal
+function ComputeAsync(X: Integer): specialize IFuture<Integer>; async;
+begin
+  Result := specialize RunAsync<Integer>(
+    function: Integer
+    var
+      A, B: Integer;
+    begin
+      AsyncSleep(50); // потік ОС залишається вільним
+      A := await FetchPartA(X);
+      B := await FetchPartB(X);
+      Result := A + B;
+    end);
+end;
+```
 
 ---
 

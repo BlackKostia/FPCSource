@@ -59,7 +59,7 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
 - **Coroutines & `async` / `await` (`fcl-coroutines`)**:
   - Stackful fibers (`TFiber`) for AMD64 / POSIX.
   - Generators (`TGenerator<T>`) supporting idiomatic `for Item in Generator do`.
-  - Compiler-native `async` procedural directive and `await` operator for state-machine transformations.
+  - `await` operator: inside a coroutine started with `TFiber.Async`/`TFiber.Spawn` it suspends the coroutine without blocking the OS thread (outside coroutines it waits in place). The `async` directive is parsed but does not change code generation yet.
 
 ---
 

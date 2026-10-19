@@ -184,66 +184,113 @@ end;
 
 ---
 
-## 5. Компіляторна підтримка: директива `async` та оператор `await`
+## 5. `async` та `await`: що вони роблять насправді
 
-У компіляторі trunk (`compiler/ppcx64`) впроваджено пряму підтримку ключових слів `async` та `await` як контекстних конструкцій без порушення бінарної сумісності PPU:
+### 5.1. Оператор `await`
 
-### 5.1. Директива `async`
-Може вказуватися для процедур та функцій, що виконують асинхронні операції або повертають асинхронні дескриптори (`ITask` або `specialize IFuture<T>`):
+`await E` компілятор перетворює на `E.Value`, якщо `E` має член `Value`
+(`IFuture<T>`), інакше на `E.Wait` (`ITask`). Тобто `await` — це очікування
+результату задачі. Чи блокує воно потік, залежить від того, де виконується код:
+
+| Де виконується `await` | Що відбувається |
+|---|---|
+| усередині файбера (`TFiber.Async`, `TFiber.Spawn`, власний `TFiber`) | файбер **призупиняється**, потік ОС вільний; файбер продовжить роботу, коли задача завершиться — у потоці свого циклу подій або, без циклу, у потоці пулу |
+| у генераторі (`TGenerator<T>`) | очікування **блокує** потік: файбер генератора перемикається лише в `Yield` |
+| поза файбером | очікування **блокує** поточний потік, як `Value`/`Wait` |
+
+Так само неблокувально всередині файбера працюють `IFuture.Value`,
+`ITask.Wait` без таймауту і `TTask.WaitForAll` без таймауту — `await` лише
+коротший запис. `Wait` з таймаутом і `WaitForAny` блокують і у файбері.
+
+`await` — контекстне ключове слово: якщо в області видимості є змінна,
+функція чи поле з іменем `await`, воно має звичайне значення.
+
+### 5.2. `TFiber.Async` і `TFiber.Spawn`: асинхронний код без зворотних викликів
+
 ```pascal
-procedure ProcessLog; async;
-begin
-  WriteLn('Асинхронна процедура');
-end;
+uses SysUtils, System.Threading, fcleventloop, async.fiber;
 
-function FetchDataAsync: specialize IFuture<Integer>; async;
+var
+  Loop: IEventLoop;
+  Total: specialize IFuture<Integer>;
 begin
-  Result := TTask.specialize Future<Integer>(
+  Loop := TEventLoop.Create(bkAuto);
+  Total := TFiber.specialize Async<Integer>(
     function: Integer
+    var
+      A, B: Integer;
     begin
-      Result := 42;
-    end);
-end;
+      A := await DownloadSizeAsync('a.bin');  // файбер чекає, потік вільний
+      B := await DownloadSizeAsync('b.bin');
+      Result := A + B;
+    end, Loop);
+  while Total.Status <> TTaskStatus.Completed do
+    Loop.RunOnce(10);
+  WriteLn(Total.Value);
+end.
 ```
 
-### 5.2. Оператор `await`
-Оператор `await` може застосовуватися:
-1. **До `specialize IFuture<T>` у виразах**: автоматично розгортає значення майбутньої задачі, повертаючи розпакований тип `T`:
-   ```pascal
-   function AddTenAsync(const AFuture: specialize IFuture<Integer>): specialize IFuture<Integer>; async;
-   var
-     Val: Integer;
-   begin
-     Val := await AFuture; // Val отримує Integer напряму
-     Result := TTask.specialize Future<Integer>(
-       function: Integer
-       begin
-         Result := Val + 10;
-       end);
-   end;
-   ```
-2. **До `ITask` або об'єктів з методом `Wait` як оператор або вираз**: автоматично очікує завершення виконання фонової операції без необхідності ручного виклику `.Wait`:
-   ```pascal
-   var
-     T: ITask;
-   begin
-     T := TTask.Run(procedure begin DoWork; end);
-     await T; // Неблокуюче очікування завершення задачі
-   end;
-   ```
+`Async` виконує функцію синхронно до першого очікування незавершеної задачі
+і тоді повертає майбутнє — як `async`-метод у C#. З `Loop` уся корутина
+виконується в потоці циклу (тисяча корутин можуть чекати на одному потоці);
+без `Loop` вона продовжується в потоках пулу. `Spawn` — те саме для процедури,
+повертає `ITask`. Виняток корутини потрапляє в її майбутнє. Файбер
+звільняється сам, коли функція повертає результат.
+
+### 5.3. Директива `async` та компіляторна валідація
+
+Компілятор FPC (`compiler/pdecsub.pas`) здійснює строгу типізаційну перевірку підпрограм із модифікатором `async;`:
+- **Функції**: тип повернення зобов'язаний бути асинхронним типом — інтерфейсом (`specialize IFuture<T>`, `ITask`), класом або асинхронним дескриптором. Спроба оголосити `function Bad: Integer; async;` призводить до помилки компіляції:
+  ```text
+  Error: Async function must return ITask or IFuture<T>
+  ```
+- **Процедури**: `procedure Worker; async;` трактуються як асинхронні fire-and-forget операції.
+
+### 5.4. Ергономічний синтаксис `RunAsync` та `SpawnAsync` (модуль `fclasync`)
+
+Для найбільш зручного написання асинхронного коду в стилі сучасних мов програмування модуль `fclasync` надає прямі хелпери:
+- **`RunAsync<T>(Func)`** — виконує функцію як асинхронну корутину і миттєво повертає викликачу `specialize IFuture<T>`.
+- **`SpawnAsync(Proc)`** — запускає процедуру у фоновій корутині, повертаючи `ITask`.
+- **`AsyncSleep(ms)`** — неблокуючий сон у файбері, що вивільняє системний потік.
+
+Приклад з повною підтримкою лямбд `=>`:
+```pascal
+function CalculateDataAsync(Id: Integer): specialize IFuture<Integer>; async;
+begin
+  Result := specialize RunAsync<Integer>(
+    function: Integer
+    var
+      DataA, DataB: Integer;
+    begin
+      // Неблокуюче призупинення файбера на await:
+      DataA := await FetchPartAAsync(Id);
+      DataB := await FetchPartBAsync(Id);
+      Result := DataA + DataB;
+    end);
+end;
+
+// Виклик з боку викликача НЕ блокує потік:
+F := CalculateDataAsync(42); // повертає IFuture миттєво (< 1 мс)
+// Виконуємо іншу роботу...
+Total := await F; // розгортає результат
+```
 
 ---
 
 ## 6. Збірка та запуск тестів
 
-Для перевірки роботи функціоналу Фази 1.4:
+Для перевірки роботи функціоналу асинхронності:
 ```sh
-# Збірка і прогін модульних тестів fcl-coroutines
+# Збірка і запуск комплексного тесту сучасного async/await (по аналогії з C#/Rust/Go):
+. tests/concurrency/fpcenv.sh
+$FPC_TRUNK @"$FPC_CFG" -Fupackages/fcl-coroutines/src tests/concurrency/test_modern_async.pp
+./tests/concurrency/test_modern_async
+
+# Збірка і прогін модульних тестів fcl-coroutines (28 тестів):
 ./tests/concurrency/build-async.sh
 ./tests/concurrency/out-async/testasync -a --format=plain
 
-# Збірка і прогін демонстраційного прикладу coroutine_showcase
-. tests/concurrency/fpcenv.sh
+# Збірка і прогін демонстраційного прикладу coroutine_showcase:
 $FPC_TRUNK @"$FPC_CFG" -FE./tests/concurrency/out-async -FU./tests/concurrency/out-async \
   -Fi./packages/fcl-coroutines/src -Fu./packages/fcl-coroutines/src -Fu./packages/fcl-coroutines/tests \
   docs/concurrency/examples/coroutine_showcase.pp
