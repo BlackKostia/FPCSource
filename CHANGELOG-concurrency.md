@@ -208,6 +208,18 @@
   `eventloop.promise`.
 
 ### Додано
+- Розумні вказівники на керованих записах — модуль `smartptrs`
+  (`System.SmartPtrs`) у `rtl-objpas` (розділ 3.1 дорожньої карти):
+  `TScoped<T>` — одноосібне володіння, `Free` на виході з області видимості
+  й під час розкручування винятку, копіювання власника піднімає
+  `ESmartPtrError`, передача володіння через `Move`/`Release`/`Reset`;
+  `TArc<T>` — спільне володіння будь-яким `TObject` з атомарним лічильником
+  і блоком керування; `TWeak<T>` — спостерігач без володіння з атомарним
+  `Lock` (без «воскресіння» звільненого об'єкта). 40 fpcunit-тестів
+  (`utcsmartptrs.pp`, зокрема стрес-тести на 8 потоках), heaptrc — 0 витоків;
+  посібник `guides/smart-pointers.md`, ADR-0007, fpdoc
+  `rtl-objpas/xml/smartptrs.xml`, приклад `examples/smart_pointers.pp`,
+  скрипт `tests/concurrency/build-smartptrs.sh`.
 - Неблокувальний `await` у корутинах: усередині файбера `await`,
   `IFuture.Value`, `ITask.Wait` і `TTask.WaitForAll` без таймауту
   призупиняють файбер замість блокування потоку ОС (`System.Threading`:

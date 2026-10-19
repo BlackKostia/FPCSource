@@ -15,12 +15,14 @@
 | `guide-arrow-functions.md` | **Посібник користувача стрілкових функцій (Розділ 2.2)**: синтаксис `=>`, скорочення шаблонного коду в `System.Threading` та `fcl-async`, виведення типів параметрів і результату |
 | `guide-tuples.md` | **Посібник користувача кортежів та деконструкції (Розділ 2.4)**: позиційні та іменовані кортежі, деконструкція `(A, B) := Expr`, inline-розпакування `var (A, B) := ...`, одночасний swap `(X, Y) := (Y, X)`, структурна еквівалентність |
 | `guide-async.md` | **Посібник користувача `fcl-async` та `async/await` (Фаза 1.4)**: `TFiber` (стекові корутини System V AMD64), `TGenerator<T>` (`for..in`), `TTaskCompletionSource<T>`, компіляторна директива `async` та оператор `await` |
-| `examples/` | Приклади з документації (`parallel_for.pp`, `tasks.pp`, `pool_lifetime.pp`, `valgrind_annotate.pp`, `primes_*`, `report_*`, `batch_processing.pp`, `showcase_pipeline.pp`, `syncobjs_phase2.pp`, `continuations_cancel.pp`, `eventloop_benchmark.pp`, `coroutine_showcase.pp`); кожен компілюється й запускається |
+| `guides/smart-pointers.md` | **Посібник користувача розумних вказівників (Розділ 3.1)**: `TScoped<T>` (одноосібне володіння без `try..finally`), `TArc<T>` (атомарний підрахунок посилань між потоками), `TWeak<T>` (розрив циклів), пастки тимчасових значень і замикань |
+| `examples/` | Приклади з документації (`parallel_for.pp`, `tasks.pp`, `pool_lifetime.pp`, `valgrind_annotate.pp`, `primes_*`, `report_*`, `batch_processing.pp`, `showcase_pipeline.pp`, `syncobjs_phase2.pp`, `continuations_cancel.pp`, `eventloop_benchmark.pp`, `coroutine_showcase.pp`, `smart_pointers.pp`); кожен компілюється й запускається |
 | `valgrind.md` | Перевірка гонок даних (helgrind/drd), анотації, відомі обмеження |
 | `baseline.md` | Базова лінія тестів trunk до наших змін (відомі падіння) |
-| `adr/` | Дизайн-рішення (ADR-0001: життєвий цикл потоків пулу; ADR-0002: клієнтські запити Valgrind; ADR-0003: детермінованість `TParallel.For` і `Join`; ADR-0004: примітиви `SyncObjs` Фази 2; ADR-0005: неблокувальні продовження та `TCancellationToken`; ADR-0006: масштабований асинхронний I/O `fcl-eventloop`) |
+| `adr/` | Дизайн-рішення (ADR-0001: життєвий цикл потоків пулу; ADR-0002: клієнтські запити Valgrind; ADR-0003: детермінованість `TParallel.For` і `Join`; ADR-0004: примітиви `SyncObjs` Фази 2; ADR-0005: неблокувальні продовження та `TCancellationToken`; ADR-0006: масштабований асинхронний I/O `fcl-eventloop`; ADR-0007: розумні вказівники на керованих записах) |
 | `roadmap-improvements.md` | **Дорожня карта розвитку FPC**: рекомендації щодо бібліотек багатопоточності (Фази 2–4), синтаксичної ергономіки компілятора, безпеки пам'яті та інструментарію |
 | `../../packages/fcl-base/xml/fpvalgrind.xml` | Довідник API `fpvalgrind` у стандартному форматі `fpdoc` |
+| `../../packages/rtl-objpas/xml/smartptrs.xml` | Довідник API модуля `smartptrs` (`TScoped`, `TArc`, `TWeak`) у стандартному форматі `fpdoc` |
 | `../../packages/fcl-base/xml/syncobjs-phase2.xml` | Довідник API нових примітивів `SyncObjs` (Фаза 2) у стандартному форматі `fpdoc` |
 | `../../packages/fcl-eventloop/xml/fcleventloop.xml` | Довідник API пакету `fcl-eventloop` (Фаза 1.3) у стандартному форматі `fpdoc` |
 | `../../packages/vcl-compat/xml/system.threading.xml` | Довідник API `System.Threading` у стандартному форматі `fpdoc` |

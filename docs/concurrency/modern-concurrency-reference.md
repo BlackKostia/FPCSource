@@ -37,6 +37,7 @@
    - [6.3. Виведення типів у ланцюжках `TTask.Future` та `ThenBy`](#63-виведення-типів-у-ланцюжках-ttaskfuture-та-thenby)
 7. [Комплексний приклад: Наскрізний реактивний конвеєр](#7-комплексний-приклад-наскрізний-реактивний-конвеєр)
 8. [Правила безпеки, діагностика та Valgrind](#8-правила-безпеки-діагностика-та-valgrind)
+9. [Модуль `smartptrs`: розумні вказівники `TScoped<T>`, `TArc<T>`, `TWeak<T>`](#9-модуль-smartptrs-розумні-вказівники-tscopedt-tarct-tweakt)
 
 ---
 
@@ -78,6 +79,7 @@
 | **Мережевий сервер із 10 000 – 100 000+ клієнтів** | `fcl-eventloop` (`TEventLoopGroup`) | Нативні `epoll` / `io_uring` / `kqueue` / `IOCP`, витрата пам'яті ~2 КБ на клієнта, не потребує окремого стеку потоку на з'єднання. | Модель thread-per-connection (`ssockets` / блокуючі сокети — падіння ядра через вичерпання пам'яті). |
 | **Стекові корутини (user-space fibers) та послідовний асинхронний I/O** | `TFiber` (`fcl-async`) | Швидке перемикання контексту AMD64 (10 нс), неблокуючий `TFiber.Await<T>`, `Sleep` через EventLoop. | Жорсткий паралелізм (файбер виконується на одному потоці до `Yield`). |
 | **Ледачі послідовності з підтримкою `for..in`** | `generic TGenerator<T>` (`fcl-async`) | Генератор зі зворотним викликом `YieldValue`, сумісний з `IEnumerator<T>`. | Важкі міжпотокові конвеєри (використовуйте `TChannel<T>`). |
+| **Спільний об'єкт для кількох потоків/задач, який має звільнитися після останнього користувача** | `generic TArc<T>` (+ `TWeak<T>` для зворотних посилань) | Атомарний лічильник у блоці керування, будь-який `TObject` без `TInterfacedObject`, `Free` рівно один раз у потоці останнього власника. | Ручний підрахунок посилань або «головний потік звільнить, коли всі завершаться» (гонки, use-after-free). |
 | **Природний асинхронний код без callback hell** | `async` / `await` (компілятор trunk) | Процедурна директива `async`, оператор `await` розгортає `IFuture<T>.Value` або очікує `ITask.Wait`. | Блокуючі системні виклики. |
 
 ---
@@ -989,3 +991,43 @@ end.
 1. **Не блокуйте потік Event Loop**: Усі тривалі обчислення, звернення до БД або блокуючий I/O передавайте у `TTask.Run` або `TChannel<T>`. Потік реактора повинен лише пересилати байти.
 2. **Уникайте захоплення змінних циклу за посиланням**: В анонімних функціях усередині циклів копіюйте лічильник у локальну змінну (`var LocalI := I;`) або використовуйте параметри процедури.
 3. **Чистота під Valgrind / Helgrind**: Усі нові примітиви (`TCancellationToken`, `TCountdownEvent`, `TBarrier`, `TSlimReaderWriterLock`, `TChannel`) протестовано з ключем `-dFPC_VALGRIND` і містять вбудовані анотації `VgHappensBefore` / `VgHappensAfter`. Жодних хибних спрацювань детектора гонок даних!
+
+---
+
+## 9. Модуль `smartptrs`: розумні вказівники `TScoped<T>`, `TArc<T>`, `TWeak<T>`
+
+Пакет `rtl-objpas`, модуль `smartptrs` (`System.SmartPtrs`). Повний посібник —
+[guides/smart-pointers.md](guides/smart-pointers.md), рішення — [ADR-0007](adr/0007-smart-pointers.md).
+
+| Тип | Призначення | Ключові члени |
+|---|---|---|
+| `generic TScoped<T: class>` | Одноосібне володіння, `Free` на виході з області видимості (і при винятку) | `Create`, `Reset`, `Release`, `Move`, `Swap`, `Obj`, `IsAssigned` |
+| `generic TArc<T: class>` | Спільне володіння з атомарним лічильником | `Create`, `Reset`, `Obj`, `UseCount`, `=`/`<>` |
+| `generic TWeak<T: class>` | Спостереження без володіння, розрив циклів | `Create`/`Assign`, `Lock`, `TryLock`, `Expired`, `Reset` |
+| `ESmartPtrError` | Спроба скопіювати `TScoped`, що володіє об'єктом | нащадок `EInvalidOpException` |
+
+```pascal
+uses smartptrs;
+type
+  TCatalogArc = specialize TArc<TCatalog>;
+
+// Кожна задача отримує власну копію TArc через параметр за значенням.
+function StartLookup(Catalog: TCatalogArc; const Key: string): specialize IFuture<Integer>;
+begin
+  Result := TTask.specialize Future<Integer>(
+    function: Integer
+    begin
+      Result := Catalog.Obj.Names.IndexOf(Key);
+    end);
+end;
+```
+
+**Гарантії потокобезпечності `TArc`/`TWeak`:** різні змінні, що посилаються на
+один об'єкт, можна копіювати й знищувати з будь-яких потоків; об'єкт
+звільняється рівно один раз; `TWeak.Lock` ніколи не повертає звільнений
+об'єкт. Запис в **одну й ту саму** змінну `TArc` паралельно з іншим доступом
+до неї потребує синхронізації (як `std::shared_ptr`).
+
+**Пастки:** тимчасові значення (`W.Lock.Obj`) живуть до кінця підпрограми;
+анонімні функції захоплюють змінну `TArc`, а не копію; `TScoped` передавайте
+лише як `const`/`var`.

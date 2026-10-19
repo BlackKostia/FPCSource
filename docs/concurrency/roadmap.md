@@ -139,10 +139,12 @@
 
 ## 3. Пам'ять, безпека та нульові накладні витрати (рівень Rust / C++20)
 
-### 3.1. Розумні вказівники на базі керованих записів (`TScoped<T>`, `TArc<T>`) у RTL
+### 3.1. Розумні вказівники на базі керованих записів (`TScoped<T>`, `TArc<T>`) у RTL [РЕАЛІЗОВАНО]
 Механізм Management Operators (`Initialize`, `Finalize`, `AddRef`, `Copy`) для `advancedrecords` у FPC вже дозволяє створити стандартний модуль `sysmanaged` / `smartptrs`:
 - **`TScoped<T>` (аналог `std::unique_ptr`)** — автоматично викликає `.Free` при виході зі стекового кадру (навіть у разі винятку), усуваючи потребу в `try..finally` для локальних об'єктів (`TStringList`, `TMemoryStream`, `TThreadPool`).
 - **`TArc<T>` (Atomic Reference Counted)** — потокобезпечне спільне володіння для будь-якого класу `TObject` без вимоги успадковувати `TInterfacedObject`.
+
+**Стан:** модуль `smartptrs` / `System.SmartPtrs` у `packages/rtl-objpas`; додатково `TWeak<T>` (аналог `std::weak_ptr`) для розриву циклів. Посібник — [guides/smart-pointers.md](guides/smart-pointers.md), рішення — [ADR-0007](adr/0007-smart-pointers.md), приклад — `examples/smart_pointers.pp`, тести — `packages/rtl-objpas/tests/utcsmartptrs.pp`. Глобальні фабрики з виведенням типу (`MakeScoped(X)`) чекають виправлення компілятора: обмежений дженерик `T: class`, що повертає `specialize TScoped<T>`, не зіставляє forward-оголошення.
 
 ### 3.2. Безпечні зрізи пам'яті (`TSpan<T>` / `TReadOnlySpan<T>`)
 - Легковагова структура `(Ptr: ^T; Length: SizeInt)` з перевіркою меж (при `-Cr`), що представляє неперервний піддіапазон статичного масиву, динамічного масиву, рядка або `TBytes` без копіювання і без алокацій у купі.
@@ -169,7 +171,7 @@
 | Пріоритет | Напрямок | Де реалізується | Складність | Очікуваний ефект |
 |---|---|---|---|---|
 | **1** | `TChannel<T>`, `TCountdownEvent`, `TBarrier`, `TCancellationToken`, `.ContinueWith` [РЕАЛІЗОВАНО] | `packages/fcl-base`, `packages/vcl-compat` | Середня | Повноцінна оркестрація потоків і передавання повідомлень без низькорівневих блокувань |
-| **2** | Розумні вказівники `TScoped<T>` / `TArc<T>` та `TSpan<T>` | `rtl/objpas` або `packages/rtl-objpas` | Низька–середня | Зникнення шаблонних блоків `try..finally` і витоків пам'яті в багатопоточному коді |
+| **2** | Розумні вказівники `TScoped<T>` / `TArc<T>` [РЕАЛІЗОВАНО] та `TSpan<T>` | `packages/rtl-objpas` | Низька–середня | Зникнення шаблонних блоків `try..finally` і витоків пам'яті в багатопоточному коді |
 | **3** | Необов'язковий `specialize` + виведення типів для дженериків [РЕАЛІЗОВАНО] | `compiler/` (`pexpr.pas`, `ptype.pas`, `pgenutil.pas`) | Середня | Суттєве очищення синтаксису `TTask.Future`, колекцій та алгоритмів |
 | **4** | Асинхронний цикл подій `fcl-eventloop` (`epoll`/`kqueue`/`IOCP`) [РЕАЛІЗОВАНО] | `packages/fcl-eventloop` | Висока | Високопродуктивні мережеві сервіси на FPC |
 | **5** | Короткі лямбди `=>` та `async`/`await` [РЕАЛІЗОВАНО] | `compiler/`, `packages/fcl-coroutines` | Висока | Рівень ергономіки сучасних C# / Rust / TypeScript при збереженні нативної швидкості FPC |
