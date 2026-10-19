@@ -1,0 +1,184 @@
+# Packages whose API reference is generated with fpdoc.
+#
+# Paths are relative to the repository root. Packages are built in the
+# listed order, so a package may link to the packages above it.
+#
+# `internal` holds glob patterns (matched case-insensitively against the full
+# element name) for implementation details that are exempt from the coverage
+# check. Patterns are applied in order, gitignore-style: a later pattern
+# starting with "!" brings matching elements back into scope.
+#
+# `scope`, when present, limits the check to matching elements. It is used for
+# units that this branch only extends: the rest of such a unit is documented
+# upstream (fpcdocs).
+
+[defaults]
+options = "-Mobjfpc -Sm -dUNIX -dLINUX -dCPU64 -dCPUX86_64"
+
+[[package]]
+name = "vcl-compat"
+title = "System.Threading"
+units = ["packages/vcl-compat/src/system.threading.pp"]
+descr = ["packages/vcl-compat/xml/system.threading.xml"]
+internal = [
+  "TSparseArray*",
+  "TWorkStealingQueue*",
+  "TObjectCache*",
+  "TExceptionList*",
+  "TExceptionArray",
+  "ICancellationState*",
+  "TAbstractTask*",
+  "TFuture*",
+  "TFutureContinuationTask*",
+  "TTransformFuture*",
+  "TTask.TTaskParams*",
+  "TTask.DoWaitForAll",
+  "TTask.DoWaitForAny",
+  "TTask.NewId",
+  "TTask.ExecuteWork",
+  "TTask.AddCompleteEvent",
+  "TTask.RemoveCompleteEvent",
+  "TTask.HandleChildCompletion",
+  "TTask.SetExceptionObject",
+  "TTask.GetControlFlag",
+  "TTask.GetId",
+  "TTask.GetStatus",
+  "TTask.Wait",
+  "TTask.Cancel",
+  "TTask.CheckCanceled",
+  "TTask.Start",
+  "TTask.ContinueWith",
+  "TTask.IsReplicating",
+  "TTask.IsQueued",
+  "TTask.DoneEvent",
+  "TThreadPool.IControlFlag.*",
+  "TThreadPool.TSafeShared*",
+  "TThreadPool.IThreadPoolWorkItem*",
+  "TThreadPool.TControlFlag*",
+  "TThreadPool.TAbstractWorkerData*",
+  "TThreadPool.TWorkerData*",
+  "TThreadPool.TBaseWorkerThread*",
+  "TThreadPool.TQueueWorkerThread*",
+  "TThreadPool.TThreadPoolMonitor*",
+  "TThreadPool.GetCurrentThreadPool",
+  "TThreadPoolStats.Assign",
+  "TParallel.TInt32LoopProc*",
+  "TParallel.TInt64LoopProc*",
+  "TParallel.ILoopParams*",
+  "TParallel.TLoopParams*",
+  "TParallel.TInt32LoopParams*",
+  "TParallel.TInt64LoopParams*",
+  "TParallel.TLoopStateFlag*",
+  "TParallel.ShouldExitFlags",
+  "TParallel.TLoopState32.*",
+  "TParallel.TLoopState64.*",
+  "TParallel.TLoopState.Create",
+  "TParallel.TLoopResult.Create",
+  "IFuture.GetValue",
+  "ITask.GetId",
+  "ITask.GetStatus",
+  "TCancellationTokenRegistration.Dispose",
+]
+
+[[package]]
+name = "fcl-base"
+title = "SyncObjs (additions) and fpvalgrind"
+units = ["packages/fcl-base/src/syncobjs.pp", "packages/fcl-base/src/fpvalgrind.pp"]
+descr = ["packages/fcl-base/xml/syncobjs-phase2.xml", "packages/fcl-base/xml/fpvalgrind.xml"]
+internal = [
+  "TCustomChannel.NotifyItem*",
+]
+
+[package.scope]
+syncobjs = [
+  "TCountdownEvent*",
+  "TBarrier*",
+  "EBarrierPostPhaseException",
+  "TSlimReaderWriterLock*",
+  "TSlimReadLockGuard*",
+  "TSlimWriteLockGuard*",
+  "EChannelClosedException",
+  "TCustomChannel*",
+  "TChannel*",
+]
+
+[[package]]
+name = "fcl-eventloop"
+title = "fcl-eventloop"
+units = [
+  "packages/fcl-eventloop/src/eventloop.types.pp",
+  "packages/fcl-eventloop/src/eventloop.core.pp",
+  "packages/fcl-eventloop/src/eventloop.sockets.pp",
+  "packages/fcl-eventloop/src/eventloop.pipes.pp",
+  "packages/fcl-eventloop/src/eventloop.files.pp",
+  "packages/fcl-eventloop/src/fcleventloop.pp",
+]
+descr = [
+  "packages/fcl-eventloop/xml/eventloop.types.xml",
+  "packages/fcl-eventloop/xml/eventloop.core.xml",
+  "packages/fcl-eventloop/xml/eventloop.sockets.xml",
+  "packages/fcl-eventloop/xml/eventloop.pipes.xml",
+  "packages/fcl-eventloop/xml/eventloop.files.xml",
+  "packages/fcl-eventloop/xml/fcleventloop.xml",
+]
+include = ["packages/fcl-eventloop/src/unix"]
+internal = [
+  "PHandleRegistration",
+  "THandleRegistration*",
+  "PTimerEntry",
+  "TTimerEntry*",
+  "TDeferredKind*",
+  "TDeferredEntry*",
+  "TEventLoopWorkerThread*",
+  # Implementation classes: their methods are documented on the interfaces.
+  "TEventLoopBase.*",
+  "TEventLoopGroup.*",
+  "TAsyncSocket.*",
+  "TAsyncServerSocket.*",
+  "TAsyncPipe.*",
+  "TAsyncFile.*",
+  "!TEventLoopBase.Create",
+  "!TEventLoopGroup.Create",
+  "!TAsyncSocket.Create",
+  "!TAsyncServerSocket.Create",
+  "!TAsyncPipe.Create",
+  "!TAsyncFile.Open",
+  "IEventLoop.GetBackendKind",
+  "IEventLoop.IsRunning",
+  "IEventLoopGroup.GetLoop",
+  "IAsyncSocket.GetHandle",
+  "IAsyncSocket.IsConnected",
+  "IAsyncServerSocket.GetHandle",
+  "IAsyncServerSocket.GetPort",
+  "IAsyncDatagramSocket.GetHandle",
+  "IAsyncPipe.GetReaderHandle",
+  "IAsyncPipe.GetWriterHandle",
+  "IAsyncFile.GetHandle",
+  "IAsyncFile.GetSize",
+]
+
+[[package]]
+name = "fcl-coroutines"
+title = "fcl-coroutines"
+units = [
+  "packages/fcl-coroutines/src/async.types.pp",
+  "packages/fcl-coroutines/src/async.fiber.pp",
+  "packages/fcl-coroutines/src/async.generator.pp",
+  "packages/fcl-coroutines/src/async.statemachine.pp",
+  "packages/fcl-coroutines/src/fclasync.pp",
+]
+descr = [
+  "packages/fcl-coroutines/xml/async.types.xml",
+  "packages/fcl-coroutines/xml/async.fiber.xml",
+  "packages/fcl-coroutines/xml/async.generator.xml",
+  "packages/fcl-coroutines/xml/async.statemachine.xml",
+  "packages/fcl-coroutines/xml/fclasync.xml",
+]
+include = ["packages/fcl-eventloop/src", "packages/fcl-eventloop/src/unix", "packages/vcl-compat/src"]
+internal = [
+  "TGenerator.GetCurrent",
+  "TGenerator.TEnumerator.GetCurrent",
+  "TAsyncTaskMethodBuilder.GetTask",
+  "TAsyncTaskBuilder.GetTask",
+  "TAsyncTaskMethodBuilder.TSource",
+]

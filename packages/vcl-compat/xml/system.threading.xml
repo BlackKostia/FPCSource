@@ -9,32 +9,103 @@
 -->
 
 <module name="System.Threading">
-<short>Task-based parallel programming library (thread pools, tasks, futures, and parallel loops)</short>
+<short>Task-based parallel programming library: thread pools, tasks, futures, continuations, cancellation and parallel loops</short>
 <descr>
-<p><file>System.Threading</file> implements a Delphi-compatible Parallel Programming Library (PPL) for Free Pascal. Instead of manually managing operating-system threads (<var>TThread</var>), applications express concurrency in terms of lightweight tasks (<link id="ITask"/>, <link id="TTask"/>), typed asynchronous results (<link id="IFuture"/>), and data-parallel loops (<link id="TParallel"/>).</p>
-<p>Work items are scheduled across a work-stealing thread pool (<link id="TThreadPool"/>) that reuses worker threads, balances uneven workloads via per-thread work-stealing queues, and propagates unhandled exceptions to the waiting caller inside a flattened <link id="EAggregateException"/>.</p>
+<p><file>System.Threading</file> implements a Delphi-compatible Parallel Programming Library for Free Pascal. Instead of managing operating-system threads (<var>TThread</var>) directly, an application expresses concurrency as lightweight tasks (<link id="ITask"/>, <link id="TTask"/>), typed asynchronous results (<link id="IFuture"/>), non-blocking continuations (<link id="ITask.ContinueWith"/>, <link id="TITaskHelper.ThenBy"/>), cooperative cancellation (<link id="TCancellationToken"/>) and data-parallel loops (<link id="TParallel"/>).</p>
+<p>Work items run on a work-stealing thread pool (<link id="TThreadPool"/>). Unhandled exceptions raised by tasks are captured and re-raised in the waiting thread inside a flattened <link id="EAggregateException"/>.</p>
+<p>Anonymous procedures are used throughout the API, so programs using it need <var>{$modeswitch functionreferences}</var> and <var>{$modeswitch anonymousfunctions}</var>, and <var>cthreads</var> as the first unit on Unix.</p>
 </descr>
 
-<!-- object Visibility: default -->
-<element name="EAggregateException">
-<short>Aggregates one or more exceptions raised by concurrent tasks or parallel loop iterations</short>
+<!-- ================= Procedure and function types ================= -->
+
+<element name="TLightweightEvent">
+<short>Event type used for task completion events; an alias of <var>TEvent</var></short>
+</element>
+
+<element name="TFunctionEvent">
+<short>Method that receives a sender and returns a value of type <var>T</var>; used by the method-based <link id="TTask.Future"/> overloads</short>
+</element>
+
+<element name="TProc">
+<short>Generic reference to a procedure taking one argument of type <var>T</var></short>
+</element>
+
+<element name="TProc2">
+<short>Generic reference to a procedure taking two arguments of types <var>T1</var> and <var>T2</var></short>
+</element>
+
+<element name="TFunc">
+<short>Generic reference to a parameterless function returning <var>T</var></short>
+</element>
+
+<element name="TFunc1">
+<short>Generic reference to a function taking one <var>const</var> argument of type <var>TArg</var> and returning <var>TResult</var></short>
 <descr>
-<p><var>EAggregateException</var> collects exceptions thrown by asynchronous tasks (<link id="TTask.Wait"/>, <link id="TTask.WaitForAll"/>) or parallel loop replicas (<link id="TParallel.For"/>, <link id="TParallel.Join"/>). Nested aggregate exceptions are automatically flattened into a single list of inner exceptions.</p>
-<p>Iterate over the collected exceptions using a <var>for..in</var> loop (which yields exactly <link id="EAggregateException.Count">Count</link> elements), index them via <link id="EAggregateException.InnerExceptions">InnerExceptions</link>, or filter handled exceptions with <link id="EAggregateException.Handle">Handle</link>.</p>
+<p>The argument is declared <var>const</var>. An anonymous function or arrow function assigned to a <var>TFunc1</var> must declare its parameter as <var>const</var> too, otherwise the compiler reports incompatible types.</p>
+</descr>
+</element>
+
+<element name="TProcRef">
+<short>Reference to a parameterless procedure; the body type of tasks and of <link id="TParallel.Join"/></short>
+</element>
+
+<element name="TExceptionHandlerEvent">
+<short>Method called by <link id="EAggregateException.Handle"/> for each inner exception; set <var>aHandled</var> to <var>True</var> to mark it handled</short>
+</element>
+
+<element name="TExceptionHandlerProc">
+<short>Procedure reference called by <link id="EAggregateException.Handle"/> for each inner exception; set <var>aHandled</var> to <var>True</var> to mark it handled</short>
+</element>
+
+<!-- ================= EAggregateException ================= -->
+
+<element name="EAggregateException">
+<short>Exception that carries one or more exceptions raised by tasks or parallel loop iterations</short>
+<descr>
+<p><var>EAggregateException</var> collects the exceptions raised by tasks (<link id="ITask.Wait"/>, <link id="TTask.WaitForAll"/>, <link id="IFuture.Value"/>) or by parallel loop iterations (<link id="TParallel.For"/>, <link id="TParallel.Join"/>). Nested aggregate exceptions are flattened into a single list.</p>
+<p>Iterate over the inner exceptions with <var>for E in Agg do</var> (which yields exactly <link id="EAggregateException.Count">Count</link> elements), index them with <link id="EAggregateException.InnerExceptions">InnerExceptions</link>, or let <link id="EAggregateException.Handle">Handle</link> filter out the ones the program can deal with.</p>
+<p>The aggregate exception owns its inner exceptions and frees them when it is destroyed.</p>
 </descr>
 <seealso>
-<link id="TTask.Wait"/>
+<link id="ITask.Wait"/>
 <link id="TTask.WaitForAll"/>
 <link id="TParallel.For"/>
 </seealso>
 </element>
 
+<element name="EAggregateException.TExceptionEnumerator">
+<short>Enumerator returned by <link id="EAggregateException.GetEnumerator"/> for <var>for..in</var> loops</short>
+</element>
+
+<element name="EAggregateException.TExceptionEnumerator.Create">
+<short>Creates an enumerator over a copy of the given exception array</short>
+</element>
+
+<element name="EAggregateException.TExceptionEnumerator.MoveNext">
+<short>Advances to the next inner exception; returns <var>False</var> after the last one</short>
+</element>
+
+<element name="EAggregateException.TExceptionEnumerator.Current">
+<short>The inner exception at the current position</short>
+</element>
+
+<element name="EAggregateException.MaxLoggedExceptions">
+<short>Maximum number of inner exceptions included in the text returned by <link id="EAggregateException.ToString">ToString</link></short>
+</element>
+
+<element name="EAggregateException.Create">
+<short>Creates an aggregate exception containing the given exceptions, with the default or the given message</short>
+<descr>
+<p>The new object takes ownership of the exceptions in <var>aExceptionArray</var>.</p>
+</descr>
+</element>
+
 <element name="EAggregateException.Count">
-<short>Number of inner exceptions contained in the aggregate exception</short>
+<short>Number of inner exceptions</short>
 </element>
 
 <element name="EAggregateException.InnerExceptions">
-<short>Indexed access (<var>0..Count - 1</var>) to the captured exceptions</short>
+<short>Indexed access (<var>0..Count - 1</var>) to the inner exceptions; the default property</short>
 </element>
 
 <element name="EAggregateException.GetEnumerator">
@@ -42,133 +113,312 @@
 </element>
 
 <element name="EAggregateException.Handle">
-<short>Invokes a predicate for each inner exception and re-raises any unhandled exceptions</short>
+<short>Calls a handler for each inner exception and re-raises the ones that were not handled</short>
+<descr>
+<p>The handler is called once for every inner exception. If it leaves <var>aHandled</var> as <var>False</var> for at least one of them, <var>Handle</var> raises a new <var>EAggregateException</var> with the same message that contains only the unhandled exceptions; the handled ones stay owned by the original object. If all exceptions are handled, <var>Handle</var> returns normally.</p>
+</descr>
 </element>
 
-<!-- object Visibility: default -->
+<element name="EAggregateException.Add">
+<short>Appends an exception to the list; the aggregate exception takes ownership of it</short>
+</element>
+
+<element name="EAggregateException.ToString">
+<short>Returns the message followed by the number of inner exceptions and the first <link id="EAggregateException.MaxLoggedExceptions">MaxLoggedExceptions</link> of them</short>
+</element>
+
+<!-- ================= TThreadPool ================= -->
+
 <element name="TThreadPool">
-<short>Work-stealing thread pool that executes queued tasks and parallel loops</short>
+<short>Work-stealing thread pool that executes tasks, futures and parallel loops</short>
 <descr>
-<p><var>TThreadPool</var> manages a set of reusable worker threads and a background monitor thread. Each worker thread maintains a local work-stealing queue alongside the global queue; idle workers steal pending work items from other threads before blocking on the queue event.</p>
-<p>All worker threads and the monitor thread are owned by the pool (<var>FreeOnTerminate = False</var>). When a worker finishes, it moves to an internal finished-thread list and is joined (<var>WaitFor</var>) and freed by the monitor thread or during <link id="TThreadPool.Destroy"/>. Consequently, <var>Pool.Free</var> guarantees that no pool thread is still executing user code, destructors, or RTL thread epilogues after destruction returns.</p>
-<p>Note: <link id="TThreadPool.OnThreadTerminate"/> executes in the terminating worker thread before it is joined. Avoid calling <var>TThread.Synchronize</var> from <var>OnThreadTerminate</var> if the pool may be destroyed from the main thread.</p>
+<p><var>TThreadPool</var> manages a set of reusable worker threads and a monitor thread. Each worker has a local work-stealing queue next to the global queue; an idle worker takes work from other workers' queues before it goes to sleep. The monitor thread adds workers when queued work waits and CPU usage is low, and idle workers retire after a timeout.</p>
+<p>Every method that schedules work accepts an optional pool; when it is omitted, <link id="TThreadPool.Default"/> is used. Create a separate pool to isolate a workload or to limit its number of threads.</p>
+<p>All worker threads and the monitor thread are owned by the pool (<var>FreeOnTerminate = False</var>). <var>Pool.Free</var> terminates, joins (<var>WaitFor</var>) and frees all of them, so after it returns no pool thread is still running user code, destructors or the RTL thread epilogue.</p>
 </descr>
 <seealso>
 <link id="TTask"/>
 <link id="TParallel"/>
+<link id="TThreadPoolStats"/>
 </seealso>
 </element>
 
-<element name="TThreadPool.Default">
-<short>Process-wide default thread pool used when no explicit pool is supplied</short>
+<element name="TThreadPool.IControlFlag">
+<short>Shared flag that lets only the first of several queued work items execute</short>
+<descr>
+<p>A control flag starts at -1. Each work item increments it just before running and executes only if the result is 0, so of all work items queued with the same flag only the first one to start runs; the others are skipped. Incrementing the flag before any item starts cancels all of them. Obtain a flag with <link id="TThreadPool.NewControlFlag"/>.</p>
+</descr>
+</element>
+
+<element name="TThreadPool.TProcThread">
+<short>Procedure reference that receives a pool thread; the type of <link id="TThreadPool.OnThreadStart"/> and <link id="TThreadPool.OnThreadTerminate"/></short>
+</element>
+
+<element name="TThreadPool.Create">
+<short>Creates a pool; worker threads are started on demand when work is queued</short>
+<descr>
+<p>The initial limits are <var>MinWorkerThreads = max(2, ProcessorCount div 4)</var> and <var>MaxWorkerThreads = 2 * ProcessorCount</var>.</p>
+</descr>
 </element>
 
 <element name="TThreadPool.Destroy">
-<short>Signals shutdown, wakes all workers, joins and frees all worker and monitor threads</short>
+<short>Shuts the pool down and joins and frees all worker threads and the monitor thread</short>
+<descr>
+<p>Work items that are still queued are not executed. Because <var>Destroy</var> waits for every pool thread, it must not be called from a pool thread, and <link id="TThreadPool.OnThreadTerminate"/> must not wait for the thread that calls <var>Destroy</var> (for example through <var>TThread.Synchronize</var> when the pool is freed from the main thread).</p>
+</descr>
 </element>
 
-<element name="TThreadPool.SetMinWorkerThreads">
-<short>Sets the minimum number of worker threads maintained by the pool</short>
-</element>
-
-<element name="TThreadPool.SetMaxWorkerThreads">
-<short>Sets the maximum number of concurrent worker threads allowed in the pool</short>
+<element name="TThreadPool.NewControlFlag">
+<short>Returns a new <link id="TThreadPool.IControlFlag"/> in its initial state</short>
 </element>
 
 <element name="TThreadPool.QueueWorkItem">
-<short>Queues a procedure or method for asynchronous execution on the pool</short>
+<short>Queues a procedure or a <var>TNotifyEvent</var> for execution on the pool</short>
+<descr>
+<p>This is the low-level entry point used by tasks. It returns immediately and gives no way to wait for the item or to receive its exceptions; use <link id="TTask.Run"/> for that. Work items queued with the same <var>aControlFlag</var> follow the rules described in <link id="TThreadPool.IControlFlag"/>.</p>
+</descr>
+</element>
+
+<element name="TThreadPool.SetMaxWorkerThreads">
+<short>Sets the maximum number of worker threads; returns <var>False</var> and changes nothing if the value is not greater than <var>MinWorkerThreads</var></short>
+<descr>
+<p>The default minimum is <var>max(2, ProcessorCount div 4)</var>, so on a machine with 16 or more logical processors <var>SetMaxWorkerThreads(4)</var> fails. To limit a pool to a small number of threads, lower the minimum first:</p>
+<code>
+Pool.SetMinWorkerThreads(1);
+if not Pool.SetMaxWorkerThreads(4) then
+  raise Exception.Create('could not limit the pool');
+</code>
+</descr>
+<seealso>
+<link id="TThreadPool.SetMinWorkerThreads"/>
+</seealso>
+</element>
+
+<element name="TThreadPool.SetMinWorkerThreads">
+<short>Sets the minimum number of worker threads kept by the pool; returns <var>False</var> and changes nothing unless <var>0 &lt;= aValue &lt; MaxWorkerThreads</var></short>
+</element>
+
+<element name="TThreadPool.MaxWorkerThreads">
+<short>Maximum number of worker threads the pool may create</short>
+</element>
+
+<element name="TThreadPool.MinWorkerThreads">
+<short>Number of worker threads the pool keeps even when idle</short>
+</element>
+
+<element name="TThreadPool.UnlimitedWorkerThreadsWhenBlocked">
+<short>Declared for Delphi compatibility; it currently has no effect</short>
+<descr>
+<p>The property is declared with <var>default True</var>, but the pool neither initializes nor reads the field, so it reads <var>False</var> on a new pool and setting it changes nothing.</p>
+</descr>
+</element>
+
+<element name="TThreadPool.Interactive">
+<short>When <var>True</var>, waiting for this pool's tasks in the main thread keeps processing <var>TThread.Synchronize</var> and <var>TThread.Queue</var> requests</short>
+<descr>
+<p>With <var>Interactive</var> set, <link id="ITask.Wait"/>, <link id="TTask.WaitForAll"/> and <link id="TTask.WaitForAny"/> called from the main thread poll with <var>CheckSynchronize</var> instead of blocking on an event. This avoids a deadlock when a task calls <var>TThread.Synchronize</var> while the main thread waits for it.</p>
+</descr>
+<seealso>
+<link id="GetThreadPoolInteractive"/>
+<link id="SetThreadPoolInteractive"/>
+</seealso>
+</element>
+
+<element name="TThreadPool.OnThreadStart">
+<short>Called in each new worker thread when it registers with the pool</short>
 </element>
 
 <element name="TThreadPool.OnThreadTerminate">
-<short>Callback invoked on a worker thread just before it terminates</short>
-</element>
-
-<!-- interface Visibility: default -->
-<element name="ITask">
-<short>Interface representing an asynchronous unit of work</short>
+<short>Called in a worker thread just before it leaves the pool</short>
 <descr>
-<p><var>ITask</var> provides lifecycle control (<link id="ITask.Start"/>, <link id="ITask.Cancel"/>, <link id="ITask.Wait"/>) and status inspection (<link id="ITask.Status"/>) for asynchronous tasks managed by <link id="TTask"/>.</p>
-</descr>
-<seealso>
-<link id="TTask"/>
-<link id="IFuture"/>
-</seealso>
-</element>
-
-<element name="ITask.Wait">
-<short>Blocks until the task completes, the timeout expires, or the task faults/cancels</short>
-<descr>
-<p><var>Wait</var> checks completion using an acquire read barrier on the fast path before waiting on the completion event. If the task or any of its child replicas raised an unhandled exception, <var>Wait</var> raises an <link id="EAggregateException"/>. If the task was canceled, <var>Wait</var> raises <var>EOperationCancelled</var>.</p>
+<p>The handler runs in the terminating thread before the pool joins it. Do not call <var>TThread.Synchronize</var> from it if the pool may be destroyed from the main thread: <link id="TThreadPool.Destroy"/> waits for the thread, which in turn waits for the main thread.</p>
 </descr>
 </element>
 
-<element name="ITask.Start">
-<short>Schedules the task for execution on its associated thread pool</short>
+<element name="TThreadPool.Default">
+<short>Process-wide pool used when no pool is passed; created when the unit is initialized and freed at program finalization</short>
 </element>
 
-<element name="ITask.Cancel">
-<short>Requests cancellation of the task</short>
+<element name="TThreadPool.Current">
+<short>Pool of the task running in the current thread, or <link id="TThreadPool.Default"/> outside a task</short>
 </element>
 
-<element name="ITask.CheckCanceled">
-<short>Raises <var>EOperationCancelled</var> if cancellation has been requested for the task or its token</short>
+<element name="GetThreadPoolInteractive">
+<short>Returns the <link id="TThreadPool.Interactive"/> setting of a pool</short>
 </element>
 
-<element name="ITask.ContinueWith">
-<short>Schedules a non-blocking continuation task that executes when this task finishes</short>
+<element name="SetThreadPoolInteractive">
+<short>Changes the <link id="TThreadPool.Interactive"/> setting of a pool</short>
+</element>
+
+<!-- ================= TThreadPoolStats ================= -->
+
+<element name="TThreadPoolStats">
+<short>Snapshot of a thread pool's counters, for monitoring and diagnostics</short>
 <descr>
-<p><var>ContinueWith</var> attaches a continuation callback (<var>TProc&lt;ITask&gt;</var>) that is automatically scheduled on the thread pool (or executed inline when <var>TTaskContinuationOption.ExecuteSynchronously</var> is specified) once the antecedent task reaches a terminal state (<var>Completed</var>, <var>Canceled</var>, or <var>Exception</var>).</p>
-<p>Filter execution using <link id="TTaskContinuationOptions"/> (for example, <var>OnlyOnCompleted</var>, <var>OnlyOnFaulted</var>, or <var>OnlyOnCanceled</var>) and optionally associate a <link id="TCancellationToken"/>.</p>
+<p>The values are copied from the pool without locking, at the moment <link id="TThreadPoolStats.Get"/>, <link id="TThreadPoolStats.Current"/> or <link id="TThreadPoolStats.Default"/> is called. They describe the pool's state approximately and must not be used for synchronization.</p>
 </descr>
 </element>
 
-<element name="ITask.Status">
-<short>Current execution status of the task (<var>TTaskStatus</var>)</short>
+<element name="TThreadPoolStats.Get">
+<short>Returns a snapshot of the given pool</short>
 </element>
 
-<!-- interface Visibility: default -->
-<element name="IFuture">
-<short>Generic interface representing an asynchronous computation that produces a typed value</short>
+<element name="TThreadPoolStats.Current">
+<short>Snapshot of <link id="TThreadPool.Current"/></short>
+</element>
+
+<element name="TThreadPoolStats.Default">
+<short>Snapshot of <link id="TThreadPool.Default"/></short>
+</element>
+
+<element name="TThreadPoolStats.WorkerThreadCount">
+<short>Number of worker threads in the pool</short>
+</element>
+
+<element name="TThreadPoolStats.MinLimitWorkerThreadCount">
+<short>The pool's <link id="TThreadPool.MinWorkerThreads">MinWorkerThreads</link></short>
+</element>
+
+<element name="TThreadPoolStats.MaxLimitWorkerThreadCount">
+<short>The pool's <link id="TThreadPool.MaxWorkerThreads">MaxWorkerThreads</link></short>
+</element>
+
+<element name="TThreadPoolStats.IdleWorkerThreadCount">
+<short>Number of worker threads waiting for work</short>
+</element>
+
+<element name="TThreadPoolStats.QueuedRequestCount">
+<short>Number of queued work items that have not started yet</short>
+</element>
+
+<element name="TThreadPoolStats.RetiredWorkerThreadCount">
+<short>Number of worker threads that are retiring because they were idle</short>
+</element>
+
+<element name="TThreadPoolStats.AverageCPUUsage">
+<short>Average CPU usage in percent, as measured by the pool monitor</short>
+</element>
+
+<element name="TThreadPoolStats.CurrentCPUUsage">
+<short>Most recent CPU usage sample in percent</short>
+</element>
+
+<element name="TThreadPoolStats.ThreadSuspended">
+<short>Number of worker threads suspended by the monitor because CPU usage was too high</short>
+</element>
+
+<element name="TThreadPoolStats.LastSuspendTick">
+<short>Tick count (milliseconds) at which a worker thread was last suspended</short>
+</element>
+
+<element name="TThreadPoolStats.LastThreadCreationTick">
+<short>Tick count (milliseconds) at which the pool last created a worker thread</short>
+</element>
+
+<element name="TThreadPoolStats.LastQueuedRequestCount">
+<short>Queued request count at the previous monitor tick</short>
+</element>
+
+<!-- ================= Status and continuation options ================= -->
+
+<element name="TTaskStatus">
+<short>Life-cycle state of a task, returned by <link id="ITask.Status"/></short>
+</element>
+
+<element name="TTaskStatus.Created">
+<short>Created but not started yet (<link id="TTask.Create"/>)</short>
+</element>
+
+<element name="TTaskStatus.WaitingToRun">
+<short>Started and queued on the pool, waiting for a worker thread</short>
+</element>
+
+<element name="TTaskStatus.Running">
+<short>The task body is executing</short>
+</element>
+
+<element name="TTaskStatus.Completed">
+<short>Finished without an exception (terminal state)</short>
+</element>
+
+<element name="TTaskStatus.WaitingForChildren">
+<short>The body has finished but child tasks or loop replicas are still running</short>
+</element>
+
+<element name="TTaskStatus.Canceled">
+<short>Canceled before or while running (terminal state); waiting for the task raises <var>EOperationCancelled</var></short>
+</element>
+
+<element name="TTaskStatus.Exception">
+<short>Finished with an unhandled exception (terminal state); waiting for the task raises <link id="EAggregateException"/></short>
+</element>
+
+<element name="TTaskContinuationOption">
+<short>Flags that control whether and how a continuation runs</short>
 <descr>
-<p><var>IFuture&lt;T&gt;</var> extends <link id="ITask"/> with a <link id="IFuture.Value">Value</link> property that waits for completion if necessary and returns the computed result of type <var>T</var> (or re-raises any captured exception), as well as non-blocking continuation methods (<link id="IFuture.ContinueWith"/>, <link id="IFuture.Map"/>, and <link id="TITaskHelper.ThenBy"/>).</p>
+<p>A continuation is attached with <link id="ITask.ContinueWith"/>, <link id="IFuture.ContinueWith"/>, <link id="IFuture.Map"/> or <link id="TITaskHelper.ThenBy"/>. When the antecedent reaches a terminal status, the continuation is checked against all flags in the set; if any flag excludes that status, the continuation is not run and its own task becomes <var>Canceled</var>.</p>
 </descr>
-<seealso>
-<link id="TTask.Future"/>
-<link id="TITaskHelper.ThenBy"/>
-<link id="ITask"/>
-</seealso>
 </element>
 
-<element name="IFuture.Value">
-<short>Waits for the computation to finish and returns its result</short>
+<element name="TTaskContinuationOption.NotOnCompleted">
+<short>Do not run if the antecedent completed successfully</short>
 </element>
 
-<element name="IFuture.ContinueWith">
-<short>Schedules a non-blocking continuation receiving the completed <var>IFuture&lt;T&gt;</var></short>
+<element name="TTaskContinuationOption.NotOnFaulted">
+<short>Do not run if the antecedent finished with an exception</short>
 </element>
 
-<element name="IFuture.Map">
-<short>Schedules a non-blocking transformation of type <var>T -&gt; T</var> returning a new <var>IFuture&lt;T&gt;</var></short>
+<element name="TTaskContinuationOption.NotOnCanceled">
+<short>Do not run if the antecedent was canceled; without an explicit token the continuation also uses the antecedent's token</short>
 </element>
 
-<!-- record Visibility: default -->
+<element name="TTaskContinuationOption.OnlyOnCompleted">
+<short>Run only if the antecedent completed successfully</short>
+</element>
+
+<element name="TTaskContinuationOption.OnlyOnFaulted">
+<short>Run only if the antecedent finished with an exception</short>
+</element>
+
+<element name="TTaskContinuationOption.OnlyOnCanceled">
+<short>Run only if the antecedent was canceled</short>
+</element>
+
+<element name="TTaskContinuationOption.ExecuteSynchronously">
+<short>Run the continuation in the thread that completes the antecedent instead of queuing it on the pool</short>
+<descr>
+<p>If the antecedent has already finished when the continuation is attached, the continuation runs immediately in the calling thread. Use this only for short continuations: they delay the thread that completed the antecedent.</p>
+</descr>
+</element>
+
+<element name="TTaskContinuationOptions">
+<short>Set of <link id="TTaskContinuationOption"/> flags; <var>[]</var> runs the continuation for any terminal status</short>
+</element>
+
+<!-- ================= Cancellation ================= -->
+
 <element name="TCancellationTokenRegistration">
-<short>Handle representing a callback registered with a <var>TCancellationToken</var></short>
+<short>Handle of a callback registered with <link id="TCancellationToken.Register"/></short>
 <descr>
-<p>Call <link id="TCancellationTokenRegistration.Unregister">Unregister</link> (or <var>Dispose</var>) to detach the callback before the token is canceled.</p>
+<p>Call <link id="TCancellationTokenRegistration.Unregister">Unregister</link> to remove the callback when it is no longer needed. A registration of <link id="TCancellationToken.None"/>, or of a token that was already canceled when the callback was registered, is empty; unregistering it does nothing.</p>
 </descr>
 </element>
 
 <element name="TCancellationTokenRegistration.Unregister">
-<short>Unregisters the associated cancellation callback</short>
+<short>Removes the callback; if the callback is running in another thread, waits until it returns</short>
+<descr>
+<p>After <var>Unregister</var> returns, the callback is not running and will not be called, so the data it uses can be freed. Calling <var>Unregister</var> from inside the callback itself does not wait. Calling it more than once is harmless.</p>
+</descr>
 </element>
 
-<!-- record Visibility: default -->
 <element name="TCancellationToken">
-<short>Lightweight value token for cooperative cancellation of tasks, futures, and parallel loops</short>
+<short>Value type that tells tasks, futures, loops and asynchronous I/O whether cancellation was requested</short>
 <descr>
-<p><var>TCancellationToken</var> is a lightweight, thread-safe value type obtained from <link id="TCancellationTokenSource.Token"/> (or <link id="TCancellationToken.None"/> for a non-cancelable token). Pass the same token to <link id="TTask.Run"/>, <link id="TTask.Future"/>, <link id="TParallel.For"/>, <link id="TParallel.Join"/>, or <link id="ITask.ContinueWith"/> to coordinate cancellation across an entire tree of asynchronous operations.</p>
-<p>Tasks created inside an executing parent task automatically inherit the parent task's ambient <var>TCancellationToken</var> unless an explicit token is supplied.</p>
+<p>A token is obtained from <link id="TCancellationTokenSource.Token"/>, or <link id="TCancellationToken.None"/> for a token that is never canceled. It is a record holding a reference-counted pointer to the source's state: copying it is cheap, and a token remains valid after its source is freed (it then simply never becomes canceled).</p>
+<p>Pass the same token to <link id="TTask.Run"/>, <link id="TTask.Future"/>, <link id="TParallel.For"/>, <link id="TParallel.Join"/>, <link id="ITask.ContinueWith"/> or the <var>fcl-eventloop</var> <var>*Async</var> methods to cancel a whole tree of operations at once. A task created while another task runs in the same thread inherits that task's token unless it receives its own.</p>
+<p>Cancellation is cooperative: code that runs for a long time should check <link id="TCancellationToken.IsCancellationRequested"/> or call <link id="TCancellationToken.ThrowIfCancellationRequested"/> regularly.</p>
+<p>All members are thread-safe.</p>
 </descr>
 <seealso>
 <link id="TCancellationTokenSource"/>
@@ -177,88 +427,262 @@
 </element>
 
 <element name="TCancellationToken.None">
-<short>Returns an empty token that can never be canceled (<var>CanBeCanceled = False</var>)</short>
+<short>Returns a token that is never canceled (<var>CanBeCanceled = False</var>)</short>
 </element>
 
 <element name="TCancellationToken.CanBeCanceled">
-<short><var>True</var> if the token is backed by a <var>TCancellationTokenSource</var></short>
+<short><var>True</var> if the token comes from a <link id="TCancellationTokenSource"/>; <var>False</var> for <link id="TCancellationToken.None"/></short>
 </element>
 
 <element name="TCancellationToken.IsCancellationRequested">
-<short>Lock-free atomic check returning <var>True</var> once cancellation has been requested</short>
+<short><var>True</var> once the source has been canceled</short>
+<descr>
+<p>The check is a single memory read followed by a read barrier when it returns <var>True</var>; it makes no system call and can be used in tight loops.</p>
+</descr>
 </element>
 
 <element name="TCancellationToken.WaitHandle">
-<short>Kernel event (<var>TEvent</var>) signaled when the token is canceled</short>
+<short>Manual-reset event that becomes signaled when the token is canceled; <var>nil</var> for <link id="TCancellationToken.None"/></short>
+<descr>
+<p>The event is created on first access and is owned by the token's state: do not free it.</p>
+</descr>
 </element>
 
 <element name="TCancellationToken.ThrowIfCancellationRequested">
-<short>Raises <var>EOperationCancelled</var> if <var>IsCancellationRequested</var> is <var>True</var></short>
+<short>Raises <var>EOperationCancelled</var> if cancellation was requested</short>
+</element>
+
+<element name="TCancellationToken.CheckCanceled">
+<short>Same as <link id="TCancellationToken.ThrowIfCancellationRequested"/></short>
 </element>
 
 <element name="TCancellationToken.Register">
-<short>Registers a callback invoked immediately upon cancellation (or synchronously if already canceled)</short>
+<short>Registers a callback to be called when the token is canceled</short>
+<descr>
+<p>The callback runs in the thread that calls <link id="TCancellationTokenSource.Cancel"/> (or in the timer thread of <link id="TCancellationTokenSource.CancelAfter"/>). If the token is already canceled, the callback runs immediately in the calling thread and the returned registration is empty. For <link id="TCancellationToken.None"/> nothing is registered.</p>
+<p>Callbacks must be short and must not raise exceptions: an exception stops the remaining callbacks and propagates to the code that called <var>Cancel</var>.</p>
+</descr>
+<seealso>
+<link id="TCancellationTokenRegistration.Unregister"/>
+</seealso>
 </element>
 
-<!-- object Visibility: default -->
+<element name="TCancellationToken.equal(TCancellationToken,TCancellationToken):Boolean">
+<short><var>True</var> if both tokens refer to the same cancellation state</short>
+</element>
+
+<element name="TCancellationToken.notequal(TCancellationToken,TCancellationToken):Boolean">
+<short><var>True</var> if the tokens refer to different cancellation states</short>
+</element>
+
 <element name="TCancellationTokenSource">
-<short>Controller that issues a <var>TCancellationToken</var> and signals cooperative cancellation</short>
+<short>Owner of a cancellation state: issues tokens and requests cancellation</short>
 <descr>
-<p><var>TCancellationTokenSource</var> manages the shared reference-counted cancellation state behind one or more <link id="TCancellationToken"/> instances. Call <link id="TCancellationTokenSource.Cancel">Cancel</link> for immediate cancellation, <link id="TCancellationTokenSource.CancelAfter">CancelAfter</link> (or the timed constructor) for deadline-based timeout cancellation, or <link id="TCancellationTokenSource.CreateLinkedTokenSource">CreateLinkedTokenSource</link> to combine multiple tokens into a composite source.</p>
+<p>Call <link id="TCancellationTokenSource.Cancel">Cancel</link> to cancel immediately, <link id="TCancellationTokenSource.CancelAfter">CancelAfter</link> (or a timed constructor) to cancel after a delay, and <link id="TCancellationTokenSource.CreateLinkedTokenSource">CreateLinkedTokenSource</link> to combine several tokens.</p>
+<p>A pending delayed cancellation is served by a dedicated thread that lives until the delay expires, the source is canceled or freed. Avoid creating thousands of timed sources at the same time.</p>
+<p>The source must be freed by its owner. Tokens obtained from it stay valid after it is freed, but can no longer become canceled.</p>
 </descr>
 <seealso>
 <link id="TCancellationToken"/>
 </seealso>
 </element>
 
-<element name="TCancellationTokenSource.Cancel">
-<short>Transitions the token to the canceled state, signals <var>WaitHandle</var>, and invokes registered callbacks</short>
-</element>
-
-<element name="TCancellationTokenSource.CancelAfter">
-<short>Schedules automatic cancellation after the specified delay in milliseconds</short>
+<element name="TCancellationTokenSource.Create">
+<short>Creates a source; the overloads with a delay call <link id="TCancellationTokenSource.CancelAfter">CancelAfter</link></short>
 </element>
 
 <element name="TCancellationTokenSource.CreateLinkedTokenSource">
-<short>Creates a composite token source that cancels automatically when any input token is canceled</short>
+<short>Creates a new source that is canceled as soon as any of the given tokens is canceled</short>
+<descr>
+<p>Tokens that cannot be canceled are ignored. The caller owns the new source and must free it; freeing it removes its registrations from the input tokens. The new source can also be canceled directly.</p>
+</descr>
+</element>
+
+<element name="TCancellationTokenSource.Cancel">
+<short>Requests cancellation: sets the token, signals <var>WaitHandle</var> and runs the registered callbacks in the calling thread</short>
+<descr>
+<p>Only the first call has an effect; later calls return immediately.</p>
+</descr>
+</element>
+
+<element name="TCancellationTokenSource.CancelAfter">
+<short>Cancels the source after the given delay; a delay of 0 cancels immediately</short>
+<descr>
+<p>A new call replaces a pending delay. The call does nothing if the source is already canceled. A negative <var>TTimeSpan</var> is treated as 0.</p>
+</descr>
 </element>
 
 <element name="TCancellationTokenSource.Reset">
-<short>Reinitializes the source with a fresh, uncanceled state for reuse</short>
+<short>Replaces the cancellation state with a new, uncanceled one</short>
+<descr>
+<p>Tokens obtained before <var>Reset</var> keep referring to the old state; read <link id="TCancellationTokenSource.Token">Token</link> again after resetting. <var>Reset</var> also stops a pending <var>CancelAfter</var> and removes the links of a source created by <link id="TCancellationTokenSource.CreateLinkedTokenSource">CreateLinkedTokenSource</link>, so the source no longer follows its input tokens.</p>
+</descr>
 </element>
 
 <element name="TCancellationTokenSource.Token">
-<short>Returns the <var>TCancellationToken</var> linked to this source</short>
+<short>Token bound to the source's current cancellation state</short>
 </element>
 
-<!-- enumeration Visibility: default -->
-<element name="TTaskContinuationOption">
-<short>Flags controlling when and how a task continuation executes</short>
+<element name="TCancellationTokenSource.IsCancellationRequested">
+<short><var>True</var> once the source has been canceled</short>
+</element>
+
+<element name="TCancellationTokenSource.WaitHandle">
+<short>Manual-reset event signaled on cancellation; see <link id="TCancellationToken.WaitHandle"/></short>
+</element>
+
+<!-- ================= ITask / IFuture ================= -->
+
+<element name="ITask">
+<short>Interface of an asynchronous unit of work</short>
 <descr>
-<p>Combine values in <var>TTaskContinuationOptions</var> (or use the predefined constants <var>OnlyOnCompleted</var>, <var>OnlyOnFaulted</var>, <var>OnlyOnCanceled</var>, and <var>ExecuteSynchronously</var>) to filter continuation execution based on the antecedent task's terminal status.</p>
+<p><var>ITask</var> gives control over a task's life cycle (<link id="ITask.Start"/>, <link id="ITask.Cancel"/>, <link id="ITask.Wait"/>), its state (<link id="ITask.Status"/>) and non-blocking continuations (<link id="ITask.ContinueWith"/>, <link id="TITaskHelper.ThenBy"/>). Tasks are reference counted; a task that has been started keeps running even if the program drops its last reference.</p>
+</descr>
+<seealso>
+<link id="TTask"/>
+<link id="IFuture"/>
+</seealso>
+</element>
+
+<element name="ITask.Wait">
+<short>Blocks until the task finishes or the timeout expires; returns <var>False</var> on timeout</short>
+<descr>
+<p>When the task has finished, <var>Wait</var> raises:</p>
+<ul>
+<li><var>EOperationCancelled</var> if the task was canceled or its cancellation token has been canceled (also when the token is canceled after the task completed);</li>
+<li><link id="EAggregateException"/> with all collected exceptions if the task or one of its child tasks raised an exception. The exceptions are handed over to the raised object, so a second <var>Wait</var> on the same task does not raise them again.</li>
+</ul>
+<p>Calling <var>Wait</var> from a pool thread blocks that thread. Waiting in many tasks for other tasks of the same pool can use up all its workers; prefer <link id="ITask.ContinueWith"/> or <link id="TITaskHelper.ThenBy"/> there. In the main thread of an <link id="TThreadPool.Interactive">Interactive</link> pool, <var>Wait</var> keeps processing <var>TThread.Synchronize</var> requests.</p>
 </descr>
 </element>
 
-<!-- helper Visibility: default -->
+<element name="ITask.Start">
+<short>Queues a task in the <var>Created</var> state on its pool and returns it</short>
+<descr>
+<p>Starting an already started task does nothing. Starting a canceled task completes it as canceled without running it. Starting a task that has already finished raises <var>EInvalidOperation</var>. <link id="TTask.Run"/> and <link id="TTask.Future"/> return tasks that are already started.</p>
+</descr>
+</element>
+
+<element name="ITask.Cancel">
+<short>Cancels the task if it has not finished; a task that has not started yet will not run</short>
+<descr>
+<p>A running task is not interrupted: its body runs to the end unless it checks <link id="ITask.CheckCanceled"/>. Use a <link id="TCancellationToken"/> to cancel several tasks together.</p>
+</descr>
+</element>
+
+<element name="ITask.CheckCanceled">
+<short>Raises <var>EOperationCancelled</var> if the task was canceled or its token has been canceled</short>
+<descr>
+<p>Call it inside a long-running task body, typically as <var>TTask.CurrentTask.CheckCanceled</var>.</p>
+</descr>
+</element>
+
+<element name="ITask.ContinueWith">
+<short>Creates a task that runs <var>aAction</var> after this task finishes, without blocking a thread while waiting</short>
+<descr>
+<p>The continuation receives the antecedent task and runs on the pool when the antecedent reaches a terminal status (<var>Completed</var>, <var>Canceled</var> or <var>Exception</var>). Use <link id="TTaskContinuationOptions"/> to run it only for some of these, and <var>ExecuteSynchronously</var> to run it in the completing thread. If the options exclude the antecedent's status, or <var>aCancelToken</var> is canceled first, the continuation does not run and the returned task becomes <var>Canceled</var>.</p>
+<p>The continuation runs on <var>aPool</var>, or on the antecedent's pool when <var>aPool</var> is <var>nil</var>. An exception in the antecedent is not raised in the continuation: inspect <var>aAntecedent.Status</var> or call <var>aAntecedent.Wait</var> to get it.</p>
+</descr>
+<seealso>
+<link id="TITaskHelper.ThenBy"/>
+<link id="IFuture.ContinueWith"/>
+</seealso>
+</element>
+
+<element name="ITask.Status">
+<short>Current life-cycle state of the task</short>
+</element>
+
+<element name="ITask.Id">
+<short>Process-wide unique number of the task</short>
+</element>
+
+<element name="TITaskArray">
+<short>Dynamic array of tasks</short>
+</element>
+
+<element name="TITaskProc">
+<short>Procedure reference receiving a task; the action type of <link id="ITask.ContinueWith"/></short>
+</element>
+
+<element name="TITaskProcArray">
+<short>Dynamic array of <link id="TITaskProc"/></short>
+</element>
+
+<element name="TTaskArray">
+<short>Dynamic array of <link id="TTask"/> objects</short>
+</element>
+
+<element name="IFuture">
+<short>Task that produces a value of type <var>T</var></short>
+<descr>
+<p><var>IFuture&lt;T&gt;</var> extends <link id="ITask"/> with <link id="IFuture.Value">Value</link>, which waits for the computation and returns its result, and with typed continuations (<link id="IFuture.ContinueWith"/>, <link id="IFuture.Map"/>, <link id="TITaskHelper.ThenBy"/>).</p>
+<p>The interface has no GUID, so it cannot be used with <var>as</var> or <var>Supports</var>. To get the future back from an <var>ITask</var> parameter (for example inside <var>ThenBy</var>), use a hard cast <var>IFuture&lt;T&gt;(aTask)</var>, which is only valid if the task really is an <var>IFuture&lt;T&gt;</var>.</p>
+</descr>
+<seealso>
+<link id="TTask.Future"/>
+<link id="TITaskHelper.ThenBy"/>
+<link id="ITask"/>
+</seealso>
+</element>
+
+<element name="IFuture.StartFuture">
+<short>Starts a future in the <var>Created</var> state and returns it; see <link id="ITask.Start"/></short>
+</element>
+
+<element name="IFuture.Value">
+<short>Waits for the computation to finish and returns its result</short>
+<descr>
+<p><var>Value</var> calls <link id="ITask.Wait"/> without a timeout, so it raises the same exceptions: <var>EOperationCancelled</var> if the future was canceled and <link id="EAggregateException"/> if the computation raised an exception. Reading <var>Value</var> inside a pool task blocks that worker thread.</p>
+</descr>
+</element>
+
+<element name="IFuture.ContinueWith">
+<short>Creates a task that runs <var>aAction</var> with this future after it finishes</short>
+<descr>
+<p>Works like <link id="ITask.ContinueWith"/>, but the action receives the typed future, so it can read <var>Value</var> without a cast. Reading <var>Value</var> of a faulted or canceled future raises its exception in the continuation.</p>
+</descr>
+</element>
+
+<element name="IFuture.Map">
+<short>Returns a future that applies <var>aFunc</var> (<var>T -&gt; T</var>) to this future's value</short>
+<descr>
+<p>Shorthand for <var>ThenBy&lt;T, T&gt;</var>. If this future is canceled or faults, <var>aFunc</var> is not called and the returned future takes over the cancellation or the exception.</p>
+<p><var>aFunc</var> is a <link id="TFunc1"/>, so its parameter must be declared <var>const</var>, also in an arrow function: <var>F.Map((const X: Integer) =&gt; X * 2)</var>.</p>
+</descr>
+</element>
+
+<!-- ================= TITaskHelper ================= -->
+
 <element name="TITaskHelper">
-<short>Type helper on <var>ITask</var> (and <var>IFuture&lt;T&gt;</var>) providing generic <var>ThenBy</var> pipeline methods</short>
-<descr>
-<p><var>TITaskHelper</var> extends <link id="ITask"/> and <link id="IFuture"/> with strongly-typed <link id="TITaskHelper.ThenBy">ThenBy</link> methods for composing non-blocking asynchronous pipelines without blocking pool threads in <var>.Wait</var> or <var>.Value</var>.</p>
-</descr>
+<short>Type helper that adds the typed <var>ThenBy</var> continuations to <var>ITask</var> and <var>IFuture&lt;T&gt;</var></short>
 </element>
 
 <element name="TITaskHelper.ThenBy">
-<short>Chains a typed asynchronous transformation onto an <var>ITask</var> or <var>IFuture&lt;T&gt;</var>, returning <var>IFuture&lt;TResult&gt;</var></short>
+<short>Returns a future computed from the antecedent's result after the antecedent finishes, without blocking a thread while waiting</short>
 <descr>
-<p><var>ThenBy</var> schedules a continuation function after the antecedent task or future completes. If the antecedent faults with an exception, <var>ThenBy</var> skips the transformation body and automatically propagates the exception to the returned <var>IFuture&lt;TResult&gt;</var>. If the antecedent is canceled, the returned future transitions to <var>TTaskStatus.Canceled</var>.</p>
+<p>There are three groups of overloads:</p>
+<ul>
+<li><var>ThenBy&lt;T, TResult&gt;(TFunc1&lt;T, TResult&gt;)</var> passes the antecedent's value to the function. The antecedent must be an <var>IFuture&lt;T&gt;</var> of exactly this <var>T</var>; this is not checked. If the antecedent faults or is canceled, the function is not called and the result takes over the exception or the cancellation.</li>
+<li><var>ThenBy&lt;TResult&gt;(TFunc1&lt;ITask, TResult&gt;)</var> passes the antecedent task itself.</li>
+<li><var>ThenBy&lt;TResult&gt;(TFunc&lt;TResult&gt;)</var> runs a function without arguments.</li>
+</ul>
+<p>For the last two groups the antecedent's exception or cancellation is propagated only when <var>aOptions</var> is empty. With non-empty options the function runs whenever the options allow it, which can be used for recovery, for example <var>ThenBy&lt;string&gt;(@Recover, [TTaskContinuationOption.OnlyOnFaulted])</var>.</p>
+<p>A propagated exception is moved from the antecedent to the returned future: waiting for the antecedent afterwards does not raise it again. Without an explicit token the continuation uses the antecedent's token; without an explicit pool, the antecedent's pool.</p>
+<p>With <var>{$modeswitch implicitgenerics}</var> the type arguments can usually be inferred: <var>Next := Fut.ThenBy(function(const Prev: ITask): Integer begin ... end);</var>.</p>
 </descr>
+<seealso>
+<link id="TTask.ThenBy"/>
+<link id="IFuture.Map"/>
+</seealso>
 </element>
 
-<!-- object Visibility: default -->
+<!-- ================= TTask ================= -->
+
 <element name="TTask">
-<short>Factory and implementation class for asynchronous tasks and futures</short>
+<short>Factory for tasks and futures, and the class that implements <var>ITask</var></short>
 <descr>
-<p><var>TTask</var> provides class methods to create and start tasks (<link id="TTask.Run"/>, <link id="TTask.Create"/>), start typed asynchronous functions (<link id="TTask.Future"/>), chain typed continuations (<link id="TTask.ThenBy"/>), and synchronize across task arrays (<link id="TTask.WaitForAll"/>, <link id="TTask.WaitForAny"/>).</p>
+<p>Use the class methods to create tasks (<link id="TTask.Create"/>), to create and start them (<link id="TTask.Run"/>, <link id="TTask.Future"/>), to chain typed continuations (<link id="TTask.ThenBy"/>) and to wait for several tasks (<link id="TTask.WaitForAll"/>, <link id="TTask.WaitForAny"/>). Work with the returned interfaces; do not create or free <var>TTask</var> objects directly.</p>
 </descr>
 <seealso>
 <link id="ITask"/>
@@ -268,31 +692,58 @@
 </seealso>
 </element>
 
+<element name="TTask.Create">
+<short>Creates a task in the <var>Created</var> state; call <link id="ITask.Start"/> to queue it</short>
+<descr>
+<p>The class function overloads take a procedure reference or a <var>TNotifyEvent</var> with its sender, and optionally a cancellation token and a pool (default: <link id="TThreadPool.Default"/>). The parameterless constructor exists only to prevent direct construction and raises <var>ENoConstructException</var>.</p>
+</descr>
+</element>
+
+<element name="TTask.CurrentTask">
+<short>Task executing in the current thread, or <var>nil</var> outside a task</short>
+<descr>
+<p>Inside the body of <link id="TParallel.For"/> it returns the loop replica that runs the iteration.</p>
+</descr>
+</element>
+
 <element name="TTask.Run">
-<short>Creates and immediately starts an asynchronous task (optionally bound to a <var>TCancellationToken</var>)</short>
+<short>Creates a task, starts it and returns it</short>
+<descr>
+<p>Equivalent to <var>TTask.Create(...).Start</var>. With a <var>aCancelToken</var> the task is canceled when the token is canceled; if it has not started yet it will not run.</p>
+</descr>
 </element>
 
 <element name="TTask.Future">
-<short>Creates and immediately starts a typed asynchronous function returning <var>IFuture&lt;T&gt;</var></short>
+<short>Starts a function on the pool and returns an <var>IFuture&lt;T&gt;</var> for its result</short>
+<descr>
+<p>With <var>{$modeswitch implicitgenerics}</var>, <var>T</var> can be inferred from the function: <var>F := TTask.Future(function: Integer begin Result := 42; end);</var>. With an arrow function the result type is that of the expression, so <var>TTask.Future(() =&gt; 1)</var> is an <var>IFuture&lt;ShortInt&gt;</var>; write <var>(): Integer =&gt; 1</var> when another type is needed.</p>
+</descr>
 </element>
 
 <element name="TTask.ThenBy">
-<short>Chains a typed transformation <var>TFunc1&lt;T, TResult&gt;</var> onto an antecedent task or future</short>
+<short>Class-method form of <link id="TITaskHelper.ThenBy"/> that takes the antecedent task as the first argument</short>
 </element>
 
 <element name="TTask.WaitForAll">
-<short>Waits for all tasks in the array to complete within an optional timeout</short>
+<short>Waits until all tasks have finished; returns <var>False</var> on timeout</short>
+<descr>
+<p>When all tasks have finished, <var>WaitForAll</var> raises <link id="EAggregateException"/> with the exceptions of all faulted tasks, or <var>EOperationCancelled</var> if no task faulted but at least one was canceled. An empty array returns <var>True</var> immediately. Without a timeout, tasks that are still queued may be executed in the calling thread.</p>
+</descr>
 </element>
 
 <element name="TTask.WaitForAny">
-<short>Waits for at least one task in the array to complete and returns its index (<var>-1</var> on timeout)</short>
+<short>Waits until at least one task has finished and returns its index, or -1 on timeout</short>
+<descr>
+<p>If the first finished task was canceled or faulted, <var>WaitForAny</var> raises its exception (<var>EOperationCancelled</var> or <link id="EAggregateException"/>) instead of returning the index. An empty array returns -1.</p>
+</descr>
 </element>
 
-<!-- object Visibility: default -->
+<!-- ================= TParallel ================= -->
+
 <element name="TParallel">
-<short>Static class providing data-parallel loops (<var>For</var>) and fork-join task execution (<var>Join</var>)</short>
+<short>Data-parallel loops (<var>For</var>) and fork-join execution of several procedures (<var>Join</var>)</short>
 <descr>
-<p><var>TParallel</var> partitions iteration ranges (<link id="TParallel.For"/>) and heterogeneous procedure lists (<link id="TParallel.Join"/>) across a <link id="TThreadPool"/> using self-replicating tasks and dynamic stride sizing.</p>
+<p><var>TParallel</var> distributes loop iterations (<link id="TParallel.For"/>) or a list of procedures (<link id="TParallel.Join"/>) over a <link id="TThreadPool"/>, using up to <var>2 * ProcessorCount</var> self-replicating tasks.</p>
 </descr>
 <seealso>
 <link id="TParallel.For"/>
@@ -302,42 +753,202 @@
 </seealso>
 </element>
 
+<element name="TParallel.TIteratorEvent32">
+<short>Method called for each iteration of an <var>Integer</var> loop</short>
+</element>
+
+<element name="TParallel.TIteratorStateEvent32">
+<short>Method called for each iteration of an <var>Integer</var> loop, with the replica's <link id="TParallel.TLoopState"/></short>
+</element>
+
+<element name="TParallel.TIteratorEvent64">
+<short>Method called for each iteration of an <var>Int64</var> loop</short>
+</element>
+
+<element name="TParallel.TIteratorStateEvent64">
+<short>Method called for each iteration of an <var>Int64</var> loop, with the replica's <link id="TParallel.TLoopState"/></short>
+</element>
+
+<element name="TParallel.TIteratorEvent">
+<short>Alias of <link id="TParallel.TIteratorEvent32"/></short>
+</element>
+
+<element name="TParallel.TIteratorStateEvent">
+<short>Alias of <link id="TParallel.TIteratorStateEvent32"/></short>
+</element>
+
+<element name="TParallel.TInt32Proc">
+<short>Procedure reference for the body of an <var>Integer</var> loop</short>
+</element>
+
+<element name="TParallel.TInt32LoopStateProc">
+<short>Procedure reference for the body of an <var>Integer</var> loop with loop state</short>
+</element>
+
+<element name="TParallel.TInt64Proc">
+<short>Procedure reference for the body of an <var>Int64</var> loop</short>
+</element>
+
+<element name="TParallel.TInt64LoopStateProc">
+<short>Procedure reference for the body of an <var>Int64</var> loop with loop state</short>
+</element>
+
+<element name="TParallel.TProcInteger">
+<short>Same as <link id="TParallel.TInt32Proc"/>; the body type of the procedure-reference <var>For</var> overloads</short>
+</element>
+
+<element name="TParallel.TProcIntegerLoopState">
+<short>Same as <link id="TParallel.TInt32LoopStateProc"/></short>
+</element>
+
+<element name="TParallel.TProcInt64">
+<short>Same as <link id="TParallel.TInt64Proc"/></short>
+</element>
+
+<element name="TParallel.TProcInt64LoopState">
+<short>Same as <link id="TParallel.TInt64LoopStateProc"/></short>
+</element>
+
 <element name="TParallel.For">
-<short>Executes a loop range (<var>Integer</var> or <var>Int64</var>) in parallel across the thread pool</short>
+<short>Runs the iterations of the inclusive range <var>[aLowInclusive..aHighInclusive]</var> in parallel and waits until they are done</short>
 <descr>
-<p><var>TParallel.For</var> partitions the inclusive range <var>[aLowInclusive..aHighInclusive]</var> into dynamically sized strides. Each worker claims a range atomically together with the stride value for that batch, ensuring that every iteration in a completed loop executes <b>exactly once</b>.</p>
-<p>Overloads accepting a <link id="TParallel.TLoopState"/> parameter provide each worker replica with its own state instance to request early loop termination via <link id="TParallel.TLoopState.Break">Break</link> (ordered: all iterations below the lowest break index still run) or <link id="TParallel.TLoopState.Stop">Stop</link> (immediate: all replicas exit as soon as possible). Overloads accepting a <link id="TCancellationToken"/> cooperatively stop claiming new strides and set <var>Completed = False</var> when the token is canceled.</p>
-<p>If one or more iterations raise an exception, the loop transitions to the faulted state, stops scheduling new iterations, collects the exceptions from all worker replicas, and raises a flattened <link id="EAggregateException"/> in the calling thread.</p>
+<p><var>For</var> blocks the calling thread until the loop is finished, then returns a <link id="TParallel.TLoopResult"/>. Iterations run in no particular order. In a loop that completes normally each iteration runs <b>exactly once</b>. An empty range (<var>aHighInclusive &lt; aLowInclusive</var>) returns <var>Completed = True</var> without running anything.</p>
+<p>The overloads differ in:</p>
+<ul>
+<li>the index type: <var>Integer</var> or <var>Int64</var>;</li>
+<li>the body: a procedure reference or a method with <var>aSender</var>, with or without a <link id="TParallel.TLoopState"/> parameter. Only the bodies with loop state can call <var>Break</var> or <var>Stop</var>;</li>
+<li><var>aStride</var>: the number of consecutive iterations a worker takes at a time at the start. The stride grows while the loop runs; increase it for very cheap iterations;</li>
+<li><var>aCancelToken</var>: when it is canceled, workers stop taking new iterations and <var>For</var> returns <var>Completed = False</var> without raising an exception. A loop inside a task uses that task's token when it gets none;</li>
+<li><var>aPool</var>: default <link id="TThreadPool.Default"/>.</li>
+</ul>
+<p>If iterations raise exceptions, the loop stops starting new iterations and <var>For</var> raises an <link id="EAggregateException"/> with all collected exceptions in the calling thread.</p>
+<p>Because <var>For</var> is a reserved word, call it as <var>TParallel.&amp;For(...)</var>.</p>
 </descr>
+<seealso>
+<link id="TParallel.TLoopState"/>
+<link id="TParallel.TLoopResult"/>
+</seealso>
 </element>
 
 <element name="TParallel.Join">
-<short>Creates and starts a task that executes multiple procedures or events in parallel</short>
+<short>Starts a task that runs several procedures or <var>TNotifyEvent</var> handlers in parallel, and returns it</short>
 <descr>
-<p><var>TParallel.Join</var> schedules an array of procedures (<var>TProcRef</var>) or <var>TNotifyEvent</var> handlers concurrently on the thread pool (optionally bound to a <link id="TCancellationToken"/>) and returns the started <link id="ITask"/>. Call <var>.Wait</var> on the returned task to block until all joined procedures finish.</p>
+<p><var>Join</var> does not wait: call <var>Wait</var> on the returned <link id="ITask"/> to wait for all procedures. Exceptions raised by the procedures are re-raised by <var>Wait</var> in an <link id="EAggregateException"/>. With <var>aCancelToken</var>, procedures that have not started when the token is canceled are skipped.</p>
+<code>
+TParallel.Join([
+  procedure begin BuildIndexA; end,
+  procedure begin BuildIndexB; end
+]).Wait;
+</code>
 </descr>
 </element>
 
 <element name="TParallel.TLoopState">
-<short>Per-replica loop control object passed to <var>TParallel.For</var> iterations</short>
+<short>Loop control object passed to the bodies of <var>TParallel.For</var> that take a loop state</short>
 <descr>
-<p><var>TLoopState</var> allows an iteration body of <link id="TParallel.For"/> to cooperate with other worker threads:</p>
+<p>Each worker replica has its own instance; do not keep it after the body returns.</p>
 <ul>
-<li><var>Break</var> records the current iteration index as a candidate for <var>LowestBreakIteration</var> and prevents workers from starting iterations above that index, while guaranteeing that all iterations prior to the lowest break index still execute.</li>
-<li><var>Stop</var> signals all worker threads to stop executing further iterations immediately; <var>LowestBreakIteration</var> remains <var>Null</var>.</li>
-<li><var>ShouldExit</var> returns <var>True</var> when any replica has called <var>Stop</var>, raised an exception, been canceled via <var>TCancellationToken</var>, or called <var>Break</var> at an index lower than the current iteration.</li>
+<li><link id="TParallel.TLoopState.Break">Break</link> stops the loop after the current iteration, but all iterations with a lower index still run. Use it for an ordered search for the first match.</li>
+<li><link id="TParallel.TLoopState.Stop">Stop</link> stops the loop as soon as possible, with no guarantee about other iterations. Use it for an unordered search for any match.</li>
+<li><link id="TParallel.TLoopState.ShouldExit">ShouldExit</link> tells a long iteration that it can give up.</li>
 </ul>
 </descr>
 </element>
 
+<element name="TParallel.TLoopState.Break">
+<short>Ends the loop after the iterations below the current index; the lowest such index is reported in <link id="TParallel.TLoopResult.LowestBreakIteration"/></short>
+</element>
+
+<element name="TParallel.TLoopState.Stop">
+<short>Ends the loop as soon as possible; iterations that have not started will not run</short>
+</element>
+
+<element name="TParallel.TLoopState.ShouldExit">
+<short><var>True</var> if the current iteration does not need to finish: the loop was stopped, canceled or faulted, or <var>Break</var> was called at a lower index</short>
+</element>
+
+<element name="TParallel.TLoopState.Faulted">
+<short><var>True</var> if an iteration has raised an exception</short>
+</element>
+
+<element name="TParallel.TLoopState.Stopped">
+<short><var>True</var> if an iteration has called <link id="TParallel.TLoopState.Stop">Stop</link></short>
+</element>
+
+<element name="TParallel.TLoopState.Cancelled">
+<short><var>True</var> if the loop's cancellation token has been canceled</short>
+</element>
+
+<element name="TParallel.TLoopState.LowestBreakIteration">
+<short>Lowest index at which <var>Break</var> has been called so far, or <var>Null</var></short>
+</element>
+
+<element name="TParallel.TLoopState32">
+<short>Internal: loop state of <var>Integer</var> loops; use it through <link id="TParallel.TLoopState"/></short>
+</element>
+
+<element name="TParallel.TLoopState64">
+<short>Internal: loop state of <var>Int64</var> loops; use it through <link id="TParallel.TLoopState"/></short>
+</element>
+
 <element name="TParallel.TLoopResult">
-<short>Completion summary returned by <var>TParallel.For</var></short>
-<descr>
-<p><var>Completed</var> is <var>True</var> when the loop ran all iterations without calling <var>Break</var> or <var>Stop</var>. When terminated via <var>Break</var>, <var>LowestBreakIteration</var> contains the smallest iteration index that invoked <var>Break</var>; when terminated via <var>Stop</var> (or completed normally), <var>LowestBreakIteration</var> is <var>Null</var>.</p>
-</descr>
+<short>Result of <var>TParallel.For</var></short>
+</element>
+
+<element name="TParallel.TLoopResult.Completed">
+<short><var>True</var> if all iterations ran; <var>False</var> after <var>Break</var>, <var>Stop</var> or cancellation</short>
+</element>
+
+<element name="TParallel.TLoopResult.LowestBreakIteration">
+<short>Lowest index at which <var>Break</var> was called, or <var>Null</var> if the loop completed, was stopped or was canceled</short>
+</element>
+
+<!-- ================= Internal types: one note on the parent ================= -->
+
+<element name="TSparseArray">
+<short>Internal: thread-safe array used by the thread pool</short>
+</element>
+
+<element name="TWorkStealingQueue">
+<short>Internal: per-thread work-stealing queue of the thread pool</short>
+</element>
+
+<element name="TObjectCache">
+<short>Internal: free-list of task objects</short>
+</element>
+
+<element name="TObjectCaches">
+<short>Internal: object caches of the thread pool, one per class</short>
+</element>
+
+<element name="TExceptionList">
+<short>Internal: list of exceptions used to build an <link id="EAggregateException"/></short>
+</element>
+
+<element name="TExceptionArray">
+<short>Dynamic array of exceptions</short>
+</element>
+
+<element name="ICancellationState">
+<short>Internal: shared state behind <link id="TCancellationToken"/> and <link id="TCancellationTokenSource"/></short>
+</element>
+
+<element name="TAbstractTask">
+<short>Internal: base class of <link id="TTask"/></short>
+</element>
+
+<element name="TFuture">
+<short>Internal: class that implements <link id="IFuture"/>; create futures with <link id="TTask.Future"/></short>
+</element>
+
+<element name="TFutureContinuationTask">
+<short>Internal: task created by <link id="IFuture.ContinueWith"/></short>
+</element>
+
+<element name="TTransformFuture">
+<short>Internal: future created by <link id="TITaskHelper.ThenBy"/> and <link id="IFuture.Map"/></short>
 </element>
 
 </module> <!-- System.Threading -->
 </package>
 </fpdoc-descriptions>
-
