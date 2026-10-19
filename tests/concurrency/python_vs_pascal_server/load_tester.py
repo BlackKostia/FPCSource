@@ -32,9 +32,9 @@ def send_http_request(host, port, method, path):
     finally:
         s.close()
 
-def run_benchmark(target_port, total_requests=10000, concurrency=50):
+def run_benchmark(target_port, total_requests=10000, concurrency=50, work_n=1500):
     host = "127.0.0.1"
-    print(f"Starting load test on {host}:{target_port} -> Total Requests: {total_requests}, Concurrency: {concurrency}...")
+    print(f"Starting load test on {host}:{target_port} -> Total Requests: {total_requests}, Concurrency: {concurrency}, Work N: {work_n}...")
 
     # Warmup with 100 requests
     for i in range(100):
@@ -48,7 +48,7 @@ def run_benchmark(target_port, total_requests=10000, concurrency=50):
         elif m < 16: # 20% writes
             requests_workload.append(("POST", f"/set?key=item_{i % 100}&val=payload_{i}"))
         elif m < 19: # 15% compute
-            requests_workload.append(("GET", "/work?n=500"))
+            requests_workload.append(("GET", f"/work?n={work_n}"))
         else: # 5% stats
             requests_workload.append(("GET", "/stats"))
 
@@ -89,6 +89,7 @@ def run_benchmark(target_port, total_requests=10000, concurrency=50):
         "port": target_port,
         "total_requests": total_requests,
         "concurrency": concurrency,
+        "work_n": work_n,
         "total_time_s": round(total_time, 3),
         "rps": round(rps, 1),
         "success": successes,
@@ -105,7 +106,9 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 9001
     total = int(sys.argv[2]) if len(sys.argv) > 2 else 10000
     concurr = int(sys.argv[3]) if len(sys.argv) > 3 else 50
-    res = run_benchmark(port, total, concurr)
+    work_n = int(sys.argv[4]) if len(sys.argv) > 4 else 1500
+    res = run_benchmark(port, total, concurr, work_n)
     import json
     print("\n--- JSON RESULT ---")
     print(json.dumps(res))
+

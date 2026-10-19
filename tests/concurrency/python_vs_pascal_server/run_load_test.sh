@@ -13,6 +13,12 @@ fuser -k 9001/tcp 2>/dev/null || true
 fuser -k 9002/tcp 2>/dev/null || true
 sleep 1
 
+TOTAL_REQS=${1:-30000}
+CONCURR=${2:-100}
+WORK_N=${3:-1500}
+
+echo "Parameters: Total Requests=$TOTAL_REQS, Concurrency=$CONCURR, Work N=$WORK_N"
+
 # 1. TEST PYTHON SERVER
 echo ""
 echo ">>> [1/2] Launching Python Multithreaded Server (port 9001)..."
@@ -28,7 +34,7 @@ for i in {1..30}; do
 done
 
 echo "Python server running (PID: $PY_PID). Starting load test..."
-python3 "$DIR/load_tester.py" 9001 10000 50 | tee "$DIR/python_run.log"
+python3 "$DIR/load_tester.py" 9001 "$TOTAL_REQS" "$CONCURR" "$WORK_N" | tee "$DIR/python_run.log"
 
 PY_MEM=$(ps -p $PY_PID -o rss= 2>/dev/null || echo "0")
 PY_MEM_MB=$(awk "BEGIN {print $PY_MEM / 1024}")
@@ -53,7 +59,7 @@ for i in {1..30}; do
 done
 
 echo "Modern Pascal server running (PID: $PAS_PID). Starting load test..."
-python3 "$DIR/load_tester.py" 9002 10000 50 | tee "$DIR/pascal_run.log"
+python3 "$DIR/load_tester.py" 9002 "$TOTAL_REQS" "$CONCURR" "$WORK_N" | tee "$DIR/pascal_run.log"
 
 PAS_MEM=$(ps -p $PAS_PID -o rss= 2>/dev/null || echo "0")
 PAS_MEM_MB=$(awk "BEGIN {print $PAS_MEM / 1024}")
@@ -66,3 +72,4 @@ echo ""
 echo "=========================================================="
 echo "                   BENCHMARK COMPLETE                     "
 echo "=========================================================="
+

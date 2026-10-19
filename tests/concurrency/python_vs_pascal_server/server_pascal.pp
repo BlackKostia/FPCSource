@@ -244,8 +244,8 @@ begin
   StartTime := GetTickCount64;
 
   // Configure ThreadPool for high connection concurrency
-  TThreadPool.Default.SetMinWorkerThreads(32);
-  TThreadPool.Default.SetMaxWorkerThreads(128);
+  TThreadPool.Default.SetMinWorkerThreads(64);
+  TThreadPool.Default.SetMaxWorkerThreads(256);
 
   // Start background logging consumer task
   TTask.Run(@RunLogConsumer);
