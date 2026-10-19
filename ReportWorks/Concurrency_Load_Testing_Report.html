@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>Звіт з навантажувального тестування багатопотоковості: Modern Free Pascal (MFPC), Classic Pascal, C# (.NET 8), Python 3.12</title>
+<title>Звіт з навантажувального тестування багатопотоковості: Modern Free Pascal (MFPC), Free Pascal (FPC), C# (.NET 8), Python 3.12</title>
 <style>
   @page {
     size: A4 portrait;
@@ -142,14 +142,14 @@
 
 <!-- PAGE 1: ВСТУП ТА ОГЛЯД ІНСТРУМЕНТІВ -->
 <h1>Підсумковий звіт з навантажувального тестування багатопотоковості</h1>
-<p class="lead">Порівняльний архітектурний аналіз: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Classic Free Pascal</strong>, <strong>C# (.NET 8)</strong> та <strong>Python 3.12</strong></p>
+<p class="lead">Порівняльний архітектурний аналіз: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Free Pascal (FPC)</strong>, <strong>C# (.NET 8)</strong> та <strong>Python 3.12</strong></p>
 
 <table class="meta-table" cellpadding="4" cellspacing="0">
   <tr>
     <td><strong>Апаратна платформа:</strong> 12-ядерний процесор x86_64, 16 ГБ RAM, ОС Linux Mint 22.3 (Ubuntu 24.04 LTS &quot;Noble&quot;).</td>
   </tr>
   <tr>
-    <td><strong>Компілятори та рантайми:</strong> Modern Free Pascal (FPC Concurrency Trunk ppcx64), Classic FPC (3.3.1 base), .NET SDK 8.0.132 (Release mode, RyuJIT / Dynamic PGO), CPython 3.12.3.</td>
+    <td><strong>Компілятори та рантайми:</strong> Modern Free Pascal (FPC Concurrency Trunk ppcx64), Free Pascal FPC (3.3.1 base), .NET SDK 8.0.132 (Release mode, RyuJIT / Dynamic PGO), CPython 3.12.3.</td>
   </tr>
   <tr>
     <td><strong>Профайлер ядра:</strong> GNU time (<code>/usr/bin/time -v</code>) з точним збором User CPU Time, System/Kernel Time, Context Switches та Max RSS.</td>
@@ -215,7 +215,7 @@
       <td class="mono">17092326524331000456</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Classic Free Pascal</strong> (TCriticalSection)</td>
+      <td class="text-left"><strong>Free Pascal (FPC)</strong> (TCriticalSection)</td>
       <td><strong>1 102&nbsp;мс</strong></td>
       <td>1 814 882 ops/s</td>
       <td>16.2 МБ</td>
@@ -259,7 +259,7 @@
     <tr>
       <th>Показник системного профілювання</th>
       <th>Modern Free Pascal</th>
-      <th>Classic Free Pascal</th>
+      <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
       <th>Python 3.12</th>
     </tr>
@@ -323,7 +323,7 @@
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Висновки:</strong> <strong>Modern Pascal виявився вдвічі швидшим за C# (.NET 8)</strong> (1.58 с проти 3.07 с), не маючи витрат на об'єкти стейт-машин <code>ValueTask</code> та GC. Classic Pascal спалив 61% часу в ядрі Linux через архаїчні примітиви синхронізації <code>futex</code>.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> <strong>Modern Pascal виявився вдвічі швидшим за C# (.NET 8)</strong> (1.58 с проти 3.07 с), не маючи витрат на об'єкти стейт-машин <code>ValueTask</code> та GC. Free Pascal (FPC) спалив 61% часу в ядрі Linux через архаїчні примітиви синхронізації <code>futex</code>.</p>
 
 
 <!-- PAGE 3: ТЕСТИ 3 ТА 4 -->
@@ -344,7 +344,7 @@
     <tr>
       <th>Метрика / Показник</th>
       <th>Modern Free Pascal</th>
-      <th>Classic Free Pascal</th>
+      <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
       <th>Python 3.12</th>
     </tr>
@@ -394,7 +394,7 @@
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Висновки:</strong> Classic Pascal зазнав вибуху пам'яті до <strong>95 МБ</strong> через накопичення 4 млн динамічних структур <code>New()</code> у необмежених списках. Modern Pascal втримав споживання пам'яті на рівні <strong>9.3 МБ</strong>, випередивши C# .NET 8 за швидкістю на 21%.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> Free Pascal (FPC) зазнав вибуху пам'яті до <strong>95 МБ</strong> через накопичення 4 млн динамічних структур <code>New()</code> у необмежених списках. Modern Pascal втримав споживання пам'яті на рівні <strong>9.3 МБ</strong>, випередивши C# .NET 8 за швидкістю на 21%.</p>
 
 <h3>ТЕСТ 4. Багатофазний бар'єр: 2D-сітка Лапласа (100 000 000 оновлень комірок)</h3>
 <p>
@@ -413,7 +413,7 @@
     <tr>
       <th>Метрика / Показник</th>
       <th>Modern Free Pascal</th>
-      <th>Classic Free Pascal</th>
+      <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
       <th>Python 3.12</th>
     </tr>
@@ -456,7 +456,7 @@
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Висновки:</strong> Примітив <code>TBarrier</code> у Modern Pascal виявився в 1.5 раза швидшим за ручний двофазний бар'єр у Classic Pascal (202 мс проти 300 мс). Python виявився у 115 разів повільнішим через неможливість паралелізації математичних циклів під GIL.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> Примітив <code>TBarrier</code> у Modern Pascal виявився в 1.5 раза швидшим за ручний двофазний бар'єр у Free Pascal (FPC) (202 мс проти 300 мс). Python виявився у 115 разів повільнішим через неможливість паралелізації математичних циклів під GIL.</p>
 
 
 <!-- PAGE 4: ТЕСТ 5 ТА ЗВЕДЕНА МАТРИЦЯ -->
@@ -477,7 +477,7 @@
     <tr>
       <th>Метрика / Показник</th>
       <th>Modern Free Pascal</th>
-      <th>Classic Free Pascal</th>
+      <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
       <th>Python 3.12</th>
     </tr>
@@ -520,7 +520,7 @@
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Висновки:</strong> <strong>Modern Free Pascal став беззаперечним лідером тесту з результатом 29.8 млн транзакцій на секунду</strong>, обійшовши C# .NET 8 (24.1 млн tx/s) на 24% та Classic Pascal (19.8 млн tx/s) на 51%. Використання <code>TSlimReaderWriterLock</code> дозволило читачам не блокувати одне одного, а пам'ять склала лише 4.0 МБ.</p>
+<p class="conclusion-text"><strong>Висновки:</strong> <strong>Modern Free Pascal став беззаперечним лідером тесту з результатом 29.8 млн транзакцій на секунду</strong>, обійшовши C# .NET 8 (24.1 млн tx/s) на 24% та Free Pascal (FPC) (19.8 млн tx/s) на 51%. Використання <code>TSlimReaderWriterLock</code> дозволило читачам не блокувати одне одного, а пам'ять склала лише 4.0 МБ.</p>
 
 <h2>5. Зведена матриця та глобальні висновки</h2>
 
@@ -536,7 +536,7 @@
     <tr>
       <th>Критерій оцінки</th>
       <th>Modern Free Pascal</th>
-      <th>Classic Free Pascal</th>
+      <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
       <th>Python 3.12</th>
     </tr>
@@ -583,7 +583,7 @@
 <h3>Підсумковий інженерний вердикт</h3>
 <ol>
   <li><strong>Modern Free Pascal (MFPC)</strong> перетворює Pascal на високоефективну мову системного рівня для сучасних багатоядерних серверів. Він поєднує швидкість нативного компільованого машинного коду (у 7 &ndash; 115 разів швидше за Python), мінімальне споживання RAM (у 5 &ndash; 8 разів менше за .NET 8) та надійність моделей Go/Rust без ручного управління сирими покажчиками.</li>
-  <li><strong>Classic Pascal</strong> непридатний для складних асинхронних конвеєрів: відсутність каналів та бар'єрів змушує писати сотні рядків небезпечного коду з викликами <code>New()/Dispose()</code>, що призводить до вибуху пам'яті (до 95 МБ у DAG-тесті) та спалювання понад 60% часу в ядрі Linux на <code>futex</code>.</li>
+  <li><strong>Free Pascal (FPC)</strong> непридатний для складних асинхронних конвеєрів: відсутність каналів та бар'єрів змушує писати сотні рядків небезпечного коду з викликами <code>New()/Dispose()</code>, що призводить до вибуху пам'яті (до 95 МБ у DAG-тесті) та спалювання понад 60% часу в ядрі Linux на <code>futex</code>.</li>
   <li><strong>C# (.NET 8)</strong> є потужним конкурентом для чисельних задач завдяки JIT-оптимізаціям, проте суттєво поступається Modern Pascal у пропускній здатності міжпотокових каналів повідомлень та споживає значно більше пам'яті через накладні витрати CLR.</li>
   <li><strong>Python 3.12</strong> через архітектурне обмеження GIL непридатний для реальних висококонкурентних навантажень з інтенсивним обміном даними.</li>
 </ol>
