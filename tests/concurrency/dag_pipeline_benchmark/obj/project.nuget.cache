@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "dgSpecHash": "QNNIUruHeP4DNCwF0EWKH2RoqL5RwmYWjScLAnQ3OtGn5N4YImpBVoAG6UnQiF05X3yGOQvmZ/l6i40e+qjbbQ==",
+  "success": true,
+  "projectFilePath": "/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/bench_dag_csharp.csproj",
+  "expectedPackageFiles": [],
+  "logs": []
+}

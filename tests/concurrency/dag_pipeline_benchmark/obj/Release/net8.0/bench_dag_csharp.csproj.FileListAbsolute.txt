@@ -1,0 +1,15 @@
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/bin/Release/net8.0/bench_dag_csharp
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/bin/Release/net8.0/bench_dag_csharp.deps.json
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/bin/Release/net8.0/bench_dag_csharp.runtimeconfig.json
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/bin/Release/net8.0/bench_dag_csharp.dll
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/bin/Release/net8.0/bench_dag_csharp.pdb
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.GeneratedMSBuildEditorConfig.editorconfig
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.AssemblyInfoInputs.cache
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.AssemblyInfo.cs
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.csproj.CoreCompileInputs.cache
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.sourcelink.json
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.dll
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/refint/bench_dag_csharp.dll
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.pdb
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/bench_dag_csharp.genruntimeconfig.cache
+/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/dag_pipeline_benchmark/obj/Release/net8.0/ref/bench_dag_csharp.dll

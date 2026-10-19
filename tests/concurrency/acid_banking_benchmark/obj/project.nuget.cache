@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "dgSpecHash": "MHxosqPJ+23pwA7cMy92LyFtMgdEuTLeU9rzpG5jRoi/LwI1dpP2zj+yfj+/gx1K/Qii4hijSBxP8N7nHPNQ9g==",
+  "success": true,
+  "projectFilePath": "/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/acid_banking_benchmark/bench_acid_csharp.csproj",
+  "expectedPackageFiles": [],
+  "logs": []
+}

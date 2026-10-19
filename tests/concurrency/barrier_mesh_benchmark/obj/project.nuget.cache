@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "dgSpecHash": "Qv8atNXp+3jaj2lbwMIJiJBpI5+zKJnmaeniFrZRCxRtXGbZfTh/X8kvfjSO8V63HN9xp5NA32LYa5r1cdKizQ==",
+  "success": true,
+  "projectFilePath": "/home/chessplayer/DEV/Pascal/fpc-concurrency/tests/concurrency/barrier_mesh_benchmark/bench_barrier_csharp.csproj",
+  "expectedPackageFiles": [],
+  "logs": []
+}
