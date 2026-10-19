@@ -112,3 +112,5 @@ packages/fcl-db/tests/database.ini
 tests/concurrency/out/
 tests/concurrency/out-valgrind/
 tests/concurrency/out-eventloop/
+tests/concurrency/out-async/
+tests/concurrency/comparison/out/
