@@ -67,6 +67,17 @@ uses
     procedure specialization_init(genericdef:tdef;var state:tspecializationstate);
     procedure specialization_done(var state:tspecializationstate);
 
+    { The implementation of a generic routine declared in the interface of a
+      unit or in a record/class does not repeat the constraints of its type
+      parameters. Until the header is matched with its declaration (in
+      proc_add_definition), constraint checks failing only because of such an
+      unconstrained type parameter (e.g. a result type "specialize TBox<T>"
+      with "TBox<T: class>") are deferred: when the declaration is found, its
+      header already passed them with the constrained types; otherwise they
+      are repeated and report the same errors as without the deferral. }
+    procedure start_deferred_generic_constraint_checks(pd:tprocdef;ps:tsym);
+    procedure finish_deferred_generic_constraint_checks(pd:tprocdef;matched:boolean);
+
 implementation
 
 uses
@@ -86,6 +97,22 @@ uses
 
   type
     tdeftypeset = set of tdeftyp;
+
+    { a constraint check deferred by check_generic_constraints }
+    tdeferredconstraintcheck = class
+      genericdef : tstoreddef;
+      paramlist : tfpobjectlist;
+      poslist : tfplist;
+      constructor create(agenericdef:tstoreddef;aparamlist:tfpobjectlist;aposlist:tfplist);
+      destructor destroy;override;
+    end;
+
+  var
+    { routine whose implementation header is being parsed with deferred
+      constraint checks, see start_deferred_generic_constraint_checks }
+    deferred_constraint_pd : tprocdef = nil;
+    deferred_constraint_checks : tfpobjectlist = nil;
+
   const
     tgeneric_param_const_types : tdeftypeset = [orddef,stringdef,floatdef,setdef,pointerdef,enumdef];
     tgeneric_param_nodes : tnodetypeset = [typen,ordconstn,stringconstn,realconstn,setconstn,niln];
@@ -339,9 +366,11 @@ uses
         intffound : boolean;
         filepos : tfileposinfo;
         is_const : boolean;
+        deferred : boolean;
       begin
         { check whether the given specialization parameters fit to the eventual
           constraints of the generic }
+        deferred:=false;
         if not assigned(genericdef.genericparas) or (genericdef.genericparas.count=0) then
           internalerror(2012101001);
         if genericdef.genericparas.count<>paramlist.count then
@@ -389,6 +418,15 @@ uses
                 { undefineddef is compatible with anything }
                 if formaldef.typ=undefineddef then
                   continue;
+                { an unconstrained type parameter of an implementation whose
+                  declaration may have constraints: decide later }
+                if (paradef.typ=undefineddef) and
+                    assigned(deferred_constraint_pd) and
+                    (paradef.owner=deferred_constraint_pd.parast) then
+                  begin
+                    deferred:=true;
+                    continue;
+                  end;
                 if paradef.typ<>formaldef.typ then
                   begin
                     case formaldef.typ of
@@ -549,6 +587,124 @@ uses
                   end;
               end;
           end;
+        if deferred and result then
+          begin
+            if not assigned(deferred_constraint_checks) then
+              deferred_constraint_checks:=tfpobjectlist.create(true);
+            deferred_constraint_checks.add(tdeferredconstraintcheck.create(genericdef,paramlist,poslist));
+          end;
+      end;
+
+
+    constructor tdeferredconstraintcheck.create(agenericdef:tstoreddef;aparamlist:tfpobjectlist;aposlist:tfplist);
+      var
+        i : longint;
+        pos : pfileposinfo;
+      begin
+        genericdef:=agenericdef;
+        { the lists of the caller are freed after the specialization }
+        paramlist:=tfpobjectlist.create(false);
+        for i:=0 to aparamlist.count-1 do
+          paramlist.add(aparamlist[i]);
+        poslist:=tfplist.create;
+        for i:=0 to aposlist.count-1 do
+          begin
+            new(pos);
+            pos^:=pfileposinfo(aposlist[i])^;
+            poslist.add(pos);
+          end;
+      end;
+
+
+    destructor tdeferredconstraintcheck.destroy;
+      var
+        i : longint;
+      begin
+        for i:=0 to poslist.count-1 do
+          dispose(pfileposinfo(poslist[i]));
+        poslist.free;
+        paramlist.free;
+        inherited destroy;
+      end;
+
+
+    procedure start_deferred_generic_constraint_checks(pd:tprocdef;ps:tsym);
+      var
+        i,j : longint;
+        fwpd : tprocdef;
+        fwsym,
+        cursym : tsym;
+        candidate : boolean;
+      begin
+        { a previous header that did not reach proc_add_definition (only
+          after errors): don't lose its checks }
+        if assigned(deferred_constraint_pd) then
+          finish_deferred_generic_constraint_checks(deferred_constraint_pd,false);
+        if not assigned(ps) or
+            (ps.typ<>procsym) or
+            not assigned(pd.genericparas) or
+            (pd.genericparas.count=0) then
+          exit;
+        { is there a declaration whose type parameters have the same names
+          and where a parameter that is unconstrained here has a constraint? }
+        for i:=0 to tprocsym(ps).procdeflist.count-1 do
+          begin
+            fwpd:=tprocdef(tprocsym(ps).procdeflist[i]);
+            if (fwpd=pd) or
+                not fwpd.forwarddef or
+                not (fwpd.interfacedef or assigned(fwpd.struct)) or
+                (fwpd.struct<>pd.struct) or
+                not assigned(fwpd.genericparas) or
+                (fwpd.genericparas.count<>pd.genericparas.count) then
+              continue;
+            candidate:=false;
+            for j:=0 to pd.genericparas.count-1 do
+              begin
+                fwsym:=tsym(fwpd.genericparas[j]);
+                cursym:=tsym(pd.genericparas[j]);
+                if fwpd.genericparas.nameofindex(j)<>pd.genericparas.nameofindex(j) then
+                  begin
+                    candidate:=false;
+                    break;
+                  end;
+                if (fwsym.typ=typesym) and
+                    (cursym.typ=typesym) and
+                    (df_genconstraint in ttypesym(fwsym).typedef.defoptions) and
+                    (ttypesym(cursym).typedef.typ=undefineddef) then
+                  candidate:=true;
+              end;
+            if candidate then
+              begin
+                deferred_constraint_pd:=pd;
+                exit;
+              end;
+          end;
+      end;
+
+
+    procedure finish_deferred_generic_constraint_checks(pd:tprocdef;matched:boolean);
+      var
+        i : longint;
+        checks : tfpobjectlist;
+        check : tdeferredconstraintcheck;
+      begin
+        if not assigned(deferred_constraint_pd) or
+            (deferred_constraint_pd<>pd) then
+          exit;
+        deferred_constraint_pd:=nil;
+        if not assigned(deferred_constraint_checks) then
+          exit;
+        checks:=deferred_constraint_checks;
+        deferred_constraint_checks:=nil;
+        { no declaration with constraints matched: the deferred checks apply
+          as usual }
+        if not matched then
+          for i:=0 to checks.count-1 do
+            begin
+              check:=tdeferredconstraintcheck(checks[i]);
+              check_generic_constraints(check.genericdef,check.paramlist,check.poslist);
+            end;
+        checks.free;
       end;
 
     function parse_generic_specialization_types_internal(paramlist:tfpobjectlist;poslist:tfplist;out prettyname,specializename:ansistring;parsedtype:tdef;parsedpos:tfileposinfo):boolean;
@@ -3284,4 +3440,6 @@ uses
       end;
 
 
+finalization
+  deferred_constraint_checks.free;
 end.

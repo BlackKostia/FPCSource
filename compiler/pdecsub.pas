@@ -1201,6 +1201,8 @@ implementation
                        tstoreddef(ttypesym(genericparams[i]).typedef).register_def;
                   end;
                 insert_generic_parameter_types(pd,nil,genericparams,false);
+                { an implementation of a routine declared with constraints }
+                start_deferred_generic_constraint_checks(pd,aprocsym);
                 { the list is no longer required }
                 genericparams.free;
                 genericparams:=nil;

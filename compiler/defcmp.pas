@@ -2990,6 +2990,9 @@ implementation
 
 
     function equal_genfunc_paradefs(fwdef,currdef:tdef;fwpdst,currpdst:tsymtable): boolean;
+      var
+        conv : tconverttype;
+        pd : tprocdef;
       begin
         result:=false;
         { for open array parameters, typesym might not be assigned }
@@ -3001,7 +3004,17 @@ implementation
             { the forward declaration may have constraints }
             if not (df_genconstraint in currdef.defoptions) and (currdef.typ=undefineddef) and
                 ((fwdef.typ=undefineddef) or (df_genconstraint in fwdef.defoptions)) then
-              result:=true;
+              result:=true
+            { a forward declaration in the implementation (not in the interface
+              or a record/class, that is checked by the caller) repeats the
+              constraints: they have to be the same }
+            else if (df_genconstraint in currdef.defoptions) and
+                (df_genconstraint in fwdef.defoptions) then
+              begin
+                conv:=tc_equal;
+                pd:=nil;
+                result:=compare_defs_ext(fwdef,currdef,nothingn,conv,pd,[cdo_strict_genconstraint_check])>=te_exact;
+              end;
           end
       end;
 

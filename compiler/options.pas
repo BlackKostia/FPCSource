@@ -4882,6 +4882,10 @@ procedure read_arguments(cmd:TCmdStr);
       {$endif x86_64}
         def_system_macro('FPC_HAS_CEXTENDED');
         def_system_macro('FPC_HAS_RESSTRINITS');
+      { the implementation of a generic routine declared with constraints in
+        an interface or record/class can use generics requiring them in its
+        header (e.g. a result "specialize TBox<T>" with "TBox<T: class>") }
+        def_system_macro('FPC_HAS_CONSTRAINED_GENERIC_FORWARD');
 
       { these cpus have an inline rol/ror implementation }
       {$ifdef cpurox}

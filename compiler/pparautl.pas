@@ -67,6 +67,7 @@ implementation
       globals,globtype,cclasses,cutils,verbose,systems,fmodule,
       tokens,
       symbase,symsym,symtable,symutil,defutil,defcmp,blockutl,
+      pgenutil,
 {$ifdef jvm}
       jvmdef,
 {$endif jvm}
@@ -689,7 +690,7 @@ implementation
       end;
 
 
-    function proc_add_definition(var currpd:tprocdef):boolean;
+    function proc_add_definition_intern(var currpd:tprocdef):boolean;
 
       function check_generic_parameters(fwpd,currpd:tprocdef):boolean;
         var
@@ -1253,7 +1254,19 @@ implementation
               end;
           end;
 
-        proc_add_definition:=forwardfound;
+        proc_add_definition_intern:=forwardfound;
+      end;
+
+
+    function proc_add_definition(var currpd:tprocdef):boolean;
+      var
+        origpd : tprocdef;
+      begin
+        origpd:=currpd;
+        result:=proc_add_definition_intern(currpd);
+        { constraint checks of the header that were deferred until the
+          declaration is known }
+        finish_deferred_generic_constraint_checks(origpd,result);
       end;
 
 
