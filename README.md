@@ -59,6 +59,9 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
   - Stackful fibers (`TFiber`) for x86_64 Linux (the package builds only for this target).
   - Generators (`TGenerator<T>`) supporting idiomatic `for Item in Generator do`.
   - `await` operator: inside a coroutine started with `TFiber.Async`/`TFiber.Spawn` it suspends the coroutine without blocking the OS thread (outside coroutines it waits in place). The `async` directive is parsed but does not change code generation yet.
+- **Sanitizers in the native code generator (x86_64 Linux)**:
+  - `-fsanitize=thread`: ThreadSanitizer data race detection (2–3× slowdown instead of ~1300× under Valgrind Helgrind).
+  - `-fsanitize=address`: AddressSanitizer heap buffer overflows, use-after-free, double free and memory leaks, with the exact source line and access size.
 
 ---
 

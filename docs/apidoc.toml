@@ -18,9 +18,9 @@ options = "-Mobjfpc -Sm -dUNIX -dLINUX -dCPU64 -dCPUX86_64 -dFPC_HAS_CONSTRAINED
 
 [[package]]
 name = "rtl-objpas"
-title = "fpvalgrind, fpctsan, smart pointers and spans"
-units = ["packages/rtl-objpas/src/inc/fpvalgrind.pp", "packages/rtl-objpas/src/inc/fpctsan.pp", "packages/rtl-objpas/src/inc/smartptrs.pp", "packages/rtl-objpas/src/inc/spans.pp"]
-descr = ["packages/rtl-objpas/xml/fpvalgrind.xml", "packages/rtl-objpas/xml/fpctsan.xml", "packages/rtl-objpas/xml/smartptrs.xml", "packages/rtl-objpas/xml/spans.xml"]
+title = "fpvalgrind, fpctsan, fpcasan, smart pointers and spans"
+units = ["packages/rtl-objpas/src/inc/fpvalgrind.pp", "packages/rtl-objpas/src/inc/fpctsan.pp", "packages/rtl-objpas/src/inc/fpcasan.pp", "packages/rtl-objpas/src/inc/smartptrs.pp", "packages/rtl-objpas/src/inc/spans.pp"]
+descr = ["packages/rtl-objpas/xml/fpvalgrind.xml", "packages/rtl-objpas/xml/fpctsan.xml", "packages/rtl-objpas/xml/fpcasan.xml", "packages/rtl-objpas/xml/smartptrs.xml", "packages/rtl-objpas/xml/spans.xml"]
 internal = [
   # management operators: their behaviour is described with the types
   "*.initialize(*",

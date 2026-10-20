@@ -151,12 +151,14 @@
 
 **Стан:** модуль `spans` / `System.Spans` у `packages/rtl-objpas`: `Slice`, `Chunk` (неперетинне розбиття для паралельних задач), `CopyFrom` з перекриттям, `SpanOf`/`MutableSpanOf` для рядків. Межі перевіряються **завжди**, а не лише при `-Cr`: код дженерика компілюється з налаштуваннями модуля, де його оголошено, тож `-Cr` користувача на нього не діє ([ADR-0009](adr/0009-spans.md)). Посібник — [guides/spans.md](guides/spans.md), приклад — `examples/spans_parallel.pp`, тести — `packages/rtl-objpas/tests/utcspans.pp`.
 
-### 3.3. Підтримка ThreadSanitizer (`-fsanitize=thread`) та AddressSanitizer (`-fsanitize=address`) у генераторі коду [TSan x86_64-linux РЕАЛІЗОВАНО]
+### 3.3. Підтримка ThreadSanitizer (`-fsanitize=thread`) та AddressSanitizer (`-fsanitize=address`) у генераторі коду [TSan і ASan x86_64-linux РЕАЛІЗОВАНО]
 - Доповнення модуля `fpvalgrind` вбудованою інструментацією читань/записів пам'яті в компіляторі для TSan та ASan:
   - у 5–10 разів менше сповільнення порівняно з Valgrind Helgrind;
   - цільова платформа — x86_64-linux ([ADR-0011](adr/0011-target-platform.md)).
 
-**Стан:** ключ `-fsanitize=thread` для x86_64-linux (рідний генератор коду): прохід `compiler/x86/tsaninstr.pas` інструментує остаточні інструкції з операндом-пам'яттю (точний розмір доступу, без кадру процедури, `threadvar` і атомарних інструкцій), трампліни й лінкування `libtsan` — модуль `fpctsan` (`rtl-objpas`), `cthreads` під TSan викликає pthread через перехоплювачі, `TArc<T>` анотовано `TsanRelease`/`TsanAcquire`. Сповільнення стрес-тестів `smartptrs` — 2–3× (Helgrind — ~1300×). Рішення — [ADR-0010](adr/0010-tsan.md), посібник — [guides/tsan.md](guides/tsan.md), тести — `tests/concurrency/run-tsan.sh`, `tests/test/ttsan1`–`5`. Далі: ASan; повні стеки (`__tsan_func_entry/exit`).
+**Стан:** ключ `-fsanitize=thread` для x86_64-linux (рідний генератор коду): прохід `compiler/x86/saninstr.pas` інструментує остаточні інструкції з операндом-пам'яттю (точний розмір доступу, без кадру процедури, `threadvar` і атомарних інструкцій), трампліни й лінкування `libtsan` — модуль `fpctsan` (`rtl-objpas`), `cthreads` під TSan викликає pthread через перехоплювачі, `TArc<T>` анотовано `TsanRelease`/`TsanAcquire`. Сповільнення стрес-тестів `smartptrs` — 2–3× (Helgrind — ~1300×). Рішення — [ADR-0010](adr/0010-tsan.md), посібник — [guides/tsan.md](guides/tsan.md), тести — `tests/concurrency/run-tsan.sh`, `tests/test/ttsan1`–`5`.
+
+**ASan:** ключ `-fsanitize=address` (x86_64-linux): той самий прохід із трамплінами `fpcasan` (швидка перевірка тіньової пам'яті в трампліні, звіт «з місця доступу»), `cmem` + `libasan`, кадр `rbp` у всьому інструментованому коді. Знаходить переповнення купи, use-after-free, подвійне звільнення, витоки (LeakSanitizer); стек і глобальні змінні не перевіряються. Сповільнення тестів `smartptrs` — 2,2×. Рішення — [ADR-0012](adr/0012-asan.md), посібник — [guides/asan.md](guides/asan.md), тести — `tests/concurrency/run-asan.sh`, `tests/test/tasan1`–`3`. Далі: повні стеки TSan (`__tsan_func_entry/exit`); червоні зони стеку й глобальних змінних для ASan.
 
 ---
 

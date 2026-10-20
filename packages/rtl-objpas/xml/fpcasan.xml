@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fpdoc-descriptions>
+<package name="rtl-objpas">
+
+<!--
+  ====================================================================
+    fpcasan
+  ====================================================================
+-->
+
+<module name="fpcasan">
+<short>Run time support and annotations for AddressSanitizer (-fsanitize=address)</short>
+<descr>
+<p><file>fpcasan</file> is the run time part of the <var>-fsanitize=address</var> compiler option (x86_64-linux, native code generator). The compiler adds the unit to every module compiled with the option: it links <file>libasan</file> and contains the trampolines <var>FPC_ASAN_READ</var> and <var>FPC_ASAN_WRITE</var> that the instrumented code calls before each memory access. The trampolines check the shadow memory of AddressSanitizer themselves and preserve all general purpose registers, the flags and <var>xmm0</var>..<var>xmm15</var>; a bad access is reported with the stack of the program and stops it.</p>
+<p>Heap blocks are allocated by <file>cmem</file>, which the compiler adds to the program, so that AddressSanitizer surrounds them with red zones and detects heap buffer overflows, use-after-free, double frees and, at exit, memory leaks. Accesses to local and global variables are not checked.</p>
+<p>Custom allocators that keep freed blocks (pools, free lists) can mark them with <link id="AsanPoison"/> and <link id="AsanUnpoison"/>, guarded by the <var>FPC_SANITIZE_ADDRESS</var> conditional define that the option sets.</p>
+<p>On other platforms the routines are empty.</p>
+</descr>
+
+<!-- procedure Visibility: default -->
+<element name="AsanPoison">
+<short>Marks a memory range as not addressable</short>
+<descr>
+<p><var>AsanPoison</var> calls <var>__asan_poison_memory_region</var>: a later instrumented access to the range is reported as an error, like an access to freed heap memory. Call it when a custom allocator takes a block back into its pool.</p>
+<p>AddressSanitizer tracks addressability in 8-byte granules: a range that does not start at a multiple of 8 bytes may be poisoned only partly.</p>
+</descr>
+<seealso>
+<link id="AsanUnpoison"/>
+<link id="AsanIsPoisoned"/>
+</seealso>
+</element>
+
+<element name="AsanPoison.aAddr">
+<short>Start of the range</short>
+</element>
+
+<element name="AsanPoison.aSize">
+<short>Size of the range in bytes</short>
+</element>
+
+<!-- procedure Visibility: default -->
+<element name="AsanUnpoison">
+<short>Marks a memory range as addressable again</short>
+<descr>
+<p><var>AsanUnpoison</var> calls <var>__asan_unpoison_memory_region</var>. Call it when a custom allocator hands a block out of its pool again.</p>
+</descr>
+<seealso>
+<link id="AsanPoison"/>
+</seealso>
+</element>
+
+<element name="AsanUnpoison.aAddr">
+<short>Start of the range</short>
+</element>
+
+<element name="AsanUnpoison.aSize">
+<short>Size of the range in bytes</short>
+</element>
+
+<!-- function Visibility: default -->
+<element name="AsanIsPoisoned">
+<short>Tells whether an access to a memory range would be reported</short>
+<descr>
+<p><var>AsanIsPoisoned</var> returns <var>True</var> when some byte of the range is not addressable (<var>__asan_region_is_poisoned</var>), and always <var>False</var> when the program does not run under AddressSanitizer.</p>
+</descr>
+<seealso>
+<link id="AsanPoison"/>
+</seealso>
+</element>
+
+<element name="AsanIsPoisoned.Result">
+<short>True if an instrumented access to the range would be an error</short>
+</element>
+
+<element name="AsanIsPoisoned.aAddr">
+<short>Start of the range</short>
+</element>
+
+<element name="AsanIsPoisoned.aSize">
+<short>Size of the range in bytes</short>
+</element>
+
+</module>
+</package>
+</fpdoc-descriptions>

@@ -160,7 +160,7 @@ implementation
        { codegen }
        tgobj,cgbase,cgobj,hlcgobj,hlcgcpu,dbgbase,
 {$if defined(x86_64) and not defined(llvm)}
-       tsaninstr,
+       saninstr,
 {$endif x86_64 and not llvm}
 
        ncgflw,
@@ -1087,6 +1087,8 @@ implementation
                ((cs_opt_stackframe in current_settings.optimizerswitches) and
                 not(cs_generate_stackframes in current_settings.localswitches) and
                 not(cs_profile in current_settings.moduleswitches) and
+                { AddressSanitizer unwinds its stacks along the frame pointers }
+                not(cs_sanitize_address in current_settings.moduleswitches) and
                 not(po_assembler in procdef.procoptions) and
 {$if defined(m68k)}
                 { do not optimize away the frame pointer, if the CPU has no long
@@ -2338,10 +2340,11 @@ implementation
             postprocess_code;
 
 {$if defined(x86_64) and not defined(llvm)}
-            { ThreadSanitizer: after the optimizer, on the final code }
-            if (cs_sanitize_thread in current_settings.moduleswitches) and
+            { ThreadSanitizer and AddressSanitizer: after the optimizer, on
+              the final code }
+            if (([cs_sanitize_thread,cs_sanitize_address]*current_settings.moduleswitches)<>[]) and
                not(pi_is_assembler in flags) then
-              tsan_instrument(aktproccode);
+              sanitizer_instrument(aktproccode);
 {$endif x86_64 and not llvm}
 
             { Add end symbol and debug info }

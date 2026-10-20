@@ -287,7 +287,8 @@ Var
   PthreadInterposed : Boolean;
 
 { Looks up a pthread function. Normally in libpthread itself; when a
-  sanitizer that interposes the pthread API is loaded (ThreadSanitizer),
+  sanitizer that interposes the pthread API is loaded (ThreadSanitizer,
+  AddressSanitizer),
   in the global scope, so that its interceptors are called: otherwise it
   would not know about the threads, mutexes etc. of the program. }
 Function PthreadSym(Name : PAnsiChar) : Pointer;
@@ -317,7 +318,8 @@ begin
   PthreadScope:=PthreadDLL;
   PthreadInterposed:=false;
 {$ifndef ANDROID}
-  if dlsym(RTLD_DEFAULT,'__tsan_init')<>nil then
+  if (dlsym(RTLD_DEFAULT,'__tsan_init')<>nil) or
+     (dlsym(RTLD_DEFAULT,'__asan_init')<>nil) then
     begin
       PthreadScope:=RTLD_DEFAULT;
       PthreadInterposed:=true;

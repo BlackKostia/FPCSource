@@ -735,6 +735,7 @@ Implementation
       begin
         sanitizerlibraryfiles:=TCmdStrList.Create;
         result:=false;
+{$ifdef llvm}
         if (cs_sanitize_address in current_settings.moduleswitches) and
            not(cs_link_on_target in current_settings.globalswitches) then
           begin
@@ -777,23 +778,30 @@ Implementation
                 DeleteFile(clangsearchdirspath);
             end;
           end;
+{$endif llvm}
         if result then
           ObjectFiles.concatList(sanitizerlibraryfiles);
         sanitizerlibraryfiles.free;
         sanitizerlibraryfiles := nil;
-        { ThreadSanitizer of the native code generator (unit fpctsan links
-          libtsan): the unversioned libtsan.so is only in the library
-          directory of gcc, which fpc.cfg does not always list. The run time
-          loader finds the versioned library in the system directories, so
-          no rpath is needed. }
-        if assigned(SharedLibFiles.Find('tsan')) and
+        { ThreadSanitizer and AddressSanitizer of the native code generator
+          (units fpctsan and fpcasan link libtsan/libasan): the unversioned
+          library is only in the library directory of gcc, which fpc.cfg
+          does not always list. The run time loader finds the versioned
+          library in the system directories, so no rpath is needed. }
+        if assigned(SharedLibFiles.Find('tsan')) then
+          sanitizerlibname:='libtsan.so'
+        else if assigned(SharedLibFiles.Find('asan')) then
+          sanitizerlibname:='libasan.so'
+        else
+          sanitizerlibname:='';
+        if (sanitizerlibname<>'') and
            not(cs_link_on_target in current_settings.globalswitches) then
           begin
             gcc:=FindUtil('gcc');
             if gcc<>'' then
               begin
-                clangsearchdirspath:=outputexedir+UniqueName('gcctsanpath');
-                if shell(maybequoted(gcc)+' -print-file-name=libtsan.so > '+maybequoted(clangsearchdirspath))=0 then
+                clangsearchdirspath:=outputexedir+UniqueName('gccsanpath');
+                if shell(maybequoted(gcc)+' -print-file-name='+sanitizerlibname+' > '+maybequoted(clangsearchdirspath))=0 then
                   begin
                     AssignFile(clangsearchdirsfile,clangsearchdirspath);
 {$push}{$i-}

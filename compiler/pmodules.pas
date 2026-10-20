@@ -436,10 +436,16 @@ implementation
          end
         else if (cs_checkpointer in current_settings.localswitches) then
           CheckAddUnit('heaptrc');
-        { trampolines called by code instrumented for ThreadSanitizer }
+        { trampolines called by code instrumented for ThreadSanitizer or
+          AddressSanitizer }
         if (cs_sanitize_thread in current_settings.moduleswitches) and
            (curr.modulename^<>'FPCTSAN') then
           CheckAddUnit('fpctsan');
+{$ifndef llvm}
+        if (cs_sanitize_address in current_settings.moduleswitches) and
+           (curr.modulename^<>'FPCASAN') then
+          CheckAddUnit('fpcasan');
+{$endif llvm}
         { Objpas unit? }
         if m_objpas in current_settings.modeswitches then
           CheckAddUnit('objpas');

@@ -3066,7 +3066,20 @@ begin
         include(init_settings.moduleswitches,cs_sanitize_thread)
       else
 {$endif llvm}
-        Message1(option_e_sanitize_thread_unsupported,target_info.name);
+        Message2(option_e_sanitizer_unsupported,'thread',target_info.name);
+    end
+  else if more='sanitize=address' then
+    begin
+{$ifndef llvm}
+      if target_info.system=system_x86_64_linux then
+{$endif llvm}
+        { the LLVM code generator instruments the code itself, like with
+          -Clfsanitize=address }
+        include(init_settings.moduleswitches,cs_sanitize_address)
+{$ifndef llvm}
+      else
+        Message2(option_e_sanitizer_unsupported,'address',target_info.name);
+{$endif llvm}
     end
   else
     IllegalPara(opt);
@@ -5362,9 +5375,15 @@ begin
      not(cs_link_separate_dbg_file in init_settings.globalswitches) then
     exclude(init_settings.globalswitches,cs_link_strip);
 
-  { code instrumented for ThreadSanitizer }
+  { code instrumented for ThreadSanitizer or AddressSanitizer }
   if cs_sanitize_thread in init_settings.moduleswitches then
-    def_system_macro('FPC_SANITIZE_THREAD');
+    begin
+      if cs_sanitize_address in init_settings.moduleswitches then
+        Message(option_e_sanitizers_incompatible);
+      def_system_macro('FPC_SANITIZE_THREAD');
+    end;
+  if cs_sanitize_address in init_settings.moduleswitches then
+    def_system_macro('FPC_SANITIZE_ADDRESS');
 
   { choose a reasonable tls model }
   if (tf_section_threadvars in target_info.flags) and (init_settings.tlsmodel=tlsm_none) then

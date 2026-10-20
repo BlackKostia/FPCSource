@@ -2350,7 +2350,7 @@ const
          { Record usage of checkpointer experimental feature }
         'CheckPointer used', {cs_checkpointer_called}
         'Supports LLVM Link-Time Optimization' {cs_lto}
-        ,'Enable LLVM Address Sanitizer'
+        ,'Instrument for AddressSanitizer' {cs_sanitize_address}
         ,'Instrument for ThreadSanitizer' {cs_sanitize_thread}
        );
     globalswitchname : array[tglobalswitch] of string[73] =
