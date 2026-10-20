@@ -146,10 +146,11 @@
 
 **Стан:** модуль `smartptrs` / `System.SmartPtrs` у `packages/rtl-objpas`; додатково `TWeak<T>` (аналог `std::weak_ptr`) для розриву циклів. Посібник — [guides/smart-pointers.md](guides/smart-pointers.md), рішення — [ADR-0007](adr/0007-smart-pointers.md), приклад — `examples/smart_pointers.pp`, тести — `packages/rtl-objpas/tests/utcsmartptrs.pp`. Фабрики з виведенням типу `MakeScoped(X)`/`MakeArc(X)` — після виправлення в компіляторі перевірки обмежень у заголовку реалізації обмежених дженериків (`FPC_HAS_CONSTRAINED_GENERIC_FORWARD`, тести `tests/test/tgenconstraint41`–`58`). Некопійовані типи `end nocopy;` ([ADR-0008](adr/0008-nocopy-types.md)) [РЕАЛІЗОВАНО]: `TScoped<T>` і гарди `SyncObjs` відхиляють копії під час компіляції (`FPC_HAS_NOCOPY_TYPES`, тести `tests/test/tnocopy*`).
 
-### 3.2. Безпечні зрізи пам'яті (`TSpan<T>` / `TReadOnlySpan<T>`)
+### 3.2. Безпечні зрізи пам'яті (`TSpan<T>` / `TReadOnlySpan<T>`) [РЕАЛІЗОВАНО]
 - Легковагова структура `(Ptr: ^T; Length: SizeInt)` з перевіркою меж (при `-Cr`), що представляє неперервний піддіапазон статичного масиву, динамічного масиву, рядка або `TBytes` без копіювання і без алокацій у купі.
 - Дозволяє безпечно передавати неперетинні сегменти масиву в паралельні задачі `System.Threading`.
 
+**Стан:** модуль `spans` / `System.Spans` у `packages/rtl-objpas`: `Slice`, `Chunk` (неперетинне розбиття для паралельних задач), `CopyFrom` з перекриттям, `SpanOf`/`MutableSpanOf` для рядків. Межі перевіряються **завжди**, а не лише при `-Cr`: код дженерика компілюється з налаштуваннями модуля, де його оголошено, тож `-Cr` користувача на нього не діє ([ADR-0009](adr/0009-spans.md)). Посібник — [guides/spans.md](guides/spans.md), приклад — `examples/spans_parallel.pp`, тести — `packages/rtl-objpas/tests/utcspans.pp`.
 
 ### 3.3. Підтримка ThreadSanitizer (`-fsanitize=thread`) та AddressSanitizer (`-fsanitize=address`) у генераторі коду
 - Доповнення модуля `fpvalgrind` вбудованою інструментацією читань/записів пам'яті в компіляторі для TSan та ASan:
@@ -172,7 +173,7 @@
 | Пріоритет | Напрямок | Де реалізується | Складність | Очікуваний ефект |
 |---|---|---|---|---|
 | **1** | `TChannel<T>`, `TCountdownEvent`, `TBarrier`, `TCancellationToken`, `.ContinueWith` [РЕАЛІЗОВАНО] | `packages/fcl-base`, `packages/vcl-compat` | Середня | Повноцінна оркестрація потоків і передавання повідомлень без низькорівневих блокувань |
-| **2** | Розумні вказівники `TScoped<T>` / `TArc<T>` [РЕАЛІЗОВАНО] та `TSpan<T>` | `packages/rtl-objpas` | Низька–середня | Зникнення шаблонних блоків `try..finally` і витоків пам'яті в багатопоточному коді |
+| **2** | Розумні вказівники `TScoped<T>` / `TArc<T>` та `TSpan<T>` [РЕАЛІЗОВАНО] | `packages/rtl-objpas` | Низька–середня | Зникнення шаблонних блоків `try..finally` і витоків пам'яті в багатопоточному коді |
 | **3** | Необов'язковий `specialize` + виведення типів для дженериків [РЕАЛІЗОВАНО] | `compiler/` (`pexpr.pas`, `ptype.pas`, `pgenutil.pas`) | Середня | Суттєве очищення синтаксису `TTask.Future`, колекцій та алгоритмів |
 | **4** | Асинхронний цикл подій `fcl-eventloop` (`epoll`/`kqueue`/`IOCP`) [РЕАЛІЗОВАНО] | `packages/fcl-eventloop` | Висока | Високопродуктивні мережеві сервіси на FPC |
 | **5** | Короткі лямбди `=>` та `async`/`await` [РЕАЛІЗОВАНО] | `compiler/`, `packages/fcl-coroutines` | Висока | Рівень ергономіки сучасних C# / Rust / TypeScript при збереженні нативної швидкості FPC |

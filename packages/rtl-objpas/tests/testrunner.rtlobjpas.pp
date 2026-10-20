@@ -63,6 +63,7 @@ uses
   utcfpmonitor, tests.rtti.attrtypes2,
 {$ENDIF}
    utcsmartptrs,
+   utcspans,
    utcStrUtils,
   utcVariants
   ;

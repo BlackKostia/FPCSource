@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fpdoc-descriptions>
+<package name="rtl-objpas">
+<module name="spans">
+  <short>Memory spans: views of a contiguous range of an array or string without copying.</short>
+  <descr>
+    <p>A span is a pointer and a length (<var>Data</var>, <var>Length</var>) that refers to a contiguous range of elements of a static array, a dynamic array, a string or <var>TBytes</var>. Creating a span, slicing it or splitting it into chunks does not copy elements and does not allocate memory.</p>
+    <p>Index and range checks are always performed and raise <var>ERangeError</var>. They do not depend on <var>-Cr</var>: the code of a generic is compiled with the settings of the unit that declares it. Iterating with <var>for..in</var> and the <var>Data</var> pointer give unchecked access.</p>
+    <p>A span does not own its elements and does not keep the source alive. It must not be used after the source array is freed or resized, or after the source string is modified; a span of a temporary value (a function result, an array constructor) is invalid after the statement.</p>
+    <p>Spans that do not overlap, such as different <var>Chunk</var>s of one span, can be used from different threads at the same time without synchronization.</p>
+  </descr>
+
+<element name="TReadOnlySpan">
+  <short>Read-only view of Length elements starting at Data.</short>
+  <seealso><link id="TSpan"/></seealso>
+</element>
+<element name="TReadOnlySpan.PT">
+  <short>Pointer to an element.</short>
+</element>
+<element name="TReadOnlySpan.TElementArray">
+  <short>Dynamic array of elements, as returned by ToArray.</short>
+</element>
+<element name="TReadOnlySpan.TEnumerator">
+  <short>Enumerator for for..in; it does not perform index checks.</short>
+</element>
+<element name="TReadOnlySpan.TEnumerator.MoveNext">
+  <short>Advances to the next element; False after the last one.</short>
+</element>
+<element name="TReadOnlySpan.TEnumerator.Current">
+  <short>The current element.</short>
+</element>
+<element name="TReadOnlySpan.Create">
+  <short>Creates a span of a whole array, a range of an array, or ALength elements at AData.</short>
+  <descr>
+    <p>The overloads with an array accept static and dynamic arrays (open array parameter; the elements are not copied). The range overload raises <var>ERangeError</var> if <var>AStart..AStart+ACount-1</var> is not inside the array. The pointer overload does not check its source: <var>AData</var> must point to at least <var>ALength</var> valid elements; a negative <var>ALength</var> raises <var>ERangeError</var>.</p>
+  </descr>
+</element>
+<element name="TReadOnlySpan.Slice">
+  <short>Returns the sub-span AStart..AStart+ACount-1 (or AStart to the end).</short>
+  <descr><p>Raises <var>ERangeError</var> if the range is not inside the span. A slice at the end with a count of 0 is empty and valid.</p></descr>
+</element>
+<element name="TReadOnlySpan.Chunk">
+  <short>Returns part AIndex of ACount nearly equal, non-overlapping parts.</short>
+  <descr>
+    <p>The parts are consecutive, do not overlap, together cover the whole span and differ in length by at most one element (the first <var>Length mod ACount</var> parts are one element longer). If <var>ACount</var> is greater than <var>Length</var>, some parts are empty. Raises <var>ERangeError</var> if <var>ACount &lt;= 0</var> or <var>AIndex</var> is not in <var>0..ACount-1</var>.</p>
+  </descr>
+</element>
+<element name="TReadOnlySpan.ToArray">
+  <short>Copies the elements into a new dynamic array.</short>
+</element>
+<element name="TReadOnlySpan.IsEmpty">
+  <short>True if Length is 0.</short>
+</element>
+<element name="TReadOnlySpan.Overlaps">
+  <short>True if the two spans share at least one element.</short>
+</element>
+<element name="TReadOnlySpan.GetEnumerator">
+  <short>Returns the enumerator for for..in.</short>
+</element>
+<element name="TReadOnlySpan.Data">
+  <short>Pointer to the first element (nil for an empty span of an empty array).</short>
+</element>
+<element name="TReadOnlySpan.Length">
+  <short>Number of elements.</short>
+</element>
+<element name="TReadOnlySpan.Items">
+  <short>Element at AIndex (0-based); raises ERangeError outside 0..Length-1.</short>
+</element>
+
+<element name="TSpan">
+  <short>Read/write view of Length elements starting at Data.</short>
+  <descr><p>Converts implicitly to <var>TReadOnlySpan</var>, so a <var>TSpan</var> can be passed where a read-only span is expected.</p></descr>
+  <seealso><link id="TReadOnlySpan"/></seealso>
+</element>
+<element name="TSpan.PT">
+  <short>Pointer to an element.</short>
+</element>
+<element name="TSpan.TReadOnly">
+  <short>The TReadOnlySpan specialization with the same element type.</short>
+</element>
+<element name="TSpan.TElementArray">
+  <short>Dynamic array of elements, as returned by ToArray.</short>
+</element>
+<element name="TSpan.TEnumerator">
+  <short>Enumerator for for..in (that of TReadOnly).</short>
+</element>
+<element name="TSpan.Create">
+  <short>Creates a span of a whole array, a range of an array, or ALength elements at AData.</short>
+  <descr><p>Like <var>TReadOnlySpan.Create</var>; the array is passed as <var>var</var> parameter, so writes through the span change the array.</p></descr>
+</element>
+<element name="TSpan.assign(TSpan):TReadOnly">
+  <short>Converts to a read-only span of the same elements.</short>
+</element>
+<element name="TSpan.AsReadOnly">
+  <short>Returns a read-only span of the same elements.</short>
+</element>
+<element name="TSpan.Slice">
+  <short>Returns the sub-span AStart..AStart+ACount-1 (or AStart to the end).</short>
+</element>
+<element name="TSpan.Chunk">
+  <short>Returns part AIndex of ACount nearly equal, non-overlapping parts.</short>
+  <seealso><link id="TReadOnlySpan.Chunk"/></seealso>
+</element>
+<element name="TSpan.CopyFrom">
+  <short>Copies ASource to the start of this span.</short>
+  <descr><p>Raises <var>ERangeError</var> if ASource is longer than this span. Overlapping spans are handled (the copy is done backwards when needed). Elements are assigned one by one, so managed element types keep correct reference counts.</p></descr>
+</element>
+<element name="TSpan.Fill">
+  <short>Assigns AValue to all elements.</short>
+</element>
+<element name="TSpan.ToArray">
+  <short>Copies the elements into a new dynamic array.</short>
+</element>
+<element name="TSpan.IsEmpty">
+  <short>True if Length is 0.</short>
+</element>
+<element name="TSpan.Overlaps">
+  <short>True if the two spans share at least one element.</short>
+</element>
+<element name="TSpan.GetEnumerator">
+  <short>Returns the enumerator for for..in.</short>
+</element>
+<element name="TSpan.Data">
+  <short>Pointer to the first element.</short>
+</element>
+<element name="TSpan.Length">
+  <short>Number of elements.</short>
+</element>
+<element name="TSpan.Items">
+  <short>Element at AIndex (0-based); raises ERangeError outside 0..Length-1.</short>
+</element>
+
+<element name="TAnsiCharSpan"><short>Read/write span of AnsiChar.</short></element>
+<element name="TReadOnlyAnsiCharSpan"><short>Read-only span of AnsiChar.</short></element>
+<element name="TWideCharSpan"><short>Read/write span of WideChar.</short></element>
+<element name="TReadOnlyWideCharSpan"><short>Read-only span of WideChar.</short></element>
+<element name="TByteSpan"><short>Read/write span of Byte (for TBytes).</short></element>
+<element name="TReadOnlyByteSpan"><short>Read-only span of Byte (for TBytes).</short></element>
+
+<element name="SpanOf">
+  <short>Read-only span of the characters of a string (without the terminating #0).</short>
+  <descr><p>The span becomes invalid when the string is modified or freed.</p></descr>
+</element>
+<element name="MutableSpanOf">
+  <short>Writable span of the characters of a string.</short>
+  <descr><p>Makes the string unique first (<var>UniqueString</var>), so that writing through the span does not change other references to the same string data.</p></descr>
+</element>
+
+<element name="SpanIndexError"><short>Internal helper; do not call.</short></element>
+<element name="SpanRangeError"><short>Internal helper; do not call.</short></element>
+<element name="SpanChunkError"><short>Internal helper; do not call.</short></element>
+<element name="SpanChunkStart"><short>Internal helper; do not call.</short></element>
+<element name="SpanOverlaps"><short>Internal helper; do not call.</short></element>
+<element name="SpanRangeValid"><short>Internal helper; do not call.</short></element>
+
+</module>
+</package>
+</fpdoc-descriptions>

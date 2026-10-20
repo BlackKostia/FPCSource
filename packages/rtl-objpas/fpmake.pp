@@ -78,6 +78,8 @@ begin
     T:=P.Targets.AddUnit('fpvalgrind.pp');
     T:=P.Targets.AddUnit('smartptrs.pp');
       T.ResourceStrings:=true;
+    T:=P.Targets.AddUnit('spans.pp');
+      T.ResourceStrings:=true;
     T:=P.Targets.AddUnit('strutils.pp',StrUtilsOses);
       T.ResourceStrings:=true;
     T:=P.Targets.AddUnit('syshelpers.pp',StrUtilsOses);

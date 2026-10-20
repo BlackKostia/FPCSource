@@ -239,6 +239,16 @@
   `eventloop.promise`.
 
 ### Додано
+- Зрізи пам'яті — модуль `spans` (`System.Spans`) у `rtl-objpas` (розділ 3.2
+  дорожньої карти): `TSpan<T>`/`TReadOnlySpan<T>` — вікна в статичний чи
+  динамічний масив, рядок або `TBytes` без копіювання й алокацій; `Slice`,
+  `Chunk` (неперетинне розбиття для паралельних задач), `CopyFrom` з
+  перекриттям, `Fill`, `ToArray`, `Overlaps`, `for..in`, `SpanOf`/
+  `MutableSpanOf` для рядків. Межі перевіряються завжди (ADR-0009: `-Cr`
+  користувача на код дженерика не діє). 35 fpcunit-тестів, зокрема
+  паралельні (Helgrind — 0 повідомлень), heaptrc — 0 витоків; посібник
+  `guides/spans.md`, fpdoc `rtl-objpas/xml/spans.xml`, приклад
+  `examples/spans_parallel.pp`, скрипт `tests/concurrency/build-spans.sh`.
 - Компілятор: некопійовані типи — директива `end nocopy;` для записів
   (ADR-0008). Присвоєння зі змінної/поля/елемента/розіменування, параметр
   за значенням і `Copy()` динамічного масиву для такого типу (і типів, що
