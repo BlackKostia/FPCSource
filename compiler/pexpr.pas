@@ -59,6 +59,11 @@ interface
 
     function parse_paras(__colon,__namedpara : boolean;end_of_paras : ttoken) : tnode;
 
+    { the string type of a string constant assigned to a variable in the
+      current mode: AnsiString ($H+), UnicodeString (unicodestrings),
+      ShortString ($H-) }
+    function mode_string_def: tdef;
+
     { the ID token has to be consumed before calling this function }
     procedure do_member_read(structh:tabstractrecorddef;getaddr:boolean;sym:tsym;var p1:tnode;var again:boolean;callflags:tcallnodeflags;spezcontext:tspecializationcontext);
 
@@ -335,6 +340,110 @@ implementation
          in_args:=prev_in_args;
          named_args_allowed:=old_named_args_allowed;
          parse_paras:=p2;
+      end;
+
+
+    function mode_string_def: tdef;
+      begin
+        if cs_refcountedstrings in current_settings.localswitches then
+          begin
+            if m_default_unicodestring in current_settings.modeswitches then
+              result:=cunicodestringtype
+            else
+              result:=cansistringtype;
+          end
+        else
+          result:=cshortstringtype;
+      end;
+
+
+    (* $'Text {Expr[:Width[:Precision]]} ...' ($modeswitch interpolation):
+       the scanner generated the tokens ('Text ', Expr[:Width[:Precision]], ...)
+       after _INTERPOLATION. Strings and characters without width are
+       concatenated, otherwise the parts are written with WriteStr into a
+       temporary string; the result has the string type of the mode *)
+    function interpolated_string: tnode;
+      var
+        paras, hp: tnode;
+        parts: array of tnode;
+        count, i: longint;
+        resdef: tdef;
+        concat: boolean;
+        temp: ttempcreatenode;
+        stmts: tstatementnode;
+        old_call_procsym: tprocsym;
+        old_call_para_index: integer;
+      begin
+        consume(_INTERPOLATION);
+        consume(_LKLAMMER);
+        { the parts are not parameters of an enclosing call }
+        old_call_procsym:=current_call_procsym;
+        old_call_para_index:=current_call_para_index;
+        current_call_procsym:=nil;
+        current_call_para_index:=0;
+        paras:=parse_paras(true,false,_RKLAMMER);
+        current_call_procsym:=old_call_procsym;
+        current_call_para_index:=old_call_para_index;
+        consume(_RKLAMMER);
+        resdef:=mode_string_def;
+        if not assigned(paras) then
+          exit(cstringconstnode.createstr(''));
+
+        { the list is in reverse order }
+        count:=0;
+        concat:=true;
+        hp:=paras;
+        while assigned(hp) do
+          begin
+            do_typecheckpass(tcallparanode(hp).left);
+            if (cpf_is_colon_para in tcallparanode(hp).callparaflags) or
+               not(is_string(tcallparanode(hp).left.resultdef) or
+                   is_anychar(tcallparanode(hp).left.resultdef) or
+                   { a string constant in a constant declaration }
+                   is_chararray(tcallparanode(hp).left.resultdef) or
+                   is_widechararray(tcallparanode(hp).left.resultdef)) then
+              concat:=false;
+            inc(count);
+            hp:=tcallparanode(hp).right;
+          end;
+
+        if concat then
+          begin
+            setlength(parts,count);
+            i:=count;
+            hp:=paras;
+            while assigned(hp) do
+              begin
+                dec(i);
+                parts[i]:=tcallparanode(hp).left;
+                tcallparanode(hp).left:=nil;
+                hp:=tcallparanode(hp).right;
+              end;
+            paras.free;
+            result:=parts[0];
+            for i:=1 to count-1 do
+              result:=caddnode.create(addn,result,parts[i]);
+            { only constants: the same as a string constant (also in a
+              constant declaration) }
+            do_typecheckpass(result);
+            if not(result.nodetype in [stringconstn,ordconstn]) then
+              result:=ctypeconvnode.create(result,resdef);
+          end
+        else
+          begin
+            temp:=ctempcreatenode.create(resdef,resdef.size,tt_persistent,true);
+            result:=internalstatements(stmts);
+            addstatement(stmts,temp);
+            { the destination is the first parameter: the last of the list }
+            hp:=paras;
+            while assigned(tcallparanode(hp).right) do
+              hp:=tcallparanode(hp).right;
+            tcallparanode(hp).right:=ccallparanode.create(ctemprefnode.create(temp),nil);
+            addstatement(stmts,geninlinenode(in_writestr_x,false,paras));
+            { the last statement returns the value }
+            addstatement(stmts,ctempdeletenode.create_normal_temp(temp));
+            addstatement(stmts,ctemprefnode.create(temp));
+          end;
       end;
 
 
@@ -4668,6 +4777,16 @@ implementation
                  else
                    p1:=cstringconstnode.createunistr(current_scanner.patternw);
                  consume(_CWSTRING);
+                 if current_scanner.token in postfixoperator_tokens then
+                   begin
+                     again:=true;
+                     postfixoperators(p1,again,getaddr);
+                   end;
+               end;
+
+             _INTERPOLATION:
+               begin
+                 p1:=interpolated_string;
                  if current_scanner.token in postfixoperator_tokens then
                    begin
                      again:=true;

@@ -283,6 +283,7 @@ interface
           function  readlongcomment(include_special_char: boolean = false):RawByteString;
           function  readlongquotedstring:RawByteString;
           function readstringconstant: boolean;
+          procedure readinterpolatedstring;
           function  readstate:char;
           function  readoptionalstate(fallback:char):char;
           function  readstatedefault:char;
@@ -6874,6 +6875,144 @@ type
       exit(true);
     end;
 
+    (* $'Text {Expr[:Width[:Precision]]} ...' ($modeswitch interpolation):
+       the token is _INTERPOLATION, followed by the generated tokens of
+       ('Text ', Expr[:Width[:Precision]], ...), which the parser reads like
+       the parameters of WriteStr. The texts become ordinary string constants
+       (scanned again with the code page of the source, doubled apostrophes
+       are kept), {{ and }} are the braces. An expression may contain string
+       constants; it ends at the first } outside of them. *)
+    procedure tscannerfile.readinterpolatedstring;
+      var
+        gen, lit, expr: ansistring;
+        hasparts: boolean;
+        line, fileindex, tokenpos, exprcolumn: longint;
+        filepos: tfileposinfo;
+
+      procedure addpart(const s: ansistring);
+        begin
+          if hasparts then
+            gen:=gen+',';
+          gen:=gen+s;
+          hasparts:=true;
+        end;
+
+      procedure flushlit;
+        begin
+          if lit<>'' then
+            begin
+              addpart(''''+lit+'''');
+              lit:='';
+            end;
+        end;
+
+      label
+        done;
+      begin
+        line:=line_no;
+        fileindex:=inputfile.ref_index;
+        gen:='(';
+        lit:='';
+        hasparts:=false;
+        { skip the opening apostrophe }
+        readchar;
+        repeat
+          case c of
+            '''' :
+              begin
+                readchar;
+                if c='''' then
+                  begin
+                    lit:=lit+'''''';
+                    readchar;
+                  end
+                else
+                  break;
+              end;
+            '{' :
+              begin
+                readchar;
+                if c='{' then
+                  begin
+                    lit:=lit+'{';
+                    readchar;
+                  end
+                else
+                  begin
+                    flushlit;
+                    expr:='';
+                    { the column of the expression in the source }
+                    do_gettokenpos(tokenpos,filepos);
+                    exprcolumn:=filepos.column;
+                    while c<>'}' do
+                      begin
+                        if c in [#10,#13,#26] then
+                          begin
+                            Message(scan_e_interpolation_unterminated_expr);
+                            goto done;
+                          end;
+                        if c='''' then
+                          begin
+                            { a string constant of the expression }
+                            repeat
+                              expr:=expr+c;
+                              readchar;
+                              if c in [#10,#13,#26] then
+                                begin
+                                  Message(scan_e_interpolation_unterminated_expr);
+                                  goto done;
+                                end;
+                            until c='''';
+                          end;
+                        expr:=expr+c;
+                        readchar;
+                      end;
+                    { skip the closing brace }
+                    readchar;
+                    if trimspace(expr)='' then
+                      Message(scan_e_interpolation_empty_expr)
+                    else
+                      begin
+                        if hasparts then
+                          gen:=gen+',';
+                        { messages about the expression show its column:
+                          it starts at the same column of the generated line }
+                        if length(gen)<exprcolumn-1 then
+                          gen:=gen+StringOfChar(' ',exprcolumn-1-length(gen));
+                        gen:=gen+expr;
+                        hasparts:=true;
+                      end;
+                  end;
+              end;
+            '}' :
+              begin
+                readchar;
+                if c='}' then
+                  begin
+                    lit:=lit+'}';
+                    readchar;
+                  end
+                else
+                  Message(scan_e_interpolation_single_brace);
+              end;
+            #10,#13,#26 :
+              Message(scan_f_string_exceeds_line);
+            else
+              begin
+                lit:=lit+c;
+                readchar;
+              end;
+          end;
+        until false;
+      done:
+        flushlit;
+        if not hasparts then
+          addpart('''''');
+        gen:=gen+')';
+        token:=_INTERPOLATION;
+        substitutemacro('$interpolation',pchar(gen),length(gen),line,fileindex,false);
+      end;
+
 {****************************************************************************
                                Token Scanner
 ****************************************************************************}
@@ -7023,7 +7162,11 @@ type
              '$' :
                begin
                  readnumber;
-                 token:=_INTCONST;
+                 if (c='''') and (pattern='$') and
+                    (m_interpolation in current_settings.modeswitches) then
+                   readinterpolatedstring
+                 else
+                   token:=_INTCONST;
                  goto exit_label;
                end;
 

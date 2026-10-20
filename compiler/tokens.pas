@@ -86,6 +86,8 @@ type
     _CCHAR,
     _CWSTRING,
     _CWCHAR,
+    { an interpolated string $'...', followed by the generated (Part, ...) }
+    _INTERPOLATION,
     _LSHARPBRACKET,
     _RSHARPBRACKET,
     { C like operators }
@@ -435,6 +437,7 @@ var
       (str:'const char'    ;special:true ;keyword:[m_none];op:NOTOKEN),
       (str:'const wstring' ;special:true ;keyword:[m_none];op:NOTOKEN),
       (str:'const wchar'   ;special:true ;keyword:[m_none];op:NOTOKEN),
+      (str:'interp string' ;special:true ;keyword:[m_none];op:NOTOKEN),
       (str:'<'             ;special:true ;keyword:[m_none];op:NOTOKEN),
       (str:'>'             ;special:true ;keyword:[m_none];op:NOTOKEN),
     { C like operators }

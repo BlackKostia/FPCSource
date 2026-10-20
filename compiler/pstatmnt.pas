@@ -170,15 +170,7 @@ implementation
     { the string type of a variable initialized with a string constant }
     function inlinevar_string_def: tdef;
       begin
-        if cs_refcountedstrings in current_settings.localswitches then
-          begin
-            if m_default_unicodestring in current_settings.modeswitches then
-              result:=cunicodestringtype
-            else
-              result:=cansistringtype;
-          end
-        else
-          result:=cshortstringtype;
+        result:=mode_string_def;
       end;
 
 

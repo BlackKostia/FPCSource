@@ -168,7 +168,7 @@ general_t_objectpath_local=01033_T_$1: Using local object path: $2
 #
 # Scanner
 #
-# 02122 is the last used one
+# 02126 is the last used one
 #
 % \section{Scanner messages.}
 % This section lists the messages that the scanner emits. The scanner takes
@@ -497,6 +497,13 @@ scan_e_improperly_indented_multiline_string=02120_E_Incorrectly indented multi-l
 scan_e_illegal_asyncmode=02123_E_Illegal async mode specified "$1"
 % When you specify an async mode with the \var{\{\$ASYNCMODE xxx\}} directive,
 % the compiler didn't recognize the mode you specified. Valid values are AUTO, FIBER, STATEMACHINE.
+scan_e_interpolation_empty_expr=02124_E_Empty expression in an interpolated string
+% With \var{\{\$modeswitch interpolation\}}, \var{\{\}} in \var{\$'...'} must contain an
+% expression. Write \var{\{\{} and \var{\}\}} for the characters \var{\{} and \var{\}}.
+scan_e_interpolation_single_brace=02125_E_Single "}" in an interpolated string, write "}}" for the character
+% In \var{\$'...'} the character \var{\}} outside of an expression is written \var{\}\}}.
+scan_e_interpolation_unterminated_expr=02126_E_Unterminated expression "{" in an interpolated string
+% An expression of \var{\$'...'} ends with \var{\}} on the same line.
 %\end{description}
 #
 # Parser

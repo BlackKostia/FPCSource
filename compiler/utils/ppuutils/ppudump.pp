@@ -2524,7 +2524,8 @@ const
          'm_arrow_functions',      { short lambda syntax (=>) for anonymous functions }
          'm_tuples',               { tuples and tuple deconstruction (A, B) := Expr }
          'm_inline_vars',          { inline variable declarations: var X := Expr; for var I := ... }
-         'm_using'                 { resource statement: using var X := Expr do ... }
+         'm_using',                { resource statement: using var X := Expr do ... }
+         'm_interpolation'         (* interpolated strings $'Text {Expr:Width:Precision}' *)
        );
        { optimizer }
        optimizerswitchname : array[toptimizerswitch] of string[50] =
