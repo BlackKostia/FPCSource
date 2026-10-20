@@ -4088,6 +4088,23 @@ begin
   end;
 end;
 
+{ Continuations of one antecedent are processed one after another: a
+  continuation that runs can complete before a later sibling has been
+  canceled, so a sibling's final status must be awaited, not sampled. }
+function WaitForTaskStatus(const aTask: ITask; aStatus: TTaskStatus; aTimeoutMS: Cardinal): Boolean;
+var
+  Start: QWord;
+begin
+  Start := GetTickCount64;
+  while aTask.Status <> aStatus do
+  begin
+    if GetTickCount64 - Start > aTimeoutMS then
+      Exit(False);
+    Sleep(1);
+  end;
+  Result := True;
+end;
+
 procedure TTestContinuationsAndCancellation.TestContinueWithAndOptions;
 var
   StepLog: Integer;
@@ -4147,8 +4164,8 @@ begin
     end, [TTaskContinuationOption.OnlyOnCanceled]);
 
   AssertTrue('OnFaultTask completed', OnFaultTask.Wait(5000));
-  AssertTrue('OnCompTask canceled', OnCompTask.Status = TTaskStatus.Canceled);
-  AssertTrue('OnCancelTask canceled', OnCancelTask.Status = TTaskStatus.Canceled);
+  AssertTrue('OnCompTask canceled', WaitForTaskStatus(OnCompTask, TTaskStatus.Canceled, 5000));
+  AssertTrue('OnCancelTask canceled', WaitForTaskStatus(OnCancelTask, TTaskStatus.Canceled, 5000));
   AssertEquals('Only OnlyOnFaulted ran', 10, StepLog);
 
   // Canceled antecedent with OnlyOnCompleted / OnlyOnCanceled
@@ -4172,7 +4189,7 @@ begin
     end, [TTaskContinuationOption.OnlyOnCanceled]);
   CancelTask.Cancel;
   AssertTrue('COnCancel completed after CancelTask.Cancel', COnCancel.Wait(5000));
-  AssertTrue('COnComp was canceled', COnComp.Status = TTaskStatus.Canceled);
+  AssertTrue('COnComp was canceled', WaitForTaskStatus(COnComp, TTaskStatus.Canceled, 5000));
   AssertEquals('Only OnlyOnCanceled ran', 100, StepLog);
 
   // IFuture<T>.ContinueWith
@@ -4355,7 +4372,7 @@ begin
     end;
 
     AssertTrue('ChildTask status is Canceled', ChildTask.Status = TTaskStatus.Canceled);
-    AssertTrue('DownstreamTask is Canceled', DownstreamTask.Status = TTaskStatus.Canceled);
+    AssertTrue('DownstreamTask is Canceled', WaitForTaskStatus(DownstreamTask, TTaskStatus.Canceled, 5000));
     AssertEquals('DownstreamTask body did not run', 0, DownstreamRan);
   finally
     CTS.Free;
