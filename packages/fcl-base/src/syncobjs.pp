@@ -510,6 +510,14 @@ Type
   because TLockGuard is specialized in other units; do not call directly. }
 procedure LockGuardCopyError;
 
+{ Invoked with True before and with False after a positive-timeout wait.
+  System.Threading installs this so a pool worker that blocks can be replaced
+  by a sleeper, and a blocked worker does not count against the pool size. }
+type
+  TWorkerBlockingHook = procedure(aBlocking: Boolean);
+
+procedure SetWorkerBlockingHook(aHook: TWorkerBlockingHook);
+
 implementation
 
 {$ifdef MSWindows}
@@ -624,10 +632,30 @@ begin
     Raise ESyncObjectException.CreateFmt(SErrEventCreateFailed,['']);
 end;
 
+var
+  WorkerBlockingHook: TWorkerBlockingHook;
+
+procedure SetWorkerBlockingHook(aHook: TWorkerBlockingHook);
+begin
+  WorkerBlockingHook:=aHook;
+end;
+
 function THandleObject.WaitFor(Timeout : Cardinal) : TWaitResult;
 
 begin
-  Result := TWaitResult(basiceventWaitFor(Timeout, Handle));
+  // Timeout 0 is a poll. A pool worker blocked for real work must hand the
+  // pool to someone who can still run; the pool's own queue wait opts out.
+  if (Timeout<>0) and Assigned(WorkerBlockingHook) then
+    begin
+    WorkerBlockingHook(True);
+    try
+      Result := TWaitResult(basiceventWaitFor(Timeout, Handle));
+    finally
+      WorkerBlockingHook(False);
+    end;
+    end
+  else
+    Result := TWaitResult(basiceventWaitFor(Timeout, Handle));
   if Result = wrError then
 {$IFDEF OS2}
     FLastError := PLocalEventRec (Handle)^.FLastError;

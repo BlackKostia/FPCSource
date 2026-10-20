@@ -206,7 +206,13 @@ type
       MaxCPUUsage  = 95;        // CPU usage % at which we stop threads.
       MinCPUUsage  = 80;        // CPU usage % below which we add threads.
       NumCPUUsageSamples = 10;  // Number of samples for average CPU usage
-      MaxThreadsPerCPU = 2;     // Max threads per CPU, used to determine MaxThreads.
+      // One worker per CPU. Two per CPU made idle threads fight over the queue
+      // spin lock on micro-tasks (bench06) without helping the CPU-bound benches.
+      MaxThreadsPerCPU = 1;
+      // Workers blocked in a wait do not count against MaxThreads, so a task
+      // that waits for queued work cannot starve the pool. At most this many
+      // times MaxThreads are added for blocked workers.
+      MaxBlockedThreadsFactor = 4;
       ThreadToRequestRatio = 8; // Number of requests per thread.
       IdleTimeout = 40 * 1000;  // Idle timeout
       MonitorThreadDelay = 500; // Delay between ticks
@@ -220,6 +226,10 @@ type
     procedure UnLockQueue;
     procedure WaitForThreads;
     procedure WorkQueued;
+    // A worker that is about to block, or that has queued replicas onto its
+    // own local queue, will not drain the batch. Wake one sleeper (the posted
+    // wake was already consumed) or grow the pool.
+    procedure ReleaseSleeper;
   Private
     FInteractive: Boolean;
     FOnThreadStart: TProcThread;
@@ -237,6 +247,9 @@ type
     FAvgCPUUsage : Integer;  // Average CPU usage in %
     FRequestCount : Integer; // Number of work items in queue
     FPreviousRequestCount : Integer; // During monitor check, this is used to determine whether the number of request grows/shrinks
+    FWakePosted : Integer; // 1 once a sleeper has been signalled for the current batch
+    FBlockedThreads : Integer; // Workers blocked in a wait outside of the pool queue
+    FRecruitCount : Integer; // Counts task starts, to recruit extra workers rarely
     FThreadCreationAt : Int64; // Tick at which the last thread was created.
     FRetireEvent : TEvent;
     FQueueLock : TSpinlock;
@@ -361,14 +374,11 @@ type
     Protected
     const
       MaxDelay = RetireDelay * 60;
-      MaxCheckWaitTime = MaxInt div 2;
     private
-      FCheckWaitTime : Integer;
       FIdle: Boolean;
       FWorkQueue: TWorkStealingQueueThreadPoolWorkItem;
       FWorkException : Exception;
       FPoolRetireEvent : TEvent; // owned by pool!
-      procedure AdjustWaitTime;
       procedure WrapExecute(var aItem: IThreadPoolWorkItem);
     protected
       function SuspendWork: Boolean;
@@ -377,7 +387,6 @@ type
       procedure Execute; override;
       procedure PushLocalWorkToGlobal;
       property WorkQueue: TWorkStealingQueueThreadPoolWorkItem read FWorkQueue;
-      Property CheckWaitTime : Integer Read FCheckWaitTime;
     public
       constructor Create(aThreadPool: TThreadPool);
       destructor Destroy; override;
@@ -428,6 +437,9 @@ type
     procedure FreeMonitorThread;
   protected
     class threadvar QueueThread : TQueueWorkerThread;
+    // Set while this worker waits on the pool queue, so the blocking hook
+    // does not try to replace a thread that is already the idle waiter.
+    class threadvar FBlockingFromPool: Boolean;
     class var Caches : TObjectCaches;
     // Queue management.
     procedure RegisterWorkerThread(aThread: TQueueWorkerThread);
@@ -693,6 +705,7 @@ type
     FExceptionClass : ExceptClass;
     FExceptionMessage : string;
     procedure OnCancelToken(Sender: TObject);
+    function EnsureDoneEvent(out aAlreadyDone: Boolean): TLightweightEvent;
     function GetDoneEvent: TLightweightEvent;
   protected
     FException: TObject;
@@ -2483,13 +2496,33 @@ begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.WorkQueued','enter');{$ENDIF USE_THREADLOG}
   AtomicIncrement(FRequestCount);
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.WorkQueued','Queueing work (Requests: %d)',[FRequestCount]);{$ENDIF USE_THREADLOG}
-  DoEventSignal:=FIdleThreads>=FRequestCount;
-  {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.WorkQueued','DoEventSignal %s (%d>%d)',[BToS(DoEventSignal),FIdleThreads,FRequestCount]);{$ENDIF USE_THREADLOG}
+  // One posted wake covers a whole batch. Signalling every item wakes a
+  // sleeper per task and the producer spends the run in the event mutex.
+  // Auto-reset delivers that wake to a single thread, which then drains.
+  DoEventSignal:=(FIdleThreads>0) and (AtomicCmpExchange(FWakePosted,1,0)=0);
+  {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.WorkQueued','DoEventSignal %s (idle %d, requests %d)',[BToS(DoEventSignal),FIdleThreads,FRequestCount]);{$ENDIF USE_THREADLOG}
   if DoEventSignal then
-    FQueueEvent.SetEvent
-  else
+    FQueueEvent.SetEvent;
+  if FIdleThreads<FRequestCount then
     GrowPool;
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.WorkQueued','leave');{$ENDIF USE_THREADLOG}
+end;
+
+procedure TThreadPool.ReleaseSleeper;
+begin
+  if FRequestCount<=0 then
+    exit;
+  // The caller is leaving the drain loop. A fresh recruit budget lets the
+  // woken worker pull more sleepers in; the previous section may have spent it.
+  AtomicExchange(FRecruitCount,0);
+  if FIdleThreads>0 then
+    begin
+    AtomicExchange(FWakePosted,0);
+    if AtomicCmpExchange(FWakePosted,1,0)=0 then
+      FQueueEvent.SetEvent;
+    end;
+  if FIdleThreads<FRequestCount then
+    GrowPool;
 end;
 
 procedure TThreadPool.GrowPool;
@@ -2509,12 +2542,18 @@ procedure TThreadPool.GrowPool;
 
 Var
   DoGrow,NeedMinimum,IdleDeficit,HaveRoom : Boolean;
+  Blocked : Integer;
 
 begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GrowPool','Enter');{$ENDIF USE_THREADLOG}
   NeedMinimum:=(FThreadCount<FMinThreads);
   IdleDeficit:=(FIdleThreads<FRequestCount);
-  HaveRoom:=(FThreadCount<FMaxThreads);
+  // A blocked worker does not run queued work: the work it waits for may be
+  // behind it in the queue. Give it a stand-in beyond MaxThreads.
+  Blocked:=FBlockedThreads;
+  if Blocked>MaxBlockedThreadsFactor*FMaxThreads then
+    Blocked:=MaxBlockedThreadsFactor*FMaxThreads;
+  HaveRoom:=(FThreadCount<FMaxThreads+Blocked);
   DoGrow:=NeedMinimum or (IdleDeficit and HaveRoom);
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GrowPool','DoGrow: %s, NeedMinimum: %s, IdleDeficit: %s, HaveRoom: %s',[BToS(DoGrow),BToS(NeedMinimum),BToS(IdleDeficit),BToS(HaveRoom)]);{$ENDIF USE_THREADLOG}
   if Not DoGrow then
@@ -2682,7 +2721,10 @@ var
 
 begin
   FRetireEvent:=TLightweightEvent.Create;
-  FQueueEvent:=TEvent.Create;
+  // Auto-reset. A manual-reset event wakes every idle worker; they then fight
+  // over the queue lock. One signal wakes one sleeper. A worker that takes
+  // work signals again when more requests remain (SignalExecuting).
+  FQueueEvent:=TEvent.Create(nil,False,False,'');
   FQueueLock:=TSpinLock.Create(False);
   FWorkQueue:=TWorkItemQueue.Create;
   PC:=TThread.ProcessorCount;
@@ -2694,6 +2736,9 @@ begin
   // Statistics for the pool growth heuristics, read without a lock.
   VgBenignRace(@FAvgCPUUsage,SizeOf(FAvgCPUUsage));
   VgBenignRace(@FThreadCreationAt,SizeOf(FThreadCreationAt));
+  VgBenignRace(@FWakePosted,SizeOf(FWakePosted));
+  VgBenignRace(@FBlockedThreads,SizeOf(FBlockedThreads));
+  VgBenignRace(@FRecruitCount,SizeOf(FRecruitCount));
   {$ENDIF}
   FMinThreads:=PC div 4;
   if FMinThreads<2 then
@@ -2813,12 +2858,27 @@ end;
 
 procedure TThreadPool.SignalExecuting(aThread : TQueueWorkerThread);
 
+var
+  N: Integer;
+
 begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.SignalExecuting','Enter (Requests left: %d, Idle: %d)',[FRequestCount,FIdleThreads]);{$ENDIF USE_THREADLOG}
   if aThread.Idle then
     AtomicDecrement(FIdleThreads);
   aThread.Idle:=False;
   AtomicDecrement(FRequestCount);
+  // The first tasks, and then every 256th, may recruit one more sleeper
+  // when work is still queued. A micro-task burst must not signal per item.
+  if (FRequestCount>0) and (FIdleThreads>0) then
+    begin
+    N:=AtomicIncrement(FRecruitCount);
+    if (N<=TThread.ProcessorCount) or ((N and 255)=0) then
+      begin
+      AtomicExchange(FWakePosted,0);
+      if AtomicCmpExchange(FWakePosted,1,0)=0 then
+        FQueueEvent.SetEvent;
+      end;
+    end;
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.SignalExecuting','Leave (Requests left: %d, Idle: %d)',[FRequestCount,FIdleThreads]);{$ENDIF USE_THREADLOG}
 end;
 
@@ -2912,15 +2972,15 @@ begin
 end;
 
 // Steal an item from another thread's local queue.
-// If more work is pending, wake another idle thread: a thread that resets
-// FQueueEvent may consume a signal that was meant for several items.
+// If more work is pending, wake one idle thread. The queue event is
+// auto-reset, so a signal is not remembered for every queued item.
 
 function TThreadPool.TryGetStolenWorkItem(aThread: TQueueWorkerThread; out Itm: IThreadPoolWorkItem): Boolean;
 
 begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TryGetStolenWorkItem','Checking other queues');{$ENDIF USE_THREADLOG}
   Result:=GetWorkItemFromQueues(aThread.WorkQueue,Itm);
-  if Result and (FRequestCount>1) then
+  if Result and (FRequestCount>1) and (AtomicCmpExchange(FWakePosted,1,0)=0) then
     FQueueEvent.SetEvent;
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TryGetStolenWorkItem','Got work: %s',[BToS(Result)]);{$ENDIF USE_THREADLOG}
 end;
@@ -2946,91 +3006,122 @@ begin
   end;
 end;
 
-// if there is work, return it in Itm.
-// If there is no work, return True if the thread should continue, False if it should terminate.
+// If there is work, return it in Itm and True.
+// If the thread should stop, return False.
+// Otherwise keep sleeping on FQueueEvent. Returning True without an item would
+// send Execute straight back into the queue scan, and idle workers would spin
+// on the queue locks. An empty wake-up is not progress toward retirement:
+// the thread sleeps again. It stops only after a real idle stretch.
 
 function TThreadPool.GetWorkItemForThread(aThread: TQueueWorkerThread; out Itm: IThreadPoolWorkItem): Boolean;
 
-Var
-  CheckThreadQueues : Boolean;
+var
+  IdleSince: QWord;
+  SawIdle: Boolean;
+  Elapsed, Limit: QWord;
+  WaitMs: Integer;
+  WaitRes: TWaitResult;
 
 begin
-  Result:=True;
-  if FShutDown and (FRequestCount=0) then
+  Itm:=nil;
+  SawIdle:=False;
+  IdleSince:=0;
+  while True do
     begin
-    {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Shutting down, no work -> quit');{$ENDIF USE_THREADLOG}
-    Exit(False);
-    end;
-  if TryDequeueGlobal(Itm) then
-    Exit(True); // We got work, do not stop thread
-  // No local work, check global
-  if not aThread.Idle then
-    begin
-    {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','marking thread %d as idle',[PtrInt(aThread.ThreadID)]);{$ENDIF USE_THREADLOG}
-    AtomicIncrement(FIdleThreads);
-    aThread.Idle:=True;
-    end;
-  // FQueueEvent is a manual-reset event. Reset it *before* looking at the other
-  // threads' local queues: work pushed after the check sets it again, so no
-  // wake-up is lost. Checking before sleeping is needed because work may have
-  // been queued while this thread was starting, when WorkQueued grew the pool
-  // instead of signalling the event.
-  if FShutdown then
-    Exit(False); // Stop thread
-  FQueueEvent.ResetEvent;
-  if FShutdown then
-    begin
-    FQueueEvent.SetEvent;
-    Exit(False); // Stop thread
-    end;
-  // Look at the global queue again: an item queued between the check above
-  // and ResetEvent signalled the event, and the reset has just cleared that
-  // signal. Without this check the item waited until CheckWaitTime (up to
-  // IdleTimeout, 40 s) expired.
-  if TryDequeueGlobal(Itm) then
-    Exit(True); // We got work, do not stop thread
-  if TryGetStolenWorkItem(aThread,Itm) then
-    Exit(True); // We got work, do not stop thread
-  {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Waiting for queue event (%d ms.)',[aThread.CheckWaitTime]);{$ENDIF USE_THREADLOG}
-  CheckThreadQueues:=(FQueueEvent.WaitFor(aThread.CheckWaitTime)<>wrTimeout);
-  {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Work queued triggered: %s',[BToS(CheckThreadQueues)]);{$ENDIF USE_THREADLOG}
-  if FShutdown then
-    begin
-    {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Shutdown -> quit');{$ENDIF USE_THREADLOG}
-    Exit(False); // Stop thread
-    end;
-  if CheckThreadQueues and TryGetStolenWorkItem(aThread,Itm) then
-    Exit(True); // We got work, do not stop thread
-  if FShutdown then
-    begin
-    {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Shutdown -> quit');{$ENDIF USE_THREADLOG}
-    Exit(False); // Stop thread
-    end;
-  // Nothing to do. Adjust waiting time or stop thread.
-  if (FThreadCount > FMinThreads+1) then
-    begin
-    // The existing threads can handle the work ?
-    if (FRequestCount < ThreadToRequestRatio * (FThreadCount-1)) then
-      // we already increased wait time sufficiently ?
+    if FShutdown and (FRequestCount=0) then
       begin
-      if (aThread.CheckWaitTime>EnoughThreadsTimeOut) then
-        begin
-        {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Enough threads to handle workload -> quit');{$ENDIF USE_THREADLOG}
-        Exit(False); // Stop thread
-        end;
+      {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Shutting down, no work -> quit');{$ENDIF USE_THREADLOG}
+      // Auto-reset wakes one waiter. Hand the shutdown signal on.
+      FQueueEvent.SetEvent;
+      Exit(False);
       end;
-    aThread.AdjustWaitTime;
-    end
-  else  if (FRequestCount<=0) then
-    // We've got one thread and no requests
-    begin
-    // if we waited long enough...
-    if (aThread.CheckWaitTime>NoRequestsTimeOut) then
+    if TryDequeueGlobal(Itm) then
+      Exit(True); // We got work, do not stop thread
+    // Mark idle before the second look, so work queued from here on sees a
+    // sleeper and sets the event. Do not reset that event: it is auto-reset,
+    // and clearing it would drop the wake-up.
+    if not aThread.Idle then
       begin
-      {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','One thread, waiting quite long -> quit');{$ENDIF USE_THREADLOG}
+      {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','marking thread %d as idle',[PtrInt(aThread.ThreadID)]);{$ENDIF USE_THREADLOG}
+      AtomicIncrement(FIdleThreads);
+      aThread.Idle:=True;
+      end;
+    // One sample for this idle stretch. Counting wake-ups retired a thread
+    // after three empty signals and the pool replaced it.
+    if not SawIdle then
+      begin
+      IdleSince:=GetTickCount64;
+      SawIdle:=True;
+      end;
+    if FShutdown then
+      begin
+      FQueueEvent.SetEvent;
       Exit(False); // Stop thread
       end;
-    aThread.AdjustWaitTime;
+    // Work may have arrived while this thread was starting, when WorkQueued
+    // grew the pool instead of signalling. Look again before sleeping.
+    if TryDequeueGlobal(Itm) then
+      Exit(True); // We got work, do not stop thread
+    if TryGetStolenWorkItem(aThread,Itm) then
+      Exit(True); // We got work, do not stop thread
+    // Retire only on elapsed idle time, and only in the same cases as before:
+    // surplus threads with little queued work, or no requests at all.
+    // While requests are waiting, sleep a slice and look again; do not retire.
+    if (FThreadCount>FMinThreads+1) and
+       (FRequestCount<ThreadToRequestRatio*(FThreadCount-1)) then
+      Limit:=EnoughThreadsTimeOut
+    else if FRequestCount<=0 then
+      Limit:=NoRequestsTimeOut
+    else
+      Limit:=0;
+    // No retirement while work is outstanding: sleep until the next signal.
+    // A timed wait would call clock_gettime on every wake-up.
+    if Limit=0 then
+      WaitMs:=Integer(INFINITE)
+    else
+      begin
+      Elapsed:=GetTickCount64-IdleSince;
+      if Elapsed>=Limit then
+        begin
+        {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Idle long enough -> quit');{$ENDIF USE_THREADLOG}
+        Exit(False);
+        end;
+      WaitMs:=Integer(Limit-Elapsed);
+      if WaitMs<1 then
+        WaitMs:=1;
+      end;
+    // Drop the posted-wake mark before the last look. An item queued after
+    // this can set the mark and the event again, so the wait cannot miss it.
+    AtomicExchange(FWakePosted,0);
+    if TryDequeueGlobal(Itm) then
+      Exit(True);
+    if TryGetStolenWorkItem(aThread,Itm) then
+      Exit(True);
+    {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Waiting for queue event (%d ms.)',[WaitMs]);{$ENDIF USE_THREADLOG}
+    FBlockingFromPool:=True;
+    try
+      WaitRes:=FQueueEvent.WaitFor(WaitMs);
+    finally
+      FBlockingFromPool:=False;
+    end;
+    if WaitRes=wrTimeout then
+      begin
+      if Limit<>0 then
+        begin
+        Elapsed:=GetTickCount64-IdleSince;
+        if Elapsed>=Limit then
+          begin
+          {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Idle long enough -> quit');{$ENDIF USE_THREADLOG}
+          Exit(False);
+          end;
+        end;
+      end
+    else if FShutdown then
+      begin
+      {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GetWorkItemForThread','Shutdown -> quit');{$ENDIF USE_THREADLOG}
+      FQueueEvent.SetEvent;
+      Exit(False); // Stop thread
+      end;
     end;
 end;
 
@@ -3488,14 +3579,6 @@ begin
   ExecuteWorkItem(aItem);
 end;
 
-procedure TThreadPool.TQueueWorkerThread.AdjustWaitTime;
-begin
-  if FCheckWaitTime < MaxCheckWaitTime then
-    FCheckWaitTime:=(FCheckWaitTime *2)
-  else
-    FCheckWaitTime:=IdleTimeout;
-end;
-
 procedure TThreadPool.TQueueWorkerThread.Execute;
 
 var
@@ -3504,7 +3587,6 @@ var
 begin
   // Set event
   inherited Execute;
-  FCheckWaitTime:=IdleTimeout;
   ThreadPool.RegisterWorkerThread(Self);
   try
     While not Terminated do
@@ -3523,9 +3605,14 @@ begin
         begin
         {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Calling WrapExecute. Idle: %s',[BToS(Idle)]);{$ENDIF USE_THREADLOG}
         WrapExecute(Itm);
-        FCheckWaitTime:=IdleTimeout;
         {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Called WrapExecute. Idle: %s',[BToS(Idle)]);{$ENDIF USE_THREADLOG}
         end;
+      // CheckShouldTerminate reads the clock (GetTickCount64, a system call
+      // here) after every item. Checking only every 256th item was measured:
+      // bench06 (a million micro-tasks) became slower, 2.0-2.6 s instead of
+      // 1.8 s, with more CPU, because workers then drain the queue faster and
+      // contend with the producer on the queue spin lock. Keep the check per
+      // item until the queues no longer depend on such pacing.
       if ThreadPool.CheckShouldTerminate(Self) then
         begin
         {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Threadpool said to stop; terminating');{$ENDIF USE_THREADLOG}
@@ -3787,9 +3874,33 @@ begin
   Result:=(FStateFlags*StartedStates) = [TOptionStateFlag.Started];
 end;
 
-function TTask.GetDoneEvent: TLightweightEvent;
+function TTask.EnsureDoneEvent(out aAlreadyDone: Boolean): TLightweightEvent;
 begin
-  Result:=FDoneEvent;
+  // Created only for a waiter. Fire-and-forget tasks never allocate it.
+  // The lock pairs this with SetComplete, so a completion cannot miss the event
+  // and a waiter cannot miss a completion that already happened.
+  LockState;
+  try
+    if FDoneEvent=nil then
+      FDoneEvent:=TEvent.Create;
+    Result:=FDoneEvent;
+    aAlreadyDone:=FDone;
+  finally
+    UnLockState;
+  end;
+end;
+
+function TTask.GetDoneEvent: TLightweightEvent;
+
+var
+  Done: Boolean;
+
+begin
+  Result:=EnsureDoneEvent(Done);
+  // Manual-reset. A caller that waits on the event after the task finished
+  // must observe it as signaled.
+  if Done then
+    Result.SetEvent;
 end;
 
 function TTask.UpdateStateAtomic(aNewState: TOptionStateFlags; aInvalidStates: TOptionStateFlags): Boolean;
@@ -3972,14 +4083,19 @@ end;
 
 procedure TTask.SetComplete;
 
+var
+  Ev: TLightweightEvent;
+
 begin
   LockState;
   try
     FDone:=True;
+    Ev:=FDoneEvent;
   finally
     UnLockState;
   end;
-  FDoneEvent.SetEvent;
+  if Assigned(Ev) then
+    Ev.SetEvent;
 end;
 
 procedure TTask.AddChild;
@@ -4277,6 +4393,16 @@ begin
     Sub.Start;
     {$IFDEF USE_THREADLOG}ThreadLog('TTask.ExecuteReplicates','Started replica');{$ENDIF USE_THREADLOG}
     end;
+  // Replicas sit on this worker's local queue. The recruit budget may already
+  // have been spent by an earlier parallel section on this pool; give this
+  // section a fresh one and wake a sleeper. That sleeper recruits the rest
+  // as it starts work. A micro-task burst never comes through here.
+  if Assigned(TThreadPool.QueueThread) and
+     (TThreadPool.QueueThread.ThreadPool=FParams.Pool) then
+    begin
+    AtomicExchange(FParams.Pool.FRecruitCount,0);
+    FParams.Pool.ReleaseSleeper;
+    end;
   ReplicaCallUserCode;
 end;
 
@@ -4378,7 +4504,9 @@ function TTask.Wait(aTimeout: Cardinal): Boolean;
 
 var
   NeedSync : Boolean;
+  AlreadyDone : Boolean;
   Watch : TStopWatch;
+  Ev : TLightweightEvent;
 
 begin
   {$IFDEF USE_THREADLOG}ThreadLog('TTask.Wait','Enter (atimeout: %d) ',[aTimeout]);{$ENDIF USE_THREADLOG}
@@ -4403,7 +4531,20 @@ begin
   if Not NeedSync then
     begin
     {$IFDEF USE_THREADLOG}ThreadLog('TTask.Wait','Waiting for done event (%d)',[aTimeout]);{$ENDIF USE_THREADLOG}
-    Result:=DoneEvent.WaitFor(aTimeout)<>wrTimeout;
+    // A task that this worker queued and nobody has started yet sits on its
+    // own local queue: run it here instead of blocking for it (as
+    // DoWaitForAll does), so waiting for a child cannot starve the pool.
+    if aTimeout=INFINITE then
+      InternalExecuteNow;
+    Ev:=EnsureDoneEvent(AlreadyDone);
+    // Nested wait: this worker cannot run the task it is waiting for.
+    if not AlreadyDone and Assigned(TThreadPool.QueueThread) and
+       (TThreadPool.QueueThread.ThreadPool=FParams.Pool) then
+      FParams.Pool.ReleaseSleeper;
+    if AlreadyDone then
+      Result:=True
+    else
+      Result:=Ev.WaitFor(aTimeout)<>wrTimeout;
     if Result then
       RunChecks;
     end
@@ -4473,7 +4614,6 @@ begin
   if Not MarkAsStarted then
     Exit;
   try
-    GetDoneEvent;
     QueueEvents;
   except
     Complete(False);
@@ -4707,7 +4847,7 @@ begin
   if TCreateFlag.Replica in aParams.CreateFlags then
     Include(FStateFlags, TOptionStateFlag.Replica);
   FStateLock:=TSpinLock.Create(False);
-  FDoneEvent:=TEvent.Create;
+  // FDoneEvent stays nil until somebody waits. See EnsureDoneEvent.
   {$IFDEF FPC_VALGRIND}
   // FStateFlags is written under FStateLock only, but read without the lock
   // in several places (e.g. GetIsComplete, the fast path of Wait).
@@ -4771,6 +4911,9 @@ begin
   Event:=TEvent.Create;
   CompleteProc:=@TaskCompleted;
   try
+    if Assigned(TThreadPool.QueueThread) and
+       (TThreadPool.QueueThread.ThreadPool=(aTasks[0] as TTask).FParams.Pool) then
+      TThreadPool.QueueThread.ThreadPool.ReleaseSleeper;
     for TaskI in aTasks do
       begin
       Task:=TaskI as TTask;
@@ -7074,11 +7217,37 @@ end;
 
 Procedure DoneThreading;
 begin
+  SetWorkerBlockingHook(nil);
   FreeAndNil(TThreadPool.FDefaultPool);
   FreeAndNil(TThreadPool.Caches);
 end;
 
+procedure PoolWorkerBlocking(aBlocking: Boolean);
+
+var
+  Pool: TThreadPool;
+
+begin
+  if TThreadPool.FBlockingFromPool then
+    exit;
+  if not Assigned(TThreadPool.QueueThread) then
+    exit;
+  Pool:=TThreadPool.QueueThread.ThreadPool;
+  if not Assigned(Pool) then
+    exit;
+  // Called in pairs around one wait of this thread (a blocked thread cannot
+  // start another wait), with the same pool both times.
+  if aBlocking then
+    begin
+    AtomicIncrement(Pool.FBlockedThreads);
+    Pool.ReleaseSleeper;
+    end
+  else
+    AtomicDecrement(Pool.FBlockedThreads);
+end;
+
 Initialization
+  SetWorkerBlockingHook(@PoolWorkerBlocking);
   InitThreading;
 Finalization
   DoneThreading;

@@ -331,6 +331,12 @@ type
     procedure TestContinuationOfFastFutureRuns;
     // A failed ThreadCheck in a worker thread must be recorded
     procedure TestThreadCheckRecordsFailure;
+    // More tasks than pool threads, each waiting for a child task it started:
+    // the waiting worker runs its own queued child instead of blocking forever
+    procedure TestNestedWaitDoesNotStarve;
+    // All workers block on an event that a task still in the queue sets: the
+    // pool adds a thread beyond its maximum for the blocked workers
+    procedure TestBlockedWorkersGrowPool;
   end;
 
   { TTestTask }
@@ -1899,6 +1905,82 @@ begin
     AssertTrue('Task finished', T.Wait(5000));
     end;
   AssertTrue(Format('Slowest start took %d ms', [Slowest]), Slowest < 2000);
+end;
+
+procedure TTestThreading.TestNestedWaitDoesNotStarve;
+const
+  ParentCount = 4;
+var
+  Parents: array of ITask;
+  ChildrenDone: LongInt;
+  Pool: TThreadPool;
+  I: Integer;
+begin
+  Pool := MyThreadPool;
+  AssertTrue('Min threads', Pool.SetMinWorkerThreads(1));
+  AssertTrue('Max threads', Pool.SetMaxWorkerThreads(2));
+  ChildrenDone := 0;
+  SetLength(Parents, ParentCount);
+  for I := 0 to ParentCount - 1 do
+    Parents[I] := TTask.Run(procedure
+      var
+        Child: ITask;
+      begin
+        Child := TTask.Run(procedure
+          begin
+          Sleep(5);
+          InterlockedIncrement(ChildrenDone);
+          end, Pool);
+        Child.Wait;
+      end, Pool);
+  AssertTrue('Parents finished', TTask.WaitForAll(Parents, 20000));
+  AssertEquals('Children done', ParentCount, ChildrenDone);
+end;
+
+procedure TTestThreading.TestBlockedWorkersGrowPool;
+const
+  WaiterCount = 2;
+var
+  Tasks: array of ITask;
+  Ev: TEvent;
+  Started, Signaled: LongInt;
+  Pool: TThreadPool;
+  I: Integer;
+  T0: QWord;
+begin
+  Pool := MyThreadPool;
+  AssertTrue('Min threads', Pool.SetMinWorkerThreads(1));
+  AssertTrue('Max threads', Pool.SetMaxWorkerThreads(WaiterCount));
+  Ev := TEvent.Create(nil, True, False, '');
+  try
+    Started := 0;
+    Signaled := 0;
+    SetLength(Tasks, WaiterCount + 1);
+    T0 := GetTickCount64;
+    for I := 0 to WaiterCount - 1 do
+      Tasks[I] := TTask.Run(procedure
+        begin
+        InterlockedIncrement(Started);
+        if Ev.WaitFor(15000) = wrSignaled then
+          InterlockedIncrement(Signaled);
+        end, Pool);
+    // Every worker of the pool is blocked before the setter is queued
+    while InterlockedCompareExchange(Started, 0, 0) < WaiterCount do
+      begin
+      if GetTickCount64 - T0 > 10000 then
+        Fail('Waiters did not start');
+      Sleep(1);
+      end;
+    Tasks[WaiterCount] := TTask.Run(procedure
+      begin
+      Ev.SetEvent;
+      end, Pool);
+    AssertTrue('Tasks finished', TTask.WaitForAll(Tasks, 20000));
+    AssertEquals('Waiters signaled', WaiterCount, Signaled);
+    AssertTrue(Format('Setter ran after %d ms', [GetTickCount64 - T0]), GetTickCount64 - T0 < 10000);
+  finally
+    Ev.Free;
+  end;
 end;
 
 procedure TTestThreading.TestContinuationOfFastFutureRuns;
