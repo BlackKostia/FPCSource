@@ -6,47 +6,47 @@
 <style>
   @page {
     size: A4 portrait;
-    margin: 1.0cm 0.9cm 1.0cm 0.9cm;
+    margin: 0.5cm 0.7cm 0.5cm 0.7cm;
   }
   body {
     font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
-    line-height: 1.35;
+    line-height: 1.20;
     color: #1e293b;
     background-color: #ffffff;
-    font-size: 9pt;
+    font-size: 8.2pt;
   }
   h1 {
     color: #0f172a;
-    font-size: 16pt;
-    border-bottom: 2.5px solid #2563eb;
-    padding-bottom: 4px;
+    font-size: 14pt;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 2px;
     margin-top: 0;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
   }
   h2 {
     color: #1e3a8a;
-    font-size: 12pt;
+    font-size: 10pt;
     border-bottom: 1.5px solid #cbd5e1;
-    padding-bottom: 3px;
-    margin-top: 10px;
-    margin-bottom: 6px;
+    padding-bottom: 1.5px;
+    margin-top: 4px;
+    margin-bottom: 2px;
   }
   h3 {
     color: #1d4ed8;
-    font-size: 10.5pt;
-    margin-top: 8px;
-    margin-bottom: 4px;
+    font-size: 8.8pt;
+    margin-top: 3px;
+    margin-bottom: 2px;
   }
   p {
     margin-top: 0;
-    margin-bottom: 5px;
+    margin-bottom: 2.5px;
     text-align: justify;
   }
   .lead {
-    font-size: 9.5pt;
+    font-size: 8.6pt;
     color: #334155;
     font-weight: 500;
-    margin-bottom: 8px;
+    margin-bottom: 3px;
   }
   .meta-table {
     width: 100%;
@@ -54,11 +54,11 @@
     background-color: #f8fafc;
     border: 1px solid #cbd5e1;
     border-left: 4px solid #2563eb;
-    margin-bottom: 10px;
-    font-size: 8.5pt;
+    margin-bottom: 4px;
+    font-size: 7.6pt;
   }
   .meta-table td {
-    padding: 4px 8px;
+    padding: 2px 5px;
     border: none;
     color: #334155;
   }
@@ -71,28 +71,28 @@
     width: 100%;
     max-width: 100%;
     border-collapse: collapse;
-    margin: 6px 0 8px 0;
-    font-size: 8pt;
+    margin: 2px 0 3px 0;
+    font-size: 7.3pt;
     table-layout: fixed;
-    border: 1.5px solid #475569;
+    border: 1.2px solid #475569;
   }
   table.report-table th {
     background-color: #1e3a8a;
     color: #ffffff;
     font-weight: bold;
     border: 1px solid #475569;
-    padding: 4px 3px;
+    padding: 2px 2px;
     text-align: center;
     vertical-align: middle;
     word-wrap: break-word;
   }
   table.report-table td {
     border: 1px solid #cbd5e1;
-    padding: 3px 4px;
+    padding: 1.8px 2.5px;
     vertical-align: middle;
     text-align: center;
     word-wrap: break-word;
-    line-height: 1.25;
+    line-height: 1.12;
   }
   table.report-table td.text-left {
     text-align: left;
@@ -108,9 +108,9 @@
 
   .badge {
     display: inline-block;
-    padding: 1px 4px;
+    padding: 1px 3px;
     border-radius: 3px;
-    font-size: 7pt;
+    font-size: 6.5pt;
     font-weight: bold;
     color: white;
   }
@@ -121,20 +121,29 @@
   
   .mono {
     font-family: 'Liberation Mono', 'DejaVu Sans Mono', Courier, monospace;
-    font-size: 7.5pt;
+    font-size: 6.9pt;
   }
   ul, ol {
-    margin-top: 3px;
-    margin-bottom: 6px;
-    padding-left: 18px;
+    margin-top: 1.5px;
+    margin-bottom: 3px;
+    padding-left: 15px;
   }
   li {
-    margin-bottom: 3px;
+    margin-bottom: 1px;
   }
   .conclusion-text {
-    font-size: 8.5pt;
-    margin-bottom: 8px;
-    line-height: 1.3;
+    font-size: 7.6pt;
+    margin-bottom: 3px;
+    line-height: 1.15;
+  }
+
+  .scheme-container {
+    text-align: center;
+    margin: 2px 0 2px 0;
+  }
+  .scheme-img {
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
   }
 </style>
 </head>
@@ -144,7 +153,7 @@
 <h1>Підсумковий звіт з навантажувального тестування багатопотоковості</h1>
 <p class="lead">Порівняльний архітектурний аналіз: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Free Pascal (FPC)</strong>, <strong>C# (.NET 8)</strong> та <strong>Python 3.12</strong></p>
 
-<table class="meta-table" cellpadding="4" cellspacing="0">
+<table class="meta-table" cellpadding="3" cellspacing="0">
   <tr>
     <td><strong>Апаратна платформа:</strong> 12-ядерний процесор x86_64, 16 ГБ RAM, ОС Linux Mint 22.3 (Ubuntu 24.04 LTS &quot;Noble&quot;).</td>
   </tr>
@@ -172,10 +181,14 @@
   <li><strong><code>TThreadPool</code> та <code>TTask</code></strong>: Легковаговий пул потоків, що розподіляє мільйони підзадач на фіксовану кількість ядер процесора без падіння системи через ліміт дескрипторів ОС.</li>
 </ul>
 
-<h2>3. Методологія вимірювання та метрики</h2>
+<h2>3. Методологія вимірювання та математичні формули</h2>
 <p>
-Для кожного тесту фіксувалися 6 ключових показників: <strong>Wall Clock Time</strong> (загальний час), <strong>Throughput</strong> (продуктивність операцій/сек), <strong>User CPU Time</strong> (корисний час розрахунків процесора), <strong>System CPU Time</strong> (час блокувань у ядрі Linux), <strong>Max RSS</strong> (пікова оперативна пам'ять) та <strong>Checksum</strong> (гарантія 100% математичної еквівалентності та відсутності втрати даних).
+Для кожного тесту фіксувалися 6 ключових системних показників через профайлер ядра Linux. Пропускна здатність ($T$), співвідношення навантаження ядра ($R_{\text{cpu}}$) та паралельна ефективність мультипотоковості ($\eta$) обраховувалися за наведеними нижче формулами:
 </p>
+
+<div class="scheme-container">
+  <img src="images/formula_metrics_ua.png" class="scheme-img" alt="Формули системного профілювання" />
+</div>
 
 
 <!-- PAGE 2: ТЕСТИ 1 ТА 2 -->
@@ -186,7 +199,11 @@
 <strong>Сценарій:</strong> 12 воркерів на 12 ядрах CPU. 90% операцій (1.8 млн) — конкурентне читання котирувань під Reader-Writer Lock з розрахунком 30-ітераційного поліноміального ризик-хешу. 10% операцій (200 тис.) — монопольне оновлення ціни зі стрімінгом 200 000 подій у фоновий конвеєр.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test1_ua.png" class="scheme-img" alt="Схема архітектури Тесту 1" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 25%;">
     <col style="width: 16%;">
@@ -247,7 +264,11 @@
 <strong>Сценарій:</strong> Multi-Producer Multi-Consumer конвеєр: 6 генераторів транзакцій &rarr; Inbound Channel &rarr; 6 воркерів розрахунку комісій &rarr; Outbound Channel &rarr; 1 потік аудиту. Системне профілювання завантаження ядра Linux.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test2_ua.png" class="scheme-img" alt="Схема архітектури Тесту 2" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -327,12 +348,18 @@
 
 
 <!-- PAGE 3: ТЕСТИ 3 ТА 4 -->
-<h3 style="page-break-before: always; margin-top: 0;">ТЕСТ 3. Акторний граф конвеєра: DAG з Fan-Out / Fan-In (2 000 000 повідомлень)</h3>
+<h2 style="page-break-before: always; margin-top: 0;">Результати стрес-тестів: Тест 3 та Тест 4</h2>
+
+<h3>ТЕСТ 3. Акторний граф конвеєра: DAG з Fan-Out / Fan-In (2 000 000 повідомлень)</h3>
 <p>
 <strong>Сценарій:</strong> Топологія з 10 взаємопов'язаних акторів та 6 каналів: <code>4 Producers</code> &rarr; <code>IngestChannel</code> &rarr; <code>Router</code> &rarr; <code>4 Shard Channels</code> &rarr; <code>4 Workers</code> &rarr; <code>OutboundChannel</code> &rarr; <code>Aggregator</code>. Сумарно <strong>8 000 000 міжпотокових передач</strong>.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test3_ua.png" class="scheme-img" alt="Схема архітектури Тесту 3" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -401,7 +428,11 @@
 <strong>Сценарій:</strong> Моделювання дифузії на сітці 1000 &times; 2000 (2 млн комірок/фаза) крізь 50 послідовних lockstep фаз на 12 потоках. Перемикання подвійного буфера в атомарному <code>PostPhaseAction</code>.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test4_ua.png" class="scheme-img" alt="Схема архітектури Тесту 4" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -465,7 +496,11 @@
 <strong>Сценарій:</strong> 500 банківських рахунків, 12 потоків. 70% перевірок балансу, 20% поповнень/зняттів через CAS (<code>InterlockedCompareExchange64</code>), 10% переказів із захистом від Deadlock (впорядковане захоплення min(A, B) &rarr; max(A, B)).
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test5_ua.png" class="scheme-img" alt="Схема архітектури Тесту 5" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -524,7 +559,7 @@
 
 <h2>5. Зведена матриця та глобальні висновки</h2>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 30%;">
     <col style="width: 20%;">
@@ -572,7 +607,7 @@
     </tr>
     <tr>
       <td class="text-left"><strong>Ергономіка та безпека коду</strong></td>
-      <td><span class="badge badge-success">Сучасна</span> (0 покажчиків)</td>
+      <td><span class="badge badge-success">Сучасна</span> (0&nbsp;покажчиків)</td>
       <td><span class="badge badge-danger">+50..120% boilerplate</span></td>
       <td><span class="badge badge-success">Відмінна</span></td>
       <td><span class="badge badge-success">Лаконічна</span></td>

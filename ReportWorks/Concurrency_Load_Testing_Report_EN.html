@@ -6,47 +6,47 @@
 <style>
   @page {
     size: A4 portrait;
-    margin: 1.0cm 0.9cm 1.0cm 0.9cm;
+    margin: 0.5cm 0.7cm 0.5cm 0.7cm;
   }
   body {
     font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
-    line-height: 1.35;
+    line-height: 1.20;
     color: #1e293b;
     background-color: #ffffff;
-    font-size: 9pt;
+    font-size: 8.2pt;
   }
   h1 {
     color: #0f172a;
-    font-size: 16pt;
-    border-bottom: 2.5px solid #2563eb;
-    padding-bottom: 4px;
+    font-size: 14pt;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 2px;
     margin-top: 0;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
   }
   h2 {
     color: #1e3a8a;
-    font-size: 12pt;
+    font-size: 10pt;
     border-bottom: 1.5px solid #cbd5e1;
-    padding-bottom: 3px;
-    margin-top: 10px;
-    margin-bottom: 6px;
+    padding-bottom: 1.5px;
+    margin-top: 4px;
+    margin-bottom: 2px;
   }
   h3 {
     color: #1d4ed8;
-    font-size: 10.5pt;
-    margin-top: 8px;
-    margin-bottom: 4px;
+    font-size: 8.8pt;
+    margin-top: 3px;
+    margin-bottom: 2px;
   }
   p {
     margin-top: 0;
-    margin-bottom: 5px;
+    margin-bottom: 2.5px;
     text-align: justify;
   }
   .lead {
-    font-size: 9.5pt;
+    font-size: 8.6pt;
     color: #334155;
     font-weight: 500;
-    margin-bottom: 8px;
+    margin-bottom: 3px;
   }
   .meta-table {
     width: 100%;
@@ -54,11 +54,11 @@
     background-color: #f8fafc;
     border: 1px solid #cbd5e1;
     border-left: 4px solid #2563eb;
-    margin-bottom: 10px;
-    font-size: 8.5pt;
+    margin-bottom: 4px;
+    font-size: 7.6pt;
   }
   .meta-table td {
-    padding: 4px 8px;
+    padding: 2px 5px;
     border: none;
     color: #334155;
   }
@@ -71,28 +71,28 @@
     width: 100%;
     max-width: 100%;
     border-collapse: collapse;
-    margin: 6px 0 8px 0;
-    font-size: 8pt;
+    margin: 2px 0 3px 0;
+    font-size: 7.3pt;
     table-layout: fixed;
-    border: 1.5px solid #475569;
+    border: 1.2px solid #475569;
   }
   table.report-table th {
     background-color: #1e3a8a;
     color: #ffffff;
     font-weight: bold;
     border: 1px solid #475569;
-    padding: 4px 3px;
+    padding: 2px 2px;
     text-align: center;
     vertical-align: middle;
     word-wrap: break-word;
   }
   table.report-table td {
     border: 1px solid #cbd5e1;
-    padding: 3px 4px;
+    padding: 1.8px 2.5px;
     vertical-align: middle;
     text-align: center;
     word-wrap: break-word;
-    line-height: 1.25;
+    line-height: 1.12;
   }
   table.report-table td.text-left {
     text-align: left;
@@ -108,9 +108,9 @@
 
   .badge {
     display: inline-block;
-    padding: 1px 4px;
+    padding: 1px 3px;
     border-radius: 3px;
-    font-size: 7pt;
+    font-size: 6.5pt;
     font-weight: bold;
     color: white;
   }
@@ -121,30 +121,39 @@
   
   .mono {
     font-family: 'Liberation Mono', 'DejaVu Sans Mono', Courier, monospace;
-    font-size: 7.5pt;
+    font-size: 6.9pt;
   }
   ul, ol {
-    margin-top: 3px;
-    margin-bottom: 6px;
-    padding-left: 18px;
+    margin-top: 1.5px;
+    margin-bottom: 3px;
+    padding-left: 15px;
   }
   li {
-    margin-bottom: 3px;
+    margin-bottom: 1px;
   }
   .conclusion-text {
-    font-size: 8.5pt;
-    margin-bottom: 8px;
-    line-height: 1.3;
+    font-size: 7.6pt;
+    margin-bottom: 3px;
+    line-height: 1.15;
+  }
+
+  .scheme-container {
+    text-align: center;
+    margin: 2px 0 2px 0;
+  }
+  .scheme-img {
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
   }
 </style>
 </head>
 <body>
 
-<!-- PAGE 1: INTRODUCTION & OVERVIEW -->
-<h1>Concurrency &amp; Multithreading Load Testing Benchmark Report</h1>
-<p class="lead">Comparative Architectural Evaluation: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Free Pascal (FPC)</strong>, <strong>C# (.NET 8)</strong>, and <strong>Python 3.12</strong></p>
+<!-- PAGE 1: EXECUTIVE SUMMARY & TOOLING -->
+<h1>Concurrency Load Testing Benchmark Report</h1>
+<p class="lead">Comparative Architectural Analysis: <strong>Modern Free Pascal (MFPC)</strong>, <strong>Free Pascal (FPC)</strong>, <strong>C# (.NET 8)</strong>, and <strong>Python 3.12</strong></p>
 
-<table class="meta-table" cellpadding="4" cellspacing="0">
+<table class="meta-table" cellpadding="3" cellspacing="0">
   <tr>
     <td><strong>Hardware Platform:</strong> 12-core x86_64 CPU, 16 GB RAM, OS Linux Mint 22.3 (Ubuntu 24.04 LTS &quot;Noble&quot;).</td>
   </tr>
@@ -172,10 +181,14 @@ To eliminate synthetic artifacts and isolate architectural realities, we enginee
   <li><strong><code>TThreadPool</code> &amp; <code>TTask</code></strong>: High-efficiency thread pool that queues millions of subtasks onto hardware CPU cores without triggering OS thread descriptor exhaustion or kernel context-switch storms.</li>
 </ul>
 
-<h2>3. Measurement Methodology &amp; System Metrics</h2>
+<h2>3. Measurement Methodology &amp; Mathematical Formulations</h2>
 <p>
-For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</strong> (total real duration), <strong>Throughput</strong> (operations or transactions per second), <strong>User CPU Time</strong> (productive computational CPU cycles), <strong>System CPU Time</strong> (kernel locking / futex overhead), <strong>Max RSS</strong> (peak resident set memory), and <strong>Checksum</strong> (cryptographic verification ensuring zero data loss and identical computational parity across all platforms).
+For each test scenario, 6 key kernel metrics were tracked via Linux OS profiling. Throughput ($T$), CPU Kernel Contention Ratio ($R_{\text{cpu}}$), and Parallel Efficiency ($\eta$) were computed using the standardized mathematical formulations below:
 </p>
+
+<div class="scheme-container">
+  <img src="images/formula_metrics_en.png" class="scheme-img" alt="System Profiling Formulas" />
+</div>
 
 
 <!-- PAGE 2: TEST 1 & TEST 2 -->
@@ -186,7 +199,11 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
 <strong>Scenario:</strong> 12 worker threads pinned across 12 CPU cores. 90% operations (1.8M) — concurrent quote reads guarded by Reader-Writer Locks computing a 30-iteration polynomial risk hash. 10% operations (200k) — exclusive quote updates streaming events into a background audit channel.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test1_en.png" class="scheme-img" alt="Test 1 Architecture Scheme" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 25%;">
     <col style="width: 16%;">
@@ -247,7 +264,11 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
 <strong>Scenario:</strong> Multi-Producer Multi-Consumer streaming pipeline: 6 transaction producers &rarr; Inbound Channel &rarr; 6 verification/fee computation workers &rarr; Outbound Channel &rarr; 1 audit recorder. Linux kernel profiling measuring CPU system time.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test2_en.png" class="scheme-img" alt="Test 2 Architecture Scheme" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -266,10 +287,10 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </thead>
   <tbody>
     <tr class="highlight">
-      <td class="text-left"><strong>Wall Clock Time (Real)</strong></td>
+      <td class="text-left"><strong>Wall Clock Time</strong></td>
       <td><strong>1.58 s</strong> <span class="badge badge-success">Leader</span></td>
       <td>1.40 s</td>
-      <td><strong>3.07&nbsp;s</strong> (Slower)</td>
+      <td><strong>3.07&nbsp;s</strong> (slower)</td>
       <td><strong>117.4 s</strong> (~2 min)</td>
     </tr>
     <tr>
@@ -280,23 +301,23 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
       <td>8,513 tx/s</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>User CPU Time (Productive)</strong></td>
+      <td class="text-left"><strong>User CPU Time (productive computation)</strong></td>
       <td>11.63 s</td>
       <td>4.26 s</td>
       <td>15.80 s</td>
       <td>106.87 s</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>System CPU Time (Kernel Space)</strong></td>
-      <td><strong>0.92 s</strong> <span class="badge badge-success">Record</span></td>
-      <td><strong>6.64 s</strong> <span class="badge badge-danger">7.2x higher</span></td>
+      <td class="text-left"><strong>System CPU Time (kernel futex locking)</strong></td>
+      <td><strong>0.92 s</strong> <span class="badge badge-success">Record Low</span></td>
+      <td><strong>6.64 s</strong> <span class="badge badge-danger">7.2x worse</span></td>
       <td>0.77 s</td>
-      <td><strong>62.03 s</strong> <span class="badge badge-danger">Collapse</span></td>
+      <td><strong>62.03 s</strong> <span class="badge badge-danger">Kernel Collapse</span></td>
     </tr>
     <tr>
-      <td class="text-left"><strong>User / System Ratio</strong></td>
+      <td class="text-left"><strong>User / System CPU Ratio</strong></td>
       <td><strong>12.6 : 1</strong> (92.7% code)</td>
-      <td><strong>0.64 : 1</strong> (61% kernel!)</td>
+      <td><strong>0.64 : 1</strong> (61% in kernel!)</td>
       <td>20.5 : 1</td>
       <td>1.7 : 1</td>
     </tr>
@@ -309,7 +330,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
     </tr>
     <tr>
       <td class="text-left"><strong>Peak Memory (Max RSS)</strong></td>
-      <td><strong>6.2 MB</strong> <span class="badge badge-success">Benchmark</span></td>
+      <td><strong>6.2 MB</strong> <span class="badge badge-success">Minimal</span></td>
       <td>16.0 MB</td>
       <td>46.0 MB</td>
       <td>20.9 MB</td>
@@ -323,16 +344,22 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Conclusions:</strong> <strong>Modern Pascal proved nearly twice as fast as C# (.NET 8)</strong> (1.58 s vs 3.07 s) by completely eliminating asynchronous <code>ValueTask</code> state machine allocations and GC pressure. Free Pascal (FPC) wasted 61% of total CPU time inside the Linux kernel on raw <code>futex</code> system calls.</p>
+<p class="conclusion-text"><strong>Conclusions:</strong> <strong>Modern Pascal proved twice as fast as C# (.NET 8)</strong> (1.58 s vs 3.07 s), completely avoiding <code>ValueTask</code> state-machine heap allocations and GC pressure. Free Pascal (FPC) burned 61% of its runtime inside the Linux kernel on unoptimized futex operations.</p>
 
 
 <!-- PAGE 3: TEST 3 & TEST 4 -->
-<h3 style="page-break-before: always; margin-top: 0;">TEST 3. Actor Pipeline with Directed Acyclic Graph: DAG Fan-Out / Fan-In (2,000,000 Messages)</h3>
+<h2 style="page-break-before: always; margin-top: 0;">Benchmark Results: Test 3 &amp; Test 4</h2>
+
+<h3>TEST 3. Directed Acyclic Actor Graph: DAG with Fan-Out / Fan-In (2,000,000 Messages)</h3>
 <p>
-<strong>Scenario:</strong> 10 interconnected actor nodes across 6 channels: <code>4 Producers</code> &rarr; <code>IngestChannel</code> &rarr; <code>Router</code> &rarr; <code>4 Shard Channels</code> &rarr; <code>4 Workers</code> &rarr; <code>OutboundChannel</code> &rarr; <code>Aggregator</code>. Totaling <strong>8,000,000 inter-thread message transfers</strong>.
+<strong>Scenario:</strong> 10-actor DAG topology with 6 interconnecting channels: <code>4 Producers</code> &rarr; <code>IngestChannel</code> &rarr; <code>Router</code> &rarr; <code>4 Shard Channels</code> &rarr; <code>4 Workers</code> &rarr; <code>OutboundChannel</code> &rarr; <code>Aggregator</code>. Total of <strong>8,000,000 inter-thread handoffs</strong>.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test3_en.png" class="scheme-img" alt="Test 3 Architecture Scheme" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -342,7 +369,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </colgroup>
   <thead>
     <tr>
-      <th>Metric / Benchmark Parameter</th>
+      <th>Performance Metric</th>
       <th>Modern Free Pascal</th>
       <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
@@ -351,14 +378,14 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </thead>
   <tbody>
     <tr class="highlight">
-      <td class="text-left"><strong>Wall Clock Execution Time</strong></td>
+      <td class="text-left"><strong>Real Execution Time</strong></td>
       <td><strong>1.58 s</strong></td>
       <td>1.40 s</td>
       <td>1.91 s</td>
       <td>139.0 s (2 min 19 s)</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>DAG Throughput</strong></td>
+      <td class="text-left"><strong>DAG System Throughput</strong></td>
       <td><strong>1,261,034 msg/s</strong></td>
       <td>1,426,533 msg/s</td>
       <td>1,042,209 msg/s</td>
@@ -367,12 +394,12 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
     <tr>
       <td class="text-left"><strong>Peak Memory (Max RSS)</strong></td>
       <td><strong>9.3 MB</strong> <span class="badge badge-success">Stable</span></td>
-      <td><strong>94.9 MB</strong> <span class="badge badge-danger">10x higher!</span></td>
+      <td><strong>94.9 MB</strong> <span class="badge badge-danger">10x Memory Explosion!</span></td>
       <td>46.2 MB</td>
       <td>49.8 MB</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>System CPU Time (Kernel Space)</strong></td>
+      <td class="text-left"><strong>System CPU Time (kernel futex)</strong></td>
       <td><strong>2.29 s</strong></td>
       <td>3.51 s</td>
       <td>1.37 s</td>
@@ -386,7 +413,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
       <td>116</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Checksum (Cryptographic Hash)</strong></td>
+      <td class="text-left"><strong>Cryptographic Checksum</strong></td>
       <td class="mono">14820452197096126848</td>
       <td class="mono">14820452197096126848</td>
       <td class="mono">14820452197096126848</td>
@@ -394,14 +421,18 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Conclusions:</strong> Free Pascal (FPC) suffered a massive memory explosion up to <strong>95 MB</strong> due to accumulating 4M heap nodes allocated via raw <code>New()</code> in unbounded linked lists. Modern Pascal maintained a rock-solid <strong>9.3 MB</strong> RSS while outperforming C# .NET 8 by 21% in throughput.</p>
+<p class="conclusion-text"><strong>Conclusions:</strong> Free Pascal (FPC) experienced a memory surge to <strong>95 MB</strong> due to accumulating 4 million dynamic heap objects via <code>New()</code> in unbounded queues. Modern Pascal capped memory usage at <strong>9.3 MB</strong> while outperforming C# .NET 8 by 21%.</p>
 
-<h3>TEST 4. Multi-Phase Cyclic Barrier: 2D Laplace Diffusion Mesh (100,000,000 Cell Updates)</h3>
+<h3>TEST 4. Multi-Phase Cyclic Barrier: 2D Laplace Stencil (100,000,000 Cell Updates)</h3>
 <p>
-<strong>Scenario:</strong> Numerical stencil diffusion modeling over a 1000 &times; 2000 grid (2M cells/phase) across 50 consecutive lockstep barrier phases executed on 12 threads. Double-buffer swapping coordinated via atomic <code>PostPhaseAction</code>.
+<strong>Scenario:</strong> 1000 &times; 2000 numerical diffusion grid (2,000,000 cells/phase) across 50 synchronized lockstep iterations on 12 threads. Double-buffer flip performed inside an atomic <code>PostPhaseAction</code>.
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test4_en.png" class="scheme-img" alt="Test 4 Architecture Scheme" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -411,7 +442,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </colgroup>
   <thead>
     <tr>
-      <th>Metric / Benchmark Parameter</th>
+      <th>Performance Metric</th>
       <th>Modern Free Pascal</th>
       <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
@@ -420,21 +451,21 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </thead>
   <tbody>
     <tr class="highlight">
-      <td class="text-left"><strong>Execution Time (50 phases)</strong></td>
+      <td class="text-left"><strong>Time for 50 Lockstep Phases</strong></td>
       <td><strong>202 ms</strong></td>
       <td>300 ms</td>
       <td><strong>138 ms</strong></td>
-      <td><strong>23.35&nbsp;s</strong> (23,353&nbsp;ms)</td>
+      <td><strong>23.35 s</strong> (23,353 ms)</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Update Throughput</strong></td>
+      <td class="text-left"><strong>Stencil Update Throughput</strong></td>
       <td><strong>495,049,488 cell/s</strong></td>
       <td>333,333,320 cell/s</td>
       <td>724,637,681 cell/s</td>
       <td>4,282,082 cell/s</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Memory Footprint (Max RSS)</strong></td>
+      <td class="text-left"><strong>Peak Memory (Max RSS)</strong></td>
       <td><strong>19.9 MB</strong></td>
       <td>19.2 MB</td>
       <td><strong>50.1 MB</strong> (2.5x higher)</td>
@@ -448,7 +479,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
       <td>66</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Grid Energy (Checksum)</strong></td>
+      <td class="text-left"><strong>Mesh Energy (Checksum)</strong></td>
       <td class="mono">689432888</td>
       <td class="mono">689432888</td>
       <td class="mono">689432888</td>
@@ -456,16 +487,20 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Conclusions:</strong> The built-in <code>TBarrier</code> primitive in Modern Pascal proved 1.5&times; faster than hand-rolled two-phase semaphores in Free Pascal (FPC) (202 ms vs 300 ms). Python collapsed 115&times; slower due to GIL-enforced serialization of mathematical floating-point loops.</p>
+<p class="conclusion-text"><strong>Conclusions:</strong> Modern Pascal's <code>TBarrier</code> was 1.5&times; faster than the manual two-event barrier in Free Pascal (FPC) (202 ms vs 300 ms). Python was 115&times; slower due to GIL serialization blocking concurrent mathematical execution.</p>
 
 
-<!-- PAGE 4: TEST 5 & SUMMARY MATRIX -->
+<!-- PAGE 4: TEST 5 & GLOBAL SYNTHESIS -->
 <h3 style="page-break-before: always; margin-top: 0;">TEST 5. High-Concurrency ACID Banking Ledger (2,000,000 Transactions)</h3>
 <p>
-<strong>Scenario:</strong> 500 bank accounts, 12 worker threads. 70% balance inquiries, 20% deposits/withdrawals via CAS (<code>InterlockedCompareExchange64</code>), 10% transfers protected against Deadlocks via ordered lock acquisition: min(A, B) &rarr; max(A, B).
+<strong>Scenario:</strong> 500 accounts, 12 concurrent threads. 70% balance inquiries, 20% atomic deposits/withdrawals via CAS (<code>InterlockedCompareExchange64</code>), 10% transfers protected against deadlocks via ordered lock acquisition: min(A, B) &rarr; max(A, B).
 </p>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<div class="scheme-container">
+  <img src="images/scheme_test5_en.png" class="scheme-img" alt="Test 5 Architecture Scheme" />
+</div>
+
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 28%;">
     <col style="width: 18%;">
@@ -475,7 +510,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </colgroup>
   <thead>
     <tr>
-      <th>Metric / Benchmark Parameter</th>
+      <th>Performance Metric</th>
       <th>Modern Free Pascal</th>
       <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
@@ -484,22 +519,22 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </thead>
   <tbody>
     <tr class="highlight">
-      <td class="text-left"><strong>Execution Time (2M txs)</strong></td>
-      <td><strong>67 ms</strong> <span class="badge badge-success">Record</span></td>
+      <td class="text-left"><strong>2M Transactions Execution Time</strong></td>
+      <td><strong>67 ms</strong> <span class="badge badge-success">Record Leader</span></td>
       <td>101 ms</td>
       <td>83 ms</td>
       <td>2.33&nbsp;s (2,333&nbsp;ms)</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Throughput (tx/s)</strong></td>
+      <td class="text-left"><strong>Throughput (transactions/s)</strong></td>
       <td><strong>29,850,745 tx/s</strong></td>
       <td>19,801,979 tx/s</td>
       <td>24,096,385 tx/s</td>
       <td>856,934 tx/s</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>System CPU Time (Kernel Space)</strong></td>
-      <td><strong>0.01 s</strong> <span class="badge badge-success">Record</span></td>
+      <td class="text-left"><strong>System CPU Time (kernel futex)</strong></td>
+      <td><strong>0.01 s</strong> <span class="badge badge-success">Record Minimal</span></td>
       <td>0.06 s</td>
       <td>0.02 s</td>
       <td>0.09 s</td>
@@ -512,19 +547,19 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
       <td>10.7 MB</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Final Ledger Balance</strong></td>
-      <td><strong>$5,002,000.00</strong> <span class="badge badge-success">ACID OK</span></td>
+      <td class="text-left"><strong>Bank Balance Integrity</strong></td>
+      <td><strong>$5,002,000.00</strong> <span class="badge badge-success">ACID Pass</span></td>
       <td>$5,002,000.00</td>
       <td>$5,002,000.00</td>
       <td>$5,002,000.00</td>
     </tr>
   </tbody>
 </table>
-<p class="conclusion-text"><strong>Conclusions:</strong> <strong>Modern Free Pascal achieved first place with an extraordinary 29.8 million transactions per second</strong>, outperforming C# .NET 8 (24.1M tx/s) by 24% and Free Pascal (FPC) (19.8M tx/s) by 51%. The <code>TSlimReaderWriterLock</code> eliminated reader serialization while keeping RAM at just 4.0 MB.</p>
+<p class="conclusion-text"><strong>Conclusions:</strong> <strong>Modern Free Pascal won 1st place with 29.8 million transactions per second</strong>, outperforming C# .NET 8 (24.1M tx/s) by 24% and Free Pascal (FPC) (19.8M tx/s) by 51%. <code>TSlimReaderWriterLock</code> allowed readers to bypass kernel locks entirely, using only 4.0 MB RAM.</p>
 
-<h2>5. Summary Evaluation Matrix &amp; Architectural Takeaways</h2>
+<h2>5. Synthesis Matrix &amp; Architectural Conclusions</h2>
 
-<table class="report-table" border="1" cellpadding="4" cellspacing="0">
+<table class="report-table" border="1" cellpadding="3" cellspacing="0">
   <colgroup>
     <col style="width: 30%;">
     <col style="width: 20%;">
@@ -534,7 +569,7 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </colgroup>
   <thead>
     <tr>
-      <th>Evaluation Criteria</th>
+      <th>Evaluation Criterion</th>
       <th>Modern Free Pascal</th>
       <th>Free Pascal (FPC)</th>
       <th>C# (.NET 8)</th>
@@ -543,49 +578,49 @@ For each test scenario, 6 key metrics were tracked: <strong>Wall Clock Time</str
   </thead>
   <tbody>
     <tr>
-      <td class="text-left"><strong>Data Exchange (CSP Channels)</strong></td>
-      <td><span class="badge badge-success">Leader</span> (Fast, Zero-Alloc)</td>
-      <td>Fragments RAM</td>
-      <td>Slower (Async)</td>
-      <td><span class="badge badge-danger">Unusable (GIL)</span></td>
+      <td class="text-left"><strong>Streaming Channels (CSP)</strong></td>
+      <td><span class="badge badge-success">Top Leader</span> (fastest)</td>
+      <td>Heap fragmentation</td>
+      <td>Slower (async overhead)</td>
+      <td><span class="badge badge-danger">Unusable</span></td>
     </tr>
     <tr>
       <td class="text-left"><strong>High-Concurrency ACID (CAS)</strong></td>
       <td><span class="badge badge-success">Leader</span> (29.8M tx/s)</td>
-      <td>51% Slower</td>
+      <td>51% slower</td>
       <td>24.1M tx/s</td>
       <td>0.85M tx/s</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Phase Synchronization (TBarrier)</strong></td>
+      <td class="text-left"><strong>Lockstep Stencil (TBarrier)</strong></td>
       <td><span class="badge badge-success">Excellent</span> (495M/s)</td>
       <td>333M/s</td>
       <td><span class="badge badge-success">Leader</span> (724M/s)</td>
       <td>4.2M/s</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>RAM Footprint (Memory)</strong></td>
-      <td><span class="badge badge-success">Benchmark</span> (4 &ndash; 19 MB)</td>
+      <td class="text-left"><strong>RAM Efficiency (Max RSS)</strong></td>
+      <td><span class="badge badge-success">Gold Standard</span> (4 &ndash; 19 MB)</td>
       <td>3 &ndash; 95 MB</td>
       <td><span class="badge badge-warning">High</span> (34 &ndash; 50 MB)</td>
       <td>10 &ndash; 50 MB</td>
     </tr>
     <tr>
-      <td class="text-left"><strong>Code Ergonomics &amp; Safety</strong></td>
-      <td><span class="badge badge-success">Modern</span> (Safe, 0 Ptrs)</td>
-      <td><span class="badge badge-danger">+50..120% Boilerplate</span></td>
+      <td class="text-left"><strong>Code Safety &amp; Ergonomics</strong></td>
+      <td><span class="badge badge-success">Modern</span> (Zero&nbsp;raw&nbsp;pointers)</td>
+      <td><span class="badge badge-danger">+50..120% boilerplate</span></td>
       <td><span class="badge badge-success">Excellent</span></td>
       <td><span class="badge badge-success">Concise</span></td>
     </tr>
   </tbody>
 </table>
 
-<h3>Architectural Engineering Verdict</h3>
+<h3>Final Engineering Verdict</h3>
 <ol>
-  <li><strong>Modern Free Pascal (MFPC)</strong> elevates Pascal into a premier systems programming language for multi-core server architectures. It couples native machine code speed (7&times; to 115&times; faster than Python), ultra-low memory consumption (5&times; to 8&times; lower than .NET 8), and modern Go/Rust safety models without manual pointer bookkeeping.</li>
-  <li><strong>Free Pascal (FPC)</strong> without modern concurrency primitives is ill-suited for complex pipelines: missing channels and barriers forces developers to write hundreds of lines of unsafe boilerplate with raw <code>New()/Dispose()</code>, triggering severe heap fragmentation (95 MB in DAG tests) and wasting over 60% of CPU time in kernel <code>futex</code> traps.</li>
-  <li><strong>C# (.NET 8)</strong> is a formidable contender for tight mathematical compute due to RyuJIT, but falls behind Modern Pascal in bounded inter-thread channel throughput and imposes significant memory overhead from CLR GC management.</li>
-  <li><strong>Python 3.12</strong>, due to the Global Interpreter Lock (GIL), remains strictly unsuitable for high-load multi-threaded pipelines with shared state, collapsing by orders of magnitude under multi-core stress.</li>
+  <li><strong>Modern Free Pascal (MFPC)</strong> elevates Pascal to a cutting-edge systems-level concurrency language for modern multicore servers. It achieves native compiled execution speeds (7&times; to 115&times; faster than Python), minimal RAM footprints (5&times; to 8&times; lower than .NET 8), and Go/Rust concurrency safety without manual pointer management.</li>
+  <li><strong>Free Pascal (FPC)</strong> is ill-suited for complex asynchronous pipelines: missing typed channels and barriers force developers to write hundreds of lines of boilerplate with <code>New()/Dispose()</code>, triggering memory spikes (95 MB in the DAG test) and burning 60%+ CPU time inside the Linux kernel on futex contention.</li>
+  <li><strong>C# (.NET 8)</strong> is formidable for pure numerical computing thanks to RyuJIT Dynamic PGO, but lags significantly behind Modern Pascal in inter-thread streaming throughput and incurs much heavier memory overhead due to the CLR runtime and GC.</li>
+  <li><strong>Python 3.12</strong> is crippled by the Global Interpreter Lock (GIL) and is architecturally incapable of competing in high-throughput multithreaded systems.</li>
 </ol>
 
 </body>

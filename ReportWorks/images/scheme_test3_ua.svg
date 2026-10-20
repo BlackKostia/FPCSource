@@ -1,0 +1,35 @@
+<svg width="700" height="85" viewBox="0 0 700 85" xmlns="http://www.w3.org/2000/svg">
+  <rect width="700" height="85" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+  <rect x="0" y="0" width="6" height="85" rx="3" fill="#7c3aed" />
+
+  <rect x="15" y="12" width="105" height="60" rx="5" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5" />
+  <text x="67" y="36" font-family="DejaVu Sans, Arial" font-size="10" font-weight="bold" fill="#1e3a8a" text-anchor="middle">4 Ingest</text>
+  <text x="67" y="52" font-family="DejaVu Sans, Arial" font-size="8.5" fill="#2563eb" text-anchor="middle">Producers (2M)</text>
+
+  <line x1="120" y1="42" x2="155" y2="42" stroke="#7c3aed" stroke-width="2" />
+  <polygon points="155,38 163,42 155,46" fill="#7c3aed" />
+
+  <rect x="165" y="12" width="115" height="60" rx="5" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5" />
+  <text x="222" y="32" font-family="DejaVu Sans, Arial" font-size="10" font-weight="bold" fill="#5b21b6" text-anchor="middle">Router Actor</text>
+  <text x="222" y="47" font-family="DejaVu Sans, Arial" font-size="8" fill="#7c3aed" text-anchor="middle">Partition Key:</text>
+  <text x="222" y="61" font-family="monospace" font-size="8.5" fill="#5b21b6" text-anchor="middle">Shard = ID mod 4</text>
+
+  <line x1="280" y1="28" x2="320" y2="20" stroke="#7c3aed" stroke-width="1.5" />
+  <polygon points="320,17 328,19 322,23" fill="#7c3aed" />
+  <line x1="280" y1="56" x2="320" y2="64" stroke="#7c3aed" stroke-width="1.5" />
+  <polygon points="322,61 328,65 320,67" fill="#7c3aed" />
+
+  <rect x="330" y="8" width="185" height="68" rx="5" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5" />
+  <text x="422" y="24" font-family="DejaVu Sans, Arial" font-size="9" font-weight="bold" fill="#5b21b6" text-anchor="middle">4 Shard Channels &amp; Workers</text>
+  <text x="422" y="39" font-family="DejaVu Sans, Arial" font-size="7.5" fill="#334155" text-anchor="middle">Shard_0 • Shard_1 • Shard_2 • Shard_3</text>
+  <text x="422" y="53" font-family="DejaVu Sans, Arial" font-size="7.5" fill="#059669" text-anchor="middle">Паралельний розрахунок контрольних сум</text>
+  <text x="422" y="67" font-family="DejaVu Serif, Georgia" font-size="8" font-style="italic" fill="#0f172a" text-anchor="middle">CRC_total = CRC_0 + CRC_1 + CRC_2 + CRC_3</text>
+
+  <line x1="515" y1="42" x2="550" y2="42" stroke="#7c3aed" stroke-width="2" />
+  <polygon points="550,38 558,42 550,46" fill="#7c3aed" />
+
+  <rect x="560" y="12" width="125" height="60" rx="5" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" />
+  <text x="622" y="32" font-family="DejaVu Sans, Arial" font-size="10" font-weight="bold" fill="#14532d" text-anchor="middle">Aggregator</text>
+  <text x="622" y="47" font-family="DejaVu Sans, Arial" font-size="8.5" fill="#16a34a" text-anchor="middle">Fan-In Зведення</text>
+  <text x="622" y="61" font-family="DejaVu Sans, Arial" font-size="8" fill="#64748b" text-anchor="middle">8M передач сумарно</text>
+</svg>

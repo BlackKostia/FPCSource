@@ -1,0 +1,28 @@
+<svg width="700" height="85" viewBox="0 0 700 85" xmlns="http://www.w3.org/2000/svg">
+  <rect width="700" height="85" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+  <rect x="0" y="0" width="6" height="85" rx="3" fill="#059669" />
+
+  <rect x="15" y="10" width="180" height="65" rx="5" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" />
+  <text x="105" y="26" font-family="DejaVu Sans, Arial" font-size="10" font-weight="bold" fill="#1e3a8a" text-anchor="middle">2,000,000 Transactions</text>
+  <text x="105" y="40" font-family="DejaVu Sans, Arial" font-size="8" fill="#0284c7" text-anchor="middle">70% Inquiries (Shared Read)</text>
+  <text x="105" y="53" font-family="DejaVu Sans, Arial" font-size="8" fill="#16a34a" text-anchor="middle">20% Deposits (Lock-free CAS)</text>
+  <text x="105" y="66" font-family="DejaVu Sans, Arial" font-size="8" fill="#dc2626" text-anchor="middle">10% Transfers (Ordered Locks)</text>
+
+  <line x1="195" y1="42" x2="235" y2="42" stroke="#059669" stroke-width="2" />
+  <polygon points="235,38 243,42 235,46" fill="#059669" />
+
+  <rect x="245" y="10" width="250" height="65" rx="5" fill="#ffffff" stroke="#059669" stroke-width="1.5" />
+  <text x="370" y="26" font-family="DejaVu Sans, Arial" font-size="9.5" font-weight="bold" fill="#14532d" text-anchor="middle">Deadlock Prevention &amp; CAS</text>
+  <text x="370" y="42" font-family="DejaVu Sans, Arial" font-size="8" fill="#16a34a" text-anchor="middle">CAS: InterlockedCompareExchange64</text>
+  <line x1="260" y1="48" x2="480" y2="48" stroke="#bbf7d0" stroke-width="1" />
+  <text x="370" y="64" font-family="DejaVu Serif, Georgia" font-size="8" fill="#0f172a" text-anchor="middle">Ordered Locks: Lock(min(A, B)) → Lock(max(A, B))</text>
+
+  <line x1="495" y1="42" x2="530" y2="42" stroke="#059669" stroke-width="2" />
+  <polygon points="530,38 538,42 530,46" fill="#059669" />
+
+  <rect x="540" y="10" width="145" height="65" rx="5" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" />
+  <text x="612" y="26" font-family="DejaVu Sans, Arial" font-size="9.5" font-weight="bold" fill="#14532d" text-anchor="middle">ACID Invariant</text>
+  <text x="612" y="43" font-family="DejaVu Serif, Georgia" font-size="8.5" font-style="italic" fill="#0f172a" text-anchor="middle">∑ Balance = $5,002,000</text>
+  <line x1="550" y1="49" x2="675" y2="49" stroke="#bbf7d0" stroke-width="1" />
+  <text x="612" y="64" font-family="DejaVu Sans, Arial" font-size="8" font-weight="bold" fill="#059669" text-anchor="middle">Δ = 0.00 (Conserved)</text>
+</svg>

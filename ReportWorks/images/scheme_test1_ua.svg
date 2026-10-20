@@ -1,0 +1,32 @@
+<svg width="700" height="90" viewBox="0 0 700 90" xmlns="http://www.w3.org/2000/svg">
+  <rect width="700" height="90" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+  <rect x="0" y="0" width="6" height="90" rx="3" fill="#0284c7" />
+
+  <rect x="15" y="12" width="135" height="66" rx="5" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5" />
+  <text x="82" y="32" font-family="DejaVu Sans, Arial" font-size="10.5" font-weight="bold" fill="#1e3a8a" text-anchor="middle">12 CPU Workers</text>
+  <text x="82" y="49" font-family="DejaVu Sans, Arial" font-size="8.5" fill="#0369a1" text-anchor="middle">90% Читання (1.8M ops)</text>
+  <text x="82" y="64" font-family="DejaVu Sans, Arial" font-size="8.5" fill="#dc2626" text-anchor="middle">10% Оновлення (200k)</text>
+
+  <line x1="150" y1="33" x2="205" y2="33" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="3,2" />
+  <polygon points="205,30 212,33 205,36" fill="#0284c7" />
+  <text x="178" y="27" font-family="DejaVu Sans, Arial" font-size="8" fill="#0284c7" text-anchor="middle">Read Lock</text>
+
+  <line x1="150" y1="58" x2="205" y2="58" stroke="#dc2626" stroke-width="1.5" />
+  <polygon points="205,55 212,58 205,61" fill="#dc2626" />
+  <text x="178" y="70" font-family="DejaVu Sans, Arial" font-size="8" fill="#dc2626" text-anchor="middle">Write Lock</text>
+
+  <rect x="215" y="10" width="265" height="70" rx="5" fill="#ffffff" stroke="#0284c7" stroke-width="1.5" />
+  <text x="347" y="27" font-family="DejaVu Sans, Arial" font-size="10" font-weight="bold" fill="#0369a1" text-anchor="middle">Order Book Cache + TSlimRWLock</text>
+  <text x="347" y="43" font-family="DejaVu Sans, Arial" font-size="8" fill="#475569" text-anchor="middle">Паралельні читачі на регістрах CPU (0 syscalls)</text>
+  <line x1="225" y1="49" x2="470" y2="49" stroke="#e2e8f0" stroke-width="1" />
+  <text x="347" y="67" font-family="DejaVu Serif, Georgia" font-size="9" font-style="italic" fill="#0f172a" text-anchor="middle">RiskHash = (H_prev × 31 + Price) ⊕ (H_prev &gt;&gt; 3)</text>
+
+  <line x1="480" y1="45" x2="525" y2="45" stroke="#16a34a" stroke-width="2" />
+  <polygon points="525,41 533,45 525,49" fill="#16a34a" />
+  <text x="502" y="38" font-family="DejaVu Sans, Arial" font-size="8" fill="#16a34a" text-anchor="middle">TChannel</text>
+
+  <rect x="535" y="12" width="150" height="66" rx="5" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" />
+  <text x="610" y="32" font-family="DejaVu Sans, Arial" font-size="10.5" font-weight="bold" fill="#14532d" text-anchor="middle">Потоковий аудит</text>
+  <text x="610" y="49" font-family="DejaVu Sans, Arial" font-size="8.5" fill="#16a34a" text-anchor="middle">200 000 оновлень</text>
+  <text x="610" y="64" font-family="DejaVu Sans, Arial" font-size="8" fill="#64748b" text-anchor="middle">Backpressure черга</text>
+</svg>
