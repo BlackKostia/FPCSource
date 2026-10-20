@@ -1337,7 +1337,14 @@ implementation
                                        is_managed_type(tloadnode(p).resultdef),
                                        hsym.realname);
                                    end;
-                               end;
+                               end
+                             else if (current_procinfo.procdef.proctypeoption=potype_unitfinalize) and
+                                     (newstate=vs_read) then
+                               { the dfa does not check the finalization of a unit (it
+                                 would need global dfa), so leave the variable to the
+                                 check at the end of the unit, which warns about
+                                 variables read but nowhere assigned }
+                               newstate:=vs_read_not_warned;
                            end
                          else if (newstate = vs_read) then
                            newstate := vs_read_not_warned;
