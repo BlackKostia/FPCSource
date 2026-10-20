@@ -722,6 +722,7 @@ Implementation
     function TExternalLinker.AddSanitizerLibrariesAndGetSearchDir(const platformname: TCmdStr; out sanitizerlibrarydir: TCmdStr): boolean;
       var
         clang,
+        gcc,
         clangsearchdirs,
         textline,
         clangsearchdirspath,
@@ -780,6 +781,37 @@ Implementation
           ObjectFiles.concatList(sanitizerlibraryfiles);
         sanitizerlibraryfiles.free;
         sanitizerlibraryfiles := nil;
+        { ThreadSanitizer of the native code generator (unit fpctsan links
+          libtsan): the unversioned libtsan.so is only in the library
+          directory of gcc, which fpc.cfg does not always list. The run time
+          loader finds the versioned library in the system directories, so
+          no rpath is needed. }
+        if assigned(SharedLibFiles.Find('tsan')) and
+           not(cs_link_on_target in current_settings.globalswitches) then
+          begin
+            gcc:=FindUtil('gcc');
+            if gcc<>'' then
+              begin
+                clangsearchdirspath:=outputexedir+UniqueName('gcctsanpath');
+                if shell(maybequoted(gcc)+' -print-file-name=libtsan.so > '+maybequoted(clangsearchdirspath))=0 then
+                  begin
+                    AssignFile(clangsearchdirsfile,clangsearchdirspath);
+{$push}{$i-}
+                    reset(clangsearchdirsfile);
+{$pop}
+                    if ioresult=0 then
+                      begin
+                        readln(clangsearchdirsfile,textline);
+                        closefile(clangsearchdirsfile);
+                        { without the library gcc prints just the name }
+                        if (ExtractFilePath(textline)<>'') and FileExists(textline,false) then
+                          LibrarySearchPath.AddLibraryPath('',ExtractFilePath(textline),false);
+                      end;
+                  end;
+                if FileExists(clangsearchdirspath,false) then
+                  DeleteFile(clangsearchdirspath);
+              end;
+          end;
       end;
 
 

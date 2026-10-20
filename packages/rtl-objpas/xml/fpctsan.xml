@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fpdoc-descriptions>
+<package name="rtl-objpas">
+
+<!--
+  ====================================================================
+    fpctsan
+  ====================================================================
+-->
+
+<module name="fpctsan">
+<short>Run time support and annotations for ThreadSanitizer (-fsanitize=thread)</short>
+<descr>
+<p><file>fpctsan</file> is the run time part of the <var>-fsanitize=thread</var> compiler option (x86_64-linux, native code generator). The compiler adds the unit to every module compiled with the option: it links <file>libtsan</file> and contains the trampolines <var>FPC_TSAN_READ</var> and <var>FPC_TSAN_WRITE</var> that the instrumented code calls before each memory access. The trampolines preserve all general purpose registers, the flags and <var>xmm0</var>..<var>xmm15</var>.</p>
+<p>ThreadSanitizer sees the synchronization done through the POSIX thread library (critical sections, events, thread creation and termination), but not the atomic operations of the RTL (<var>InterlockedIncrement</var>, <var>InterlockedCompareExchange</var> and others), because the RTL is not instrumented. Code that synchronizes threads only through atomic operations must be annotated with <link id="TsanRelease"/> and <link id="TsanAcquire"/>, guarded by the <var>FPC_SANITIZE_THREAD</var> conditional define that the option sets.</p>
+<p>The program must be run with address space randomization disabled (<var>setarch $(uname -m) -R ./prog</var>) on kernels with high mmap entropy, and compiled with debug information (<var>-gw</var>) to get procedure names and line numbers in the reports.</p>
+<p>On other platforms the routines are empty.</p>
+</descr>
+
+<!-- procedure Visibility: default -->
+<element name="TsanRelease">
+<short>Publishes the memory accesses of the calling thread for a later TsanAcquire with the same address</short>
+<descr>
+<p><var>TsanRelease</var> calls <var>__tsan_release</var> for <var>aAddr</var>. Everything the calling thread did before the call happens before everything another thread does after a later <link id="TsanAcquire"/> with the same address.</p>
+<p>Call it immediately <b>before</b> the atomic operation that hands data over to another thread, for example before decrementing a reference count.</p>
+</descr>
+<seealso>
+<link id="TsanAcquire"/>
+</seealso>
+</element>
+
+<element name="TsanRelease.aAddr">
+<short>Address identifying the synchronization object, usually the atomic variable</short>
+</element>
+
+<!-- procedure Visibility: default -->
+<element name="TsanAcquire">
+<short>Acquires the memory accesses published with TsanRelease for the same address</short>
+<descr>
+<p><var>TsanAcquire</var> calls <var>__tsan_acquire</var> for <var>aAddr</var>. Call it immediately <b>after</b> the atomic operation that observed the hand-over, for example when a reference count dropped to zero and the shared object is about to be freed.</p>
+</descr>
+<seealso>
+<link id="TsanRelease"/>
+</seealso>
+</element>
+
+<element name="TsanAcquire.aAddr">
+<short>Address passed to TsanRelease by the publishing thread</short>
+</element>
+
+</module>
+</package>
+</fpdoc-descriptions>

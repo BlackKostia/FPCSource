@@ -3787,6 +3787,9 @@ option_n_win16_set_default_large_memory_model=11070_N_Setting memory model for W
 % i8086-win16 requires at least large memory model.
 option_e_avr_cvt_unsupported=11071_E_CVT option not supported for $1
 % The CVT option is not supported by the selected MCU
+option_e_sanitize_thread_unsupported=11072_E_-fsanitize=thread is not supported for target $1
+% ThreadSanitizer instrumentation is only implemented for x86_64-linux with the native
+% code generator.
 %
 % \end{description}
 # EndOfTeX
@@ -4225,6 +4228,7 @@ A*2CV<x>_Set section threadvar model to <x>
 **1e<x>_Set path to executable
 **1E_Same as -Cn
 **1fPIC_Same as -Cg
+**1fsanitize=thread_Instrument memory accesses for ThreadSanitizer (x86_64-linux; links libtsan and cmem; run with "setarch -R" if TSan reports an unexpected memory mapping)
 **1F<x>_Set file names and paths:
 **2Fa<x>[,y]_(for a program) load units <x> and [y] before uses is parsed
 **2Fc<x>_Set input codepage to <x>

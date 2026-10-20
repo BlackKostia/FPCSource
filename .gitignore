@@ -114,6 +114,7 @@ tests/concurrency/out-valgrind/
 tests/concurrency/out-eventloop/
 tests/concurrency/out-smartptrs/
 tests/concurrency/out-spans/
+tests/concurrency/out-tsan/
 tests/concurrency/out-async/
 tests/concurrency/comparison/out/
 __pycache__/

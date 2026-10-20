@@ -224,11 +224,18 @@ begin
   { everything this owner did with the object happens before its release }
   VgHappensBefore(@ABlock^.Strong);
   {$ENDIF FPC_VALGRIND}
+  {$IFDEF FPC_SANITIZE_THREAD}
+  { the same for ThreadSanitizer (fpctsan is added by the compiler) }
+  TsanRelease(@ABlock^.Strong);
+  {$ENDIF FPC_SANITIZE_THREAD}
   if InterlockedDecrement(ABlock^.Strong) = 0 then
     try
       {$IFDEF FPC_VALGRIND}
       VgHappensAfter(@ABlock^.Strong);
       {$ENDIF FPC_VALGRIND}
+      {$IFDEF FPC_SANITIZE_THREAD}
+      TsanAcquire(@ABlock^.Strong);
+      {$ENDIF FPC_SANITIZE_THREAD}
       ABlock^.Obj.Free;
     finally
       ABlock^.Obj := nil;
@@ -246,8 +253,14 @@ begin
   {$IFDEF FPC_VALGRIND}
   VgHappensBefore(@ABlock^.Weak);
   {$ENDIF FPC_VALGRIND}
+  {$IFDEF FPC_SANITIZE_THREAD}
+  TsanRelease(@ABlock^.Weak);
+  {$ENDIF FPC_SANITIZE_THREAD}
   if InterlockedDecrement(ABlock^.Weak) = 0 then
     begin
+      {$IFDEF FPC_SANITIZE_THREAD}
+      TsanAcquire(@ABlock^.Weak);
+      {$ENDIF FPC_SANITIZE_THREAD}
       {$IFDEF FPC_VALGRIND}
       VgHappensAfter(@ABlock^.Weak);
       { the decrements of the other owners are atomic accesses to the block

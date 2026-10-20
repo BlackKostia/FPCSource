@@ -401,9 +401,11 @@ implementation
            { Heaptrc unit, load heaptrace before any other units especially objpas }
            if (cs_use_heaptrc in current_settings.globalswitches) then
              CheckAddUnit('heaptrc');
-           { Valgrind requires c memory manager }
+           { Valgrind requires c memory manager, ThreadSanitizer as well: it
+             intercepts malloc/free, while blocks reused by the FPC memory
+             manager in another thread would look like data races }
            if (cs_gdb_valgrind in current_settings.globalswitches) or
-              (([cs_sanitize_address]*current_settings.moduleswitches)<>[]) then
+              (([cs_sanitize_address,cs_sanitize_thread]*current_settings.moduleswitches)<>[]) then
              CheckAddUnit('cmem');
            { Lineinfo unit }
            if (cs_use_lineinfo in current_settings.globalswitches) then begin
@@ -434,6 +436,10 @@ implementation
          end
         else if (cs_checkpointer in current_settings.localswitches) then
           CheckAddUnit('heaptrc');
+        { trampolines called by code instrumented for ThreadSanitizer }
+        if (cs_sanitize_thread in current_settings.moduleswitches) and
+           (curr.modulename^<>'FPCTSAN') then
+          CheckAddUnit('fpctsan');
         { Objpas unit? }
         if m_objpas in current_settings.modeswitches then
           CheckAddUnit('objpas');

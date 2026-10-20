@@ -76,6 +76,9 @@ begin
     { Valgrind client requests; used by smartptrs and by fcl-base/vcl-compat
       when compiled with -dFPC_VALGRIND }
     T:=P.Targets.AddUnit('fpvalgrind.pp');
+    { trampolines for code compiled with -fsanitize=thread (x86_64-linux;
+      empty elsewhere); added to such modules by the compiler }
+    T:=P.Targets.AddUnit('fpctsan.pp');
     T:=P.Targets.AddUnit('smartptrs.pp');
       T.ResourceStrings:=true;
     T:=P.Targets.AddUnit('spans.pp');

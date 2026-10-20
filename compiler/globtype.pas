@@ -207,7 +207,10 @@ interface
          { enable link time optimisation (both unit code generation and optimising the whole program/library) }
          cs_lto,
          { LLVM sanitizers }
-         cs_sanitize_address
+         cs_sanitize_address,
+         { ThreadSanitizer instrumentation by the native code generator
+           (-fsanitize=thread, x86_64-linux) }
+         cs_sanitize_thread
        );
        tmoduleswitches = set of tmoduleswitch;
 

@@ -239,6 +239,24 @@
   `eventloop.promise`.
 
 ### Додано
+- ThreadSanitizer у рідному генераторі коду (розділ 3.3 дорожньої карти,
+  ADR-0010): ключ `-fsanitize=thread` для x86_64-linux, макрос
+  `FPC_SANITIZE_THREAD`. Прохід `compiler/x86/tsaninstr.pas` після
+  розподілу регістрів вставляє перед кожною інструкцією з операндом-пам'яттю
+  виклик трампліна з точним розміром доступу; не інструментуються кадр
+  процедури, `threadvar`, GOT, атомарні інструкції й блоки `asm`. Новий
+  модуль `fpctsan` (`rtl-objpas`): трампліни, лінкування `libtsan`,
+  анотації `TsanRelease`/`TsanAcquire`; компілятор додає його до
+  інструментованих модулів, а до програми — `cmem`. Лінкер знаходить теку
+  `libtsan` через `gcc -print-file-name`. `cthreads`: у процесі з TSan
+  функції pthread беруться з глобальної області символів (перехоплювачі
+  TSan), `CDoneCriticalSection` не розблоковує м'ютекс «про всяк випадок».
+  `TArc<T>`/`TWeak<T>` анотовано для TSan. Тести:
+  `tests/concurrency/run-tsan.sh` (11 програм з навмисними гонками й без,
+  × 3 набори опцій, 33/33), `tests/test/ttsan1`–`5`; інструментовані тести
+  `spans` (35) і `smartptrs` (44) — без попереджень. Стрес-тести
+  `smartptrs` під TSan сповільнюються в 2–3 рази (Helgrind — ~1300×).
+  Посібник — `docs/concurrency/guides/tsan.md`.
 - `fcl-passrc` і fpdoc: директива `end nocopy` (ADR-0008) розбирається для
   записів, зокрема узагальнених, разом із `deprecated`/`platform`/`align` у
   будь-якому порядку; ознака `TPasRecordType.NoCopy`, виведення в

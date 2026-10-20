@@ -159,6 +159,9 @@ implementation
        pbase,pstatmnt,pdecl,pdecsub,pexports,pgenutil,pparautl,ptype,pexpr,parabase,
        { codegen }
        tgobj,cgbase,cgobj,hlcgobj,hlcgcpu,dbgbase,
+{$if defined(x86_64) and not defined(llvm)}
+       tsaninstr,
+{$endif x86_64 and not llvm}
 
        ncgflw,
        ncgutil,
@@ -2333,6 +2336,13 @@ implementation
 
             { Perform target-specific processing if necessary }
             postprocess_code;
+
+{$if defined(x86_64) and not defined(llvm)}
+            { ThreadSanitizer: after the optimizer, on the final code }
+            if (cs_sanitize_thread in current_settings.moduleswitches) and
+               not(pi_is_assembler in flags) then
+              tsan_instrument(aktproccode);
+{$endif x86_64 and not llvm}
 
             { Add end symbol and debug info }
             { this must be done after the pcrelativedata is appended else the distance calculation of
