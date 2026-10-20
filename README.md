@@ -35,6 +35,9 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
   - Declared where they are needed, the type inferred and static: `var Cache := TDictionary<string, TAccount>.Create;`
   - Loop variables scoped to the loop: `for var I := 0 to N - 1 do`, `for var Item in List do`
   - Block scope; without the mode switch the compiler behaves like FPC.
+- **Methods for Standard Types (`{$modeswitch extensionmethods}`)**:
+  - Own type helpers for `string`, `Integer`, `TDateTime`, enumerations, arrays and records next to the helpers of SysUtils: `Name.Trim.ToUpper` and `Name.Initials` together.
+  - One switch for `typehelpers` + `multihelpers`: an own string helper no longer hides `TStringHelper` ("Illegal qualifier").
 - **String Interpolation (`{$modeswitch interpolation}`)**:
   - Expressions checked by the compiler instead of `Format`: `WriteLn($'Order #{Order.Id} from {Order.Customer}: {Order.Total:0:2}');`
   - `WriteStr` formatting (`{X:Width}`, `{X:Width:Precision}`), `{{`/`}}` escapes, function calls and nested strings in expressions.

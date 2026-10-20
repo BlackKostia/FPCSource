@@ -337,6 +337,15 @@
   `eventloop.promise`.
 
 ### Додано
+- Методи для стандартних типів (розділ 2.7 дорожньої карти): перемикач
+  форку `{$modeswitch extensionmethods}` вмикає `typehelpers` і
+  `multihelpers` разом (`extensionmethods-` вимикає обидва), тож власні
+  помічники для `string`, `Integer`, `TDateTime`, переліків, масивів і
+  записів не ховають помічників SysUtils та інших модулів. Наявні
+  перемикачі не змінено. Тести `tests/test/textmeth1`–`6` (2 позитивні,
+  модуль `uextmeth1`, 4 `{%FAIL}`), посібник
+  `docs/concurrency/language/helpers.md` з правилами вибору методу й
+  пастками, приклад `docs/concurrency/examples/extension_methods.pp`.
 - Багаторядкова інтерполяція `` $`...` `` (`{$modeswitch interpolation}` з
   `multilinestrings`): рядок у зворотних апострофах на кількох рядках,
   кінці рядків за `{$MULTILINESTRINGLINEENDING}`, `` `` `` — символ, апостроф —

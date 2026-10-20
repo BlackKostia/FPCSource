@@ -849,6 +849,11 @@ implementation
                     include(current_settings.modeswitches,m_objectivec1);
                   if (i in [m_objectivec1,m_objectivec2]) then
                     include(current_settings.modeswitches,m_class);
+                  { helpers for all types, several helpers for a type at the
+                    same time (an own string helper does not hide the one of
+                    SysUtils) }
+                  if (i=m_extension_methods) then
+                    current_settings.modeswitches:=current_settings.modeswitches+[m_type_helpers,m_multi_helpers];
                 end
               else
                 begin
@@ -859,6 +864,8 @@ implementation
                   if (i in [m_objectivec1,m_objectivec2]) and
                      ([m_delphi,m_objfpc]*current_settings.modeswitches=[]) then
                     exclude(current_settings.modeswitches,m_class);
+                  if (i=m_extension_methods) then
+                    current_settings.modeswitches:=current_settings.modeswitches-[m_type_helpers,m_multi_helpers];
                 end;
 
               { set other switches depending on changed mode switch }

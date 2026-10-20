@@ -155,6 +155,11 @@
 
 **Стан:** `$'текст {Вираз} {Вираз:Ширина} {Вираз:Ширина:Точність}'`, `{{`/`}}` для дужок, `''` для апострофа, рядкові константи й виклики функцій у виразах, вкладені `$'...'`; багаторядкові `` $`...` `` (з `multilinestrings`, кінці рядків за `$MULTILINESTRINGLINEENDING`). Форматування — як у `WriteStr`/`WriteLn` (класи, записи, вказівники — помилка компіляції). Рядки й символи без специфікаторів конкатенуються, інакше — `WriteStr` у тимчасовий рядок; результат — рядковий тип режиму, без виразів — рядкова константа. Розбору шаблону під час виконання немає: удвічі швидше за `Format`, з рядками — на порядок. `$FF` не змінюється. Посібник — [language/interpolation.md](language/interpolation.md), приклад — `examples/interpolation.pp`, тести — `tests/test/tinterp1`–`20`.
 
+### 2.7. Методи для стандартних типів (`{$modeswitch extensionmethods}`) [РЕАЛІЗОВАНО]
+- Пропозиція 4.7 з `proposals/modern_pascal_productivity_and_web_vision.md`: методи для `string`, `Integer`, `TDateTime` тощо. У FPC це вже є як помічники типів (`type helper for Integer`), тож нового синтаксису не потрібно; заважала пастка: власний помічник ховає `TStringHelper` з SysUtils.
+
+**Стан:** перемикач форку `{$modeswitch extensionmethods}` вмикає `typehelpers` і `multihelpers` разом (`extensionmethods-` вимикає обидва): власні помічники для рядків, чисел, `TDateTime`, переліків, масивів і записів співіснують із помічниками SysUtils та інших модулів незалежно від порядку `uses`. Наявні `typehelpers`/`multihelpers` поводяться як в upstream. Посібник — [language/helpers.md](language/helpers.md) (правила вибору методу, пастки: точний тип, імена всередині помічника, `5.ToString`, відсутність узагальнених помічників), приклад — `examples/extension_methods.pp`, тести — `tests/test/textmeth1`–`6`. Узагальнені помічники (`helper for TArray<T>`) — не реалізовано.
+
 ---
 
 ## 3. Пам'ять, безпека та нульові накладні витрати (рівень Rust / C++20)
