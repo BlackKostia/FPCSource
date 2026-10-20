@@ -42,6 +42,8 @@ interface
     procedure label_dec;
     procedure type_dec(out had_generic:boolean);
     procedure types_dec(in_structure: boolean;out had_generic:boolean;var rtti_attrs_def: trtti_attribute_list);
+    { "nocopy" after the declaration of a record type (ADR-0008) }
+    procedure try_consume_nocopy(def:tdef;istyperenaming:boolean);
     procedure var_dec(out had_generic:boolean);
     procedure threadvar_dec(out had_generic:boolean);
     procedure property_dec;
@@ -693,6 +695,22 @@ implementation
           include(pd.procoptions,po_objc_related_result_type);
       end;
 
+    procedure try_consume_nocopy(def:tdef;istyperenaming:boolean);
+      begin
+        { recognized by its name instead of a token of its own: a new token
+          would renumber the tokens recorded for generics in ppu files }
+        while (current_scanner.token=_ID) and (current_scanner.pattern='NOCOPY') do
+          begin
+            if (def.typ<>recorddef) or istyperenaming then
+              Message(parser_e_nocopy_only_records)
+            else if df_nocopy in def.defoptions then
+              Message1(parser_e_dir_not_allowed,'NOCOPY')
+            else
+              include(tstoreddef(def).defoptions,df_nocopy);
+            consume(_ID);
+          end;
+      end;
+
     procedure types_dec(in_structure: boolean;out had_generic:boolean;var rtti_attrs_def: trtti_attribute_list);
 
       procedure finalize_class_external_status(od: tobjectdef);
@@ -1133,6 +1151,7 @@ implementation
                       end
                     else
                       begin
+                        try_consume_nocopy(hdef,istyperenaming);
                         try_consume_hintdirective(newtype.symoptions,newtype.deprecatedmsg);
                         consume(_SEMICOLON);
                       end;
@@ -1174,11 +1193,14 @@ implementation
                   end;
                 recorddef :
                   begin
+                    try_consume_nocopy(hdef,istyperenaming);
                     try_consume_hintdirective(newtype.symoptions,newtype.deprecatedmsg);
+                    try_consume_nocopy(hdef,istyperenaming);
                     consume(_SEMICOLON);
                   end;
                 else
                   begin
+                    try_consume_nocopy(hdef,istyperenaming);
                     try_consume_hintdirective(newtype.symoptions,newtype.deprecatedmsg);
                     consume(_SEMICOLON);
                   end;

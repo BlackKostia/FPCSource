@@ -2036,10 +2036,15 @@ implementation
             minargs:=1;
             resultdef:=paradef;
             func:='fpc_array_to_dynarray_copy';
+            { copies the elements (ADR-0008) }
+            if is_nocopy(tarraydef(paradef).elementdef) then
+              CGMessage1(type_e_nocopy_copy,FullTypeName(tarraydef(paradef).elementdef,nil));
           end
         else
          if is_open_array(paradef) then
           begin
+            if is_nocopy(tarraydef(paradef).elementdef) then
+              CGMessage1(type_e_nocopy_copy,FullTypeName(tarraydef(paradef).elementdef,nil));
             minargs:=1;
             resultdef:=carraydef.create(0,-1,tarraydef(paradef).rangedef);
             tarraydef(resultdef).arrayoptions:=tarraydef(resultdef).arrayoptions+[ado_IsDynamicArray];

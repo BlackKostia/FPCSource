@@ -19,9 +19,9 @@
 | `examples/` | Приклади з документації (`parallel_for.pp`, `tasks.pp`, `pool_lifetime.pp`, `valgrind_annotate.pp`, `primes_*`, `report_*`, `batch_processing.pp`, `showcase_pipeline.pp`, `syncobjs_phase2.pp`, `continuations_cancel.pp`, `eventloop_benchmark.pp`, `coroutine_showcase.pp`, `smart_pointers.pp`); кожен компілюється й запускається |
 | `valgrind.md` | Перевірка гонок даних (helgrind/drd), анотації, відомі обмеження |
 | `baseline.md` | Базова лінія тестів trunk до наших змін (відомі падіння) |
-| `adr/` | Дизайн-рішення (ADR-0001: життєвий цикл потоків пулу; ADR-0002: клієнтські запити Valgrind; ADR-0003: детермінованість `TParallel.For` і `Join`; ADR-0004: примітиви `SyncObjs` Фази 2; ADR-0005: неблокувальні продовження та `TCancellationToken`; ADR-0006: масштабований асинхронний I/O `fcl-eventloop`; ADR-0007: розумні вказівники на керованих записах) |
+| `adr/` | Дизайн-рішення (ADR-0001: життєвий цикл потоків пулу; ADR-0002: клієнтські запити Valgrind; ADR-0003: детермінованість `TParallel.For` і `Join`; ADR-0004: примітиви `SyncObjs` Фази 2; ADR-0005: неблокувальні продовження та `TCancellationToken`; ADR-0006: масштабований асинхронний I/O `fcl-eventloop`; ADR-0007: розумні вказівники на керованих записах; ADR-0008: некопійовані типи `end nocopy`) |
 | `roadmap-improvements.md` | **Дорожня карта розвитку FPC**: рекомендації щодо бібліотек багатопоточності (Фази 2–4), синтаксичної ергономіки компілятора, безпеки пам'яті та інструментарію |
-| `../../packages/fcl-base/xml/fpvalgrind.xml` | Довідник API `fpvalgrind` у стандартному форматі `fpdoc` |
+| `../../packages/rtl-objpas/xml/fpvalgrind.xml` | Довідник API `fpvalgrind` у стандартному форматі `fpdoc` |
 | `../../packages/rtl-objpas/xml/smartptrs.xml` | Довідник API модуля `smartptrs` (`TScoped`, `TArc`, `TWeak`) у стандартному форматі `fpdoc` |
 | `../../packages/fcl-base/xml/syncobjs-phase2.xml` | Довідник API нових примітивів `SyncObjs` (Фаза 2) у стандартному форматі `fpdoc` |
 | `../../packages/fcl-eventloop/xml/fcleventloop.xml` | Довідник API пакету `fcl-eventloop` (Фаза 1.3) у стандартному форматі `fpdoc` |

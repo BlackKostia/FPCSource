@@ -82,7 +82,7 @@
 <element name="TSlimReadLockGuard">
   <short>Managed record RAII guard for automatic <var>BeginRead</var> / <var>EndRead</var> on <var>TSlimReaderWriterLock</var>.</short>
   <descr>
-    <p>A guard that holds the lock cannot be copied: assignment, passing by value and copying of arrays or records that contain it raise <var>ELockException</var> without releasing anything, because the copy would release the lock a second time. Copying an empty guard is allowed. Pass guards as <var>var</var> or <var>const</var>.</p>
+    <p>A guard cannot be copied, because the copy would release the lock a second time. With a compiler that defines <var>FPC_HAS_NOCOPY_TYPES</var> the guard is declared <var>nocopy</var>: assigning a guard variable, passing it by value and copying records or arrays that contain it are compile-time errors. Copies the compiler cannot see (RTTI, the loop variable of <var>for..in</var>) raise <var>ELockException</var> at runtime if the guard holds the lock, without releasing anything. Pass guards as <var>var</var> or <var>const</var>.</p>
   </descr>
 </element>
 
@@ -96,7 +96,7 @@
 <element name="TLockGuard">
   <short>RAII guard that calls <var>Release</var> on a <var>TSynchroObject</var> when finalized.</short>
   <descr>
-    <p>A guard that holds an object cannot be copied: the copy would call <var>Release</var> a second time. Copying raises <var>ELockException</var>; copying an empty guard is allowed.</p>
+    <p>A guard cannot be copied: the copy would call <var>Release</var> a second time. The type is declared <var>nocopy</var> (compile-time errors, see <var>TSlimReadLockGuard</var>); copies the compiler cannot see raise <var>ELockException</var> at runtime if the guard holds an object.</p>
   </descr>
 </element>
 

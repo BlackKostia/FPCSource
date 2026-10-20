@@ -127,6 +127,11 @@ interface
     { # Returns whether def is needs to load RTTI for reference counting }
     function is_rtti_managed_type(def: tdef) : boolean;
 
+    {# Returns whether variables of def can't be copied: a record declared
+       "end nocopy;", a specialization of such a generic record, or a record,
+       object or static array containing such a type (see ADR-0008) }
+    function is_nocopy(def: tdef) : boolean;
+
 {    function is_in_limit_value(val_from:TConstExprInt;def_from,def_to : tdef) : boolean;}
 
 {*****************************************************************************
@@ -433,6 +438,53 @@ implementation
        symtable, // search_system_type
        symsym,
        cpuinfo;
+
+
+    function is_nocopy(def: tdef) : boolean;
+      var
+        i : longint;
+        sym : tsym;
+      begin
+        result:=false;
+        if not assigned(def) then
+          exit;
+        case def.typ of
+          recorddef,
+          objectdef:
+            begin
+              { classes, interfaces etc. are references, they are not copied }
+              if (def.typ=objectdef) and
+                 (tobjectdef(def).objecttype<>odt_object) then
+                exit;
+              if df_nocopy in def.defoptions then
+                exit(true);
+              { specializations get the flag when the declaration tokens of
+                the generic are replayed (pgenutil); fallback for others }
+              if (df_specialization in def.defoptions) and
+                 assigned(tstoreddef(def).genericdef) and
+                 (df_nocopy in tstoreddef(def).genericdef.defoptions) then
+                exit(true);
+              for i:=0 to tabstractrecorddef(def).symtable.symlist.count-1 do
+                begin
+                  sym:=tsym(tabstractrecorddef(def).symtable.symlist[i]);
+                  if (sym.typ=fieldvarsym) and
+                     not(sp_static in sym.symoptions) and
+                     is_nocopy(tfieldvarsym(sym).vardef) then
+                    exit(true);
+                end;
+            end;
+          arraydef:
+            { dynamic arrays are shared by assignment; open arrays and array of
+              const are parameters }
+            if not(ado_IsDynamicArray in tarraydef(def).arrayoptions) and
+               not(ado_IsConstructor in tarraydef(def).arrayoptions) and
+               not is_open_array(def) and
+               not is_array_of_const(def) then
+              result:=is_nocopy(tarraydef(def).elementdef);
+          else
+            ;
+        end;
+      end;
 
     { returns true, if def uses FPU }
     function is_fpu(def : tdef) : boolean;

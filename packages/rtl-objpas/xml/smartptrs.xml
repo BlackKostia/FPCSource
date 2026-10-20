@@ -26,7 +26,7 @@
   <short>Exclusive owner of an object; frees it when the record is finalized.</short>
   <descr>
     <p>The object is freed when a local variable goes out of scope (also while an exception unwinds the stack), when the class or record that contains the field is destroyed, or when a dynamic array that contains it is released.</p>
-    <p>Ownership cannot be duplicated: pass <var>TScoped</var> as <var>const</var>, <var>constref</var> or <var>var</var>, and transfer ownership with <var>Move</var>, <var>Release</var> or <var>Reset</var>. Copying an owning instance raises <var>ESmartPtrError</var>; copying an empty one is allowed and is equivalent to <var>Reset</var>.</p>
+    <p>Ownership cannot be duplicated: pass <var>TScoped</var> as <var>const</var>, <var>constref</var> or <var>var</var>, and transfer ownership with <var>Move</var>, <var>Release</var> or <var>Reset</var>. With a compiler that defines <var>FPC_HAS_NOCOPY_TYPES</var> the type is declared <var>nocopy</var>: assigning a variable, passing by value and <var>Copy()</var> of arrays are compile-time errors (function results such as <var>A.Move</var> or <var>MakeScoped(X)</var> are not copies). Copies the compiler cannot see (RTTI, the loop variable of <var>for..in</var>, <var>SetLength</var> of a shared dynamic array) raise <var>ESmartPtrError</var> at runtime when the instance owns an object.</p>
     <p><var>TScoped</var> is not thread-safe; it is meant to be owned by one thread at a time.</p>
   </descr>
   <seealso>
@@ -82,6 +82,22 @@
   </descr>
 </element>
 
+<element name="PArcBlock">
+  <short>Pointer to a TArcBlock.</short>
+</element>
+
+<element name="TArcBlock.Strong">
+  <short>Number of TArc owners; the object is freed when it reaches zero.</short>
+</element>
+
+<element name="TArcBlock.Weak">
+  <short>Number of TWeak references plus one held by all owners together; the block is disposed of when it reaches zero.</short>
+</element>
+
+<element name="TArcBlock.Obj">
+  <short>The shared object (nil after it has been freed).</short>
+</element>
+
 <element name="TArc">
   <short>Atomically reference counted shared owner of an object.</short>
   <descr>
@@ -124,11 +140,11 @@
   <descr><p>A snapshot that may be outdated by the time it is used in multi-threaded code; intended for diagnostics and tests. Returns 0 for an empty TArc.</p></descr>
 </element>
 
-<element name="TArc.op_Equal">
+<element name="TArc.equal(TArc,TArc):Boolean">
   <short>True if both refer to the same object (or both are empty).</short>
 </element>
 
-<element name="TArc.op_NotEqual">
+<element name="TArc.notequal(TArc,TArc):Boolean">
   <short>True if the operands refer to different objects.</short>
 </element>
 

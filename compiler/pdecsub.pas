@@ -480,6 +480,10 @@ implementation
              not(varspez in [vs_out,vs_var]) then
             CGMessage(cg_e_file_must_call_by_reference);
 
+          { a value parameter is a copy (ADR-0008) }
+          if (varspez=vs_value) and is_nocopy(hdef) then
+            CGMessage1(parser_e_nocopy_value_para,FullTypeName(hdef,nil));
+
           { Dispinterfaces are restricted to using only automatable types }
           if (pd.typ=procdef) and is_dispinterface(tprocdef(pd).struct) and
              not is_automatable(hdef) then

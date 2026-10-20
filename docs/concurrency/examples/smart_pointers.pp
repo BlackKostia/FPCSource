@@ -109,12 +109,8 @@ begin
   Other := Lines.Move;                  // Lines порожній, Other — власник
   WriteLn('  after Move: Lines assigned=', Lines.IsAssigned,
     ', Other count=', Other.Obj.Count);
-  try
-    Lines := Other;                     // друга копія власника заборонена
-  except
-    on E: ESmartPtrError do
-      WriteLn('  copy rejected: ESmartPtrError');
-  end;
+  // Lines := Other;  — помилка компіляції: TScoped оголошено "nocopy"
+  //                    (зі старим компілятором — ESmartPtrError)
 
   WriteLn('4. TArc shared by tasks');
   Catalog := TCatalogArc.Create(TCatalog.Create);

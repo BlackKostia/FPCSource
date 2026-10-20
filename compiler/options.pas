@@ -4886,6 +4886,8 @@ procedure read_arguments(cmd:TCmdStr);
         an interface or record/class can use generics requiring them in its
         header (e.g. a result "specialize TBox<T>" with "TBox<T: class>") }
         def_system_macro('FPC_HAS_CONSTRAINED_GENERIC_FORWARD');
+      { records declared "end nocopy;" can't be copied (ADR-0008) }
+        def_system_macro('FPC_HAS_NOCOPY_TYPES');
 
       { these cpus have an inline rol/ror implementation }
       {$ifdef cpurox}

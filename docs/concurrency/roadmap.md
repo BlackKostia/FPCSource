@@ -144,11 +144,12 @@
 - **`TScoped<T>` (аналог `std::unique_ptr`)** — автоматично викликає `.Free` при виході зі стекового кадру (навіть у разі винятку), усуваючи потребу в `try..finally` для локальних об'єктів (`TStringList`, `TMemoryStream`, `TThreadPool`).
 - **`TArc<T>` (Atomic Reference Counted)** — потокобезпечне спільне володіння для будь-якого класу `TObject` без вимоги успадковувати `TInterfacedObject`.
 
-**Стан:** модуль `smartptrs` / `System.SmartPtrs` у `packages/rtl-objpas`; додатково `TWeak<T>` (аналог `std::weak_ptr`) для розриву циклів. Посібник — [guides/smart-pointers.md](guides/smart-pointers.md), рішення — [ADR-0007](adr/0007-smart-pointers.md), приклад — `examples/smart_pointers.pp`, тести — `packages/rtl-objpas/tests/utcsmartptrs.pp`. Фабрики з виведенням типу `MakeScoped(X)`/`MakeArc(X)` — після виправлення в компіляторі перевірки обмежень у заголовку реалізації обмежених дженериків (`FPC_HAS_CONSTRAINED_GENERIC_FORWARD`, тести `tests/test/tgenconstraint41`–`58`). Наступний крок — опційні некопійовані типи для статичної заборони копіювання (див. ADR-0007).
+**Стан:** модуль `smartptrs` / `System.SmartPtrs` у `packages/rtl-objpas`; додатково `TWeak<T>` (аналог `std::weak_ptr`) для розриву циклів. Посібник — [guides/smart-pointers.md](guides/smart-pointers.md), рішення — [ADR-0007](adr/0007-smart-pointers.md), приклад — `examples/smart_pointers.pp`, тести — `packages/rtl-objpas/tests/utcsmartptrs.pp`. Фабрики з виведенням типу `MakeScoped(X)`/`MakeArc(X)` — після виправлення в компіляторі перевірки обмежень у заголовку реалізації обмежених дженериків (`FPC_HAS_CONSTRAINED_GENERIC_FORWARD`, тести `tests/test/tgenconstraint41`–`58`). Некопійовані типи `end nocopy;` ([ADR-0008](adr/0008-nocopy-types.md)) [РЕАЛІЗОВАНО]: `TScoped<T>` і гарди `SyncObjs` відхиляють копії під час компіляції (`FPC_HAS_NOCOPY_TYPES`, тести `tests/test/tnocopy*`).
 
 ### 3.2. Безпечні зрізи пам'яті (`TSpan<T>` / `TReadOnlySpan<T>`)
 - Легковагова структура `(Ptr: ^T; Length: SizeInt)` з перевіркою меж (при `-Cr`), що представляє неперервний піддіапазон статичного масиву, динамічного масиву, рядка або `TBytes` без копіювання і без алокацій у купі.
 - Дозволяє безпечно передавати неперетинні сегменти масиву в паралельні задачі `System.Threading`.
+
 
 ### 3.3. Підтримка ThreadSanitizer (`-fsanitize=thread`) та AddressSanitizer (`-fsanitize=address`) у генераторі коду
 - Доповнення модуля `fpvalgrind` вбудованою інструментацією читань/записів пам'яті в компіляторі для TSan та ASan:

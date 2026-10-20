@@ -2435,9 +2435,11 @@ uses
                         unset_forwarddef(result);
                     end;
                   else
-                    { parse hint directives for records and arrays }
+                    { parse hint directives (and "nocopy") for records and arrays }
                     if replaydepth<current_scanner.replay_stack_depth then begin
+                      try_consume_nocopy(result,false);
                       try_consume_hintdirective(srsym.symoptions,srsym.deprecatedmsg);
+                      try_consume_nocopy(result,false);
                       if replaydepth<current_scanner.replay_stack_depth then
                         consume(_SEMICOLON);
                     end;

@@ -3678,16 +3678,19 @@ begin
   Inc(Released);
 end;
 
-procedure TakeReadGuardByValue(G: TSlimReadLockGuard);
+{ With FPC_HAS_NOCOPY_TYPES the compiler rejects copies of guards in source
+  code. These helpers make the copies it can't see, through RTTI: the
+  bitwise copy + AddRef of a value parameter, and Copy of an assignment. }
+procedure ValueParamCopy(const aSrc; aSize: SizeInt; aTypeInfo: Pointer);
+var
+  Buf: array[0..63] of Byte;
 begin
-end;
-
-procedure TakeWriteGuardByValue(G: TSlimWriteLockGuard);
-begin
-end;
-
-procedure TakeLockGuardByValue(G: TCountingGuard);
-begin
+  if aSize > SizeOf(Buf) then
+    raise Exception.Create('guard too large for ValueParamCopy');
+  System.Move(aSrc, Buf, aSize);
+  AddRefArray(@Buf, aTypeInfo, 1);
+  { a value parameter is finalized when the callee returns }
+  FinalizeArray(@Buf, aTypeInfo, 1);
 end;
 
 procedure TTestSyncObjsPhase2.TestSlimReadGuardCopy;
@@ -3703,7 +3706,7 @@ var
     AssertEquals('guard + other reader', 2, RW.ReaderCount);
     Raised := False;
     try
-      TakeReadGuardByValue(A);
+      ValueParamCopy(A, SizeOf(A), TypeInfo(TSlimReadLockGuard));
     except
       on ELockException do
         Raised := True;
@@ -3712,7 +3715,7 @@ var
     AssertEquals('value copy did not release', 2, RW.ReaderCount);
     Raised := False;
     try
-      B := A;
+      CopyArray(@B, @A, TypeInfo(TSlimReadLockGuard), 1);
     except
       on ELockException do
         Raised := True;
@@ -3726,8 +3729,8 @@ var
   var
     A, B: TSlimReadLockGuard;
   begin
-    B := A;
-    TakeReadGuardByValue(A);
+    CopyArray(@B, @A, TypeInfo(TSlimReadLockGuard), 1);
+    ValueParamCopy(A, SizeOf(A), TypeInfo(TSlimReadLockGuard));
     AssertNull('empty copy allowed', B.Lock);
   end;
 
@@ -3759,7 +3762,7 @@ var
     A.Init(RW);
     Raised := False;
     try
-      TakeWriteGuardByValue(A);
+      ValueParamCopy(A, SizeOf(A), TypeInfo(TSlimWriteLockGuard));
     except
       on ELockException do
         Raised := True;
@@ -3768,7 +3771,7 @@ var
     AssertTrue('still write locked', RW.IsWriteLocked);
     Raised := False;
     try
-      B := A;
+      CopyArray(@B, @A, TypeInfo(TSlimWriteLockGuard), 1);
     except
       on ELockException do
         Raised := True;
@@ -3803,7 +3806,7 @@ var
     A.Init(S);
     Raised := False;
     try
-      TakeLockGuardByValue(A);
+      ValueParamCopy(A, SizeOf(A), TypeInfo(TCountingGuard));
     except
       on ELockException do
         Raised := True;
@@ -3811,7 +3814,7 @@ var
     AssertTrue('copy by value rejected', Raised);
     Raised := False;
     try
-      B := A;
+      CopyArray(@B, @A, TypeInfo(TCountingGuard), 1);
     except
       on ELockException do
         Raised := True;
@@ -3824,8 +3827,8 @@ var
   var
     A, B: TCountingGuard;
   begin
-    B := A;
-    TakeLockGuardByValue(A);
+    CopyArray(@B, @A, TypeInfo(TCountingGuard), 1);
+    ValueParamCopy(A, SizeOf(A), TypeInfo(TCountingGuard));
   end;
 
 begin

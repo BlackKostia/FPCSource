@@ -44,9 +44,11 @@ type
     (end of the scope of a local variable, destruction of the owning class or
     record), including unwinding caused by an exception.
 
-    Ownership cannot be duplicated: assigning or passing by value an owning
-    TScoped raises ESmartPtrError. Pass it as const/var/constref and transfer
-    ownership explicitly with Move, Release or Reset. }
+    Ownership cannot be duplicated. With FPC_HAS_NOCOPY_TYPES the type is
+    declared "nocopy" and the compiler rejects copies (assignment from a
+    variable, value parameters, Copy()); copies it can't see (RTTI, a shared
+    dynamic array made unique) raise ESmartPtrError at runtime. Pass it as
+    const/var/constref and transfer ownership with Move, Release or Reset. }
 
   generic TScoped<T: class> = record
   private
@@ -68,7 +70,7 @@ type
     function IsAssigned: Boolean; inline;
     function Get: T; inline;
     property Obj: T read FObj;
-  end;
+  end{$IFDEF FPC_HAS_NOCOPY_TYPES} nocopy{$ENDIF};
 
   { Control block shared by all TArc<T>/TWeak<T> of one object.
     Strong counts TArc owners; Weak counts TWeak references plus one

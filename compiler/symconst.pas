@@ -255,7 +255,10 @@ type
     {  never use the typename for this type, always expand full definition }
     df_llvm_no_typename,
     {  the type is a tuple record }
-    df_tuple
+    df_tuple,
+    { record declared "end nocopy;": variables of it (and of types containing
+      it) can't be copied, see defutil.is_nocopy }
+    df_nocopy
   );
   tdefoptions=set of tdefoption;
 

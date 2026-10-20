@@ -90,9 +90,10 @@ type
 
    { TLockGuard
 
-     Releases the lock when the guard is finalized. A guard that holds a
-     lock cannot be copied (assignment, value parameter): the copy would
-     release the lock a second time, so copying raises ELockException. }
+     Releases the lock when the guard is finalized. A guard cannot be
+     copied: the copy would release the lock a second time. With
+     FPC_HAS_NOCOPY_TYPES the compiler rejects copies ("nocopy"); copies it
+     can't see raise ELockException if the guard holds a lock. }
    generic TLockGuard<T:TSynchroObject> = record
      obj: T;
      class operator Initialize(var hdl: TLockGuard);
@@ -100,7 +101,7 @@ type
      class operator AddRef(var hdl: TLockGuard);
      class operator Copy(constref aSrc: TLockGuard; var aDst: TLockGuard);
      procedure Init(AObj: T);
-   end;
+   end{$IFDEF FPC_HAS_NOCOPY_TYPES} nocopy{$ENDIF};
 
    TCriticalSection = class(TSynchroObject)
    private
@@ -427,7 +428,7 @@ Type
     class operator Copy(constref aSrc: TSlimReadLockGuard; var aDst: TSlimReadLockGuard);
     procedure Init(aLock: TSlimReaderWriterLock);
     procedure Release;
-  end;
+  end{$IFDEF FPC_HAS_NOCOPY_TYPES} nocopy{$ENDIF};
 
   { TSlimWriteLockGuard }
 
@@ -440,7 +441,7 @@ Type
     class operator Copy(constref aSrc: TSlimWriteLockGuard; var aDst: TSlimWriteLockGuard);
     procedure Init(aLock: TSlimReaderWriterLock);
     procedure Release;
-  end;
+  end{$IFDEF FPC_HAS_NOCOPY_TYPES} nocopy{$ENDIF};
 
   { TChannel }
 

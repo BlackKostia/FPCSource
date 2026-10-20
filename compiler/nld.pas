@@ -86,7 +86,10 @@ interface
        tassigntype = (at_normal,at_plus,at_minus,at_star,at_slash);
 
        TAssignmentNodeFlag = (
-         anf_assign_done_in_right
+         anf_assign_done_in_right,
+         { written by the user with a source that is not a function result:
+           check that the type may be copied (see defutil.is_nocopy) }
+         anf_check_nocopy
        );
 
        TAssignmentNodeFlags = set of TAssignmentNodeFlag;
@@ -708,6 +711,21 @@ implementation
 
 
     function tassignmentnode.pass_typecheck:tnode;
+
+      { a value that is not a copy of a variable: a function result (built in
+        the destination) or Default() }
+      function is_nocopy_source(n: tnode): boolean;
+        begin
+          while n.nodetype=typeconvn do
+            n:=ttypeconvnode(n).left;
+          result:=(n.nodetype in [calln,pointerconstn]) or
+            (
+              (n.nodetype=loadn) and
+              (tloadnode(n).symtableentry.typ=staticvarsym) and
+              (vo_is_default_var in tstaticvarsym(tloadnode(n).symtableentry).varoptions)
+            );
+        end;
+
       var
         hp : tnode;
         useshelper : boolean;
@@ -748,6 +766,16 @@ implementation
         if (left.resultdef.typ<>procvardef) and
             not is_invokable(left.resultdef) then
           maybe_call_procvar(right,true);
+
+        { variables of non-copyable types can't be copied (ADR-0008) }
+        if (anf_check_nocopy in assignmentnodeflags) and
+           is_nocopy(left.resultdef) and
+           not is_nocopy_source(right) then
+          begin
+            CGMessage1(type_e_nocopy_copy,FullTypeName(left.resultdef,nil));
+            result:=cerrornode.create;
+            exit;
+          end;
 
         { assignments to formaldefs and open arrays aren't allowed }
         if is_open_array(left.resultdef) or is_array_of_const(left.resultdef) then

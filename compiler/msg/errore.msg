@@ -1739,6 +1739,12 @@ parser_e_async_must_return_task_or_future=03380_E_Async function must return ITa
 % An async function must have a return type of ITask or IFuture<T>, or be a procedure.
 parser_e_await_only_in_async=03381_E_Await can only be used inside an async routine or active fiber
 % The await operator suspends execution until the awaited task is complete. It can only be used within routines declared as async or executing within a fiber.
+parser_e_nocopy_only_records=03382_E_The directive "nocopy" is only allowed for record types
+% Only record types (including generic records) can be declared non-copyable with \var{end nocopy;}.
+parser_e_nocopy_value_para=03383_E_Type "$1" cannot be copied, it must not be passed as value parameter
+% A value parameter is a copy of the argument. A non-copyable type (a record declared
+% \var{end nocopy;} or a type containing one) can only be passed as \var{const},
+% \var{constref}, \var{var} or \var{out} parameter.
 %
 % \end{description}
 %
@@ -2209,6 +2215,10 @@ type_e_ordinal_or_pointer_expr_expected=04134_E_Ordinal or pointer expression ex
 type_e_interface_has_no_name=04135_E_Interface type $1 has no valid name
 % When applying the as-operator to an interface or class, the desired interface (i.e. the right operand of the
 % as-operator) must have a valid name.
+type_e_nocopy_copy=04136_E_Type "$1" cannot be copied
+% The type is a record declared \var{end nocopy;} or contains one. Only the result of a function
+% call or \var{Default()} can be assigned to it (the result is built in the destination);
+% transfer the contents explicitly (e.g. with a method returning the value) instead of copying a variable.
 %
 % \end{description}
 #

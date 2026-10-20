@@ -1592,6 +1592,7 @@ implementation
                          getprocvardef:=nil;
                          getfuncrefdef:=nil;
                          p1:=cassignmentnode.create(p1,p2);
+                         include(tassignmentnode(p1).assignmentnodeflags,anf_check_nocopy);
                       end
                     else
                       begin
@@ -5485,7 +5486,10 @@ implementation
                _OP_XOR :
                  p1:=caddnode.create(xorn,p1,p2);
                _ASSIGNMENT :
-                 p1:=cassignmentnode.create(p1,p2);
+                 begin
+                   p1:=cassignmentnode.create(p1,p2);
+                   include(tassignmentnode(p1).assignmentnodeflags,anf_check_nocopy);
+                 end;
                _NE :
                  p1:=caddnode.create(unequaln,p1,p2);
                else
@@ -5579,6 +5583,7 @@ implementation
                 getprocvardef:=nil;
                 getfuncrefdef:=nil;
                 p1:=cassignmentnode.create(p1,p2);
+                include(tassignmentnode(p1).assignmentnodeflags,anf_check_nocopy);
              end;
            _PLUSASN :
              begin

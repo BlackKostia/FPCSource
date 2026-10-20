@@ -272,6 +272,13 @@ begin
   AssertEquals('nothing freed', 0, Destroyed);
 end;
 
+{ With FPC_HAS_NOCOPY_TYPES the compiler rejects copies of a TScoped
+  (assignment, value parameters, Copy()). The runtime check in AddRef/Copy
+  remains for copies it can't see; these tests make such copies through
+  RTTI (CopyArray, AddRefArray) and the loop variable of for..in.
+  (SetLength of a shared dynamic array copies the elements as well; the RTL
+  then does not free the new block when AddRef raises.) }
+
 procedure TTestScoped.TestCopyOwningRaises;
 var
   A, B: TScopedTracked;
@@ -281,7 +288,8 @@ begin
   B.Reset(TTracked.Create(2));
   Raised := False;
   try
-    B := A;
+    { B := A }
+    CopyArray(@B, @A, TypeInfo(TScopedTracked), 1);
   except
     on ESmartPtrError do
       Raised := True;
@@ -297,14 +305,9 @@ var
   A, B: TScopedTracked;
 begin
   B.Reset(TTracked.Create);
-  B := A;
+  CopyArray(@B, @A, TypeInfo(TScopedTracked), 1);
   AssertFalse('B empty', B.IsAssigned);
   AssertEquals('B object freed', 1, Destroyed);
-end;
-
-procedure TakeScopedByValue(S: TScopedTracked);
-begin
-  S.Obj.Value := -1;
 end;
 
 function ReadScopedConst(const S: TScopedTracked): Integer;
@@ -314,18 +317,22 @@ end;
 
 procedure TTestScoped.TestValueParamRaises;
 var
-  A: TScopedTracked;
+  A, C: TScopedTracked;
   Raised: Boolean;
 begin
   A.Reset(TTracked.Create(5));
   Raised := False;
   try
-    TakeScopedByValue(A);
+    { what the compiler does for a value parameter: a bitwise copy that
+      gets AddRef }
+    System.Move(A, C, SizeOf(A));
+    AddRefArray(@C, TypeInfo(TScopedTracked), 1);
   except
     on ESmartPtrError do
       Raised := True;
   end;
   AssertTrue('ESmartPtrError', Raised);
+  AssertFalse('copy does not own', C.IsAssigned);
   AssertEquals('still owned', 5, A.Obj.Value);
   AssertEquals('nothing freed', 0, Destroyed);
 end;
@@ -354,7 +361,7 @@ begin
   A.Item.Reset(TTracked.Create(1));
   Raised := False;
   try
-    B := A;
+    CopyArray(@B, @A, TypeInfo(TScopedPair), 1);
   except
     on ESmartPtrError do
       Raised := True;
@@ -368,20 +375,23 @@ end;
 
 procedure TTestScoped.TestDynArrayCopyRaises;
 var
-  A, B: array of TScopedTracked;
+  A: array of TScopedTracked;
+  S: TScopedTracked;
   Raised: Boolean;
 begin
   SetLength(A, 2);
   A[0].Reset(TTracked.Create);
   Raised := False;
   try
-    B := Copy(A);
+    { the loop variable is a copy made by the compiler itself }
+    for S in A do
+      ;
   except
     on ESmartPtrError do
       Raised := True;
   end;
   AssertTrue('ESmartPtrError', Raised);
-  B := nil;
+  AssertFalse('loop variable does not own', S.IsAssigned);
   AssertTrue('A still owns', A[0].IsAssigned);
   A := nil;
   AssertEquals('freed exactly once', 1, Destroyed);
