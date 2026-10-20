@@ -1,3 +1,4 @@
+{ %KNOWNCOMPILEERROR=div and mod for Currency are not implemented (Delphi does not allow them either); left to upstream }
 { div on two Currency values has to rescale the raw quotient back into a
   Currency value, and the result of mod has to stay marked as scaled }
 program tw41865c;

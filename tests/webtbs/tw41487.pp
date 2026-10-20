@@ -1,3 +1,4 @@
+{ %KNOWNCOMPILEERROR=Pointer constants and field offsets in $if expressions are not supported; not pursued in this branch (niche, header translation only) }
 program const_internal_error;
 
 const

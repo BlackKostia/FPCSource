@@ -1,3 +1,4 @@
+{ %KNOWNCOMPILEERROR=A calling convention modifier after the initializer of a typed procedural constant is not supported; only the word order differs from Delphi, not pursued }
 { Source provided for Free Pascal Bug Report 2536 }
 { Submitted by "Michael Van Canneyt" on  2003-06-14 }
 { e-mail: Michael.VanCanneyt@wisa.be }

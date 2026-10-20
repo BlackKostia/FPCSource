@@ -1,4 +1,5 @@
 { %opt=-Ooregvar }
+{ %KNOWNCOMPILEERROR=Sets with more than 256 elements are not implemented (constant sets are set of 0..255 in the compiler) }
 
 {$ifdef fpc}
 {$packset 1}

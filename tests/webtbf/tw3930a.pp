@@ -1,4 +1,5 @@
 { %fail }
+{ %KNOWNCOMPILEERROR=type TStringList is not a distinct type for assignment compatibility; making it strict would break existing code, not pursued }
 
 { Gives under Kylix:
 

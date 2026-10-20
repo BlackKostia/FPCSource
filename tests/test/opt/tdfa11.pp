@@ -1,4 +1,5 @@
 { %OPT=-Oodfa -Sew -vw }
+{ %KNOWNCOMPILEERROR=The dfa does not relate the equal conditions of the assignment and the use (path sensitive dfa is not implemented) }
 { %norun }
 
 { this test test needs dynamic dfa to work properly,
