@@ -1756,6 +1756,13 @@ parser_e_inline_var_cannot_infer=03386_E_The type of inline variable "$1" cannot
 % \var{[1, 2]} or a procedure call without result; write \var{var X: Type := Expr;}.
 parser_e_inline_var_init_needs_single=03387_E_An initialization can only follow a single inline variable
 % \var{var A, B: Integer := 0;} is not allowed, declare the variables separately.
+parser_e_illegal_assignment_to_using_resource=03388_E_Illegal assignment to resource "$1" of a "using" statement
+% With \var{\{\$modeswitch using\}}, the resource of \var{using X := Expr do Statement}
+% is freed at the end of the statement: the statement cannot assign it, pass it
+% as \var{var} or \var{out} parameter (e.g. to \var{FreeAndNil}) or free it otherwise.
+parser_e_using_resource_type=03389_E_Type "$1" cannot be the resource of a "using" statement, a class or a COM interface is expected
+% The resource of a \var{using} statement is freed with \var{TObject.Free} (a class
+% instance) or released by assigning \var{nil} (a reference counted COM interface).
 %
 % \end{description}
 %

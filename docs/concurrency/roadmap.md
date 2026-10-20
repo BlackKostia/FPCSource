@@ -137,6 +137,16 @@
   - Детальний посібник: [`guide-tuples.md`](guide-tuples.md).
   - Тестовий набір: [`tests/concurrency/test_tuples.pp`](../../tests/concurrency/test_tuples.pp).
 
+### 2.5. Оператор ресурсу `using .. do` (`{$modeswitch using}`) [РЕАЛІЗОВАНО]
+- Пропозиція 4.2 з `proposals/modern_pascal_productivity_and_web_vision.md`: прибрати шаблон `try .. finally X.Free; end;` для локальних тимчасових об'єктів.
+  ```pascal
+  using var Src := TFileStream.Create(A, fmOpenRead),
+        var Dst := TFileStream.Create(B, fmCreate) do
+    Dst.CopyFrom(Src, 0);   // Dst, потім Src звільняються навіть після винятку
+  ```
+
+**Стан:** `using var X[: T] := Expr do S` (нова змінна, видима лише в операторі) і `using X := Expr do S` (змінна з секції `var`, після оператора `nil`); кілька ресурсів через кому, звільнення у зворотному порядку, також після винятку, `Exit`, `Break`, `Continue` і невдалої ініціалізації наступного ресурсу. Клас звільняється `TObject.Free`, COM-інтерфейс — присвоєнням `nil`; інші типи — помилка компіляції. Присвоєння ресурсу в операторі — помилка компіляції (як для змінної циклу). Компілюється в той самий `try..finally`, без додаткових витрат. `using` — зарезервоване слово лише з перемикачем. Посібник — [language/using.md](language/using.md), приклад — `examples/using_resources.pp`, тести — `tests/test/tusing1`–`20`.
+
 ---
 
 ## 3. Пам'ять, безпека та нульові накладні витрати (рівень Rust / C++20)

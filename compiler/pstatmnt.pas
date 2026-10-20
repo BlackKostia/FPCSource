@@ -321,6 +321,192 @@ implementation
       end;
 
 
+{****************************************************************************
+                    Using statement (modeswitch using)
+****************************************************************************}
+
+    type
+      tusingresourcekind = (urk_none,urk_class,urk_interface);
+
+    { how the resource of type def is freed }
+    function using_resource_kind(def: tdef; const pos: tfileposinfo): tusingresourcekind;
+      begin
+        result:=urk_none;
+        if not assigned(def) or
+           (def.typ in [errordef,undefineddef]) then
+          exit;
+        if is_class(def) then
+          result:=urk_class
+        else if is_interfacecom_or_dispinterface(def) then
+          result:=urk_interface
+        else
+          MessagePos1(pos,parser_e_using_resource_type,def.typename);
+      end;
+
+
+    { using var Name[: Type] := Expr[, ...] do Statement
+      using Variable := Expr[, ...] do Statement
+
+      Every resource is assigned before a try..finally that frees it: a class
+      instance with TObject.Free, a COM interface by assigning nil; a variable
+      of a var section is nil afterwards. So the resources are freed in
+      reverse order, also after an exception, Exit, Break or Continue, and
+      when the initialization of a later resource fails. The statement cannot
+      assign the resources. An inline resource is visible to the following
+      resources and the statement only. }
+    function using_statement: tnode;
+      type
+        tusingresource = record
+          sym: tabstractvarsym;
+          load: tnode;
+          assign: tnode;
+          pos: tfileposinfo;
+          kind: tusingresourcekind;
+          isinline,
+          { the flag vo_is_loop_counter was set by this statement }
+          flagged: boolean;
+        end;
+      var
+        resources: array of tusingresource;
+        count, i: longint;
+        name: TIDString;
+        def: tdef;
+        old_block_type: tblock_type;
+        init, body, release, hp: tnode;
+        stmts: tstatementnode;
+        vs: tlocalvarsym;
+        freesym: tsym;
+        oldcurrent_exceptblock: integer;
+      begin
+        consume(_USING);
+        count:=0;
+        setlength(resources,2);
+        push_inlinevar_scope;
+        repeat
+          if count>=length(resources) then
+            setlength(resources,count*2);
+          with resources[count] do
+            begin
+              sym:=nil;
+              load:=nil;
+              kind:=urk_none;
+              flagged:=false;
+              pos:=current_tokenpos;
+              isinline:=try_to_consume(_VAR);
+              if isinline then
+                begin
+                  pos:=current_tokenpos;
+                  name:=current_scanner.orgpattern;
+                  consume(_ID);
+                  def:=nil;
+                  if try_to_consume(_COLON) then
+                    begin
+                      old_block_type:=block_type;
+                      block_type:=bt_var_type;
+                      read_anon_type(def,false,nil);
+                      block_type:=old_block_type;
+                    end;
+                  consume(_ASSIGNMENT);
+                  { the variable is declared after its initialization }
+                  init:=comp_expr([ef_accept_equal]);
+                  if not assigned(def) then
+                    begin
+                      do_typecheckpass(init);
+                      def:=inlinevar_inferred_def(init,name,pos);
+                    end;
+                  vs:=create_inlinevar(name,pos,def);
+                  sym:=vs;
+                  load:=cloadnode.create(vs,vs.owner);
+                end
+              else
+                begin
+                  load:=factor(false,[]);
+                  consume(_ASSIGNMENT);
+                  init:=comp_expr([ef_accept_equal]);
+                end;
+              typecheckpass(load);
+              if not isinline then
+                begin
+                  if (load.nodetype=loadn) and
+                     (tloadnode(load).symtableentry.typ in [localvarsym,staticvarsym,paravarsym]) then
+                    sym:=tabstractvarsym(tloadnode(load).symtableentry)
+                  else if load.nodetype<>errorn then
+                    MessagePos(pos,type_e_variable_id_expected);
+                end;
+              kind:=using_resource_kind(load.resultdef,pos);
+              { assigned before the following resources are flagged, so an
+                assignment to an earlier resource is an error }
+              assign:=cassignmentnode.create(load.getcopy,init);
+              assign.fileinfo:=pos;
+              do_typecheckpass(assign);
+              if assigned(sym) and
+                 not(vo_is_loop_counter in sym.varoptions) then
+                begin
+                  include(sym.varoptions,vo_is_loop_counter);
+                  add_using_resource(sym);
+                  flagged:=true;
+                end;
+            end;
+          inc(count);
+        until not try_to_consume(_COMMA);
+        consume(_DO);
+
+        { the statement is a try block }
+        inc(exceptblockcounter);
+        oldcurrent_exceptblock:=current_exceptblock;
+        current_exceptblock:=exceptblockcounter;
+        body:=statement;
+        current_exceptblock:=oldcurrent_exceptblock;
+
+        for i:=0 to count-1 do
+          if resources[i].flagged then
+            begin
+              exclude(resources[i].sym.varoptions,vo_is_loop_counter);
+              remove_using_resource(resources[i].sym);
+            end;
+        pop_inlinevar_scope;
+
+        { from the last resource to the first:
+            resource := init; try <inner> finally <release> end }
+        result:=body;
+        for i:=count-1 downto 0 do
+          with resources[i] do
+            begin
+              release:=nil;
+              case kind of
+                urk_class:
+                  begin
+                    { TObject.Free, also when the class has another Free }
+                    freesym:=nil;
+                    if assigned(class_tobject) then
+                      freesym:=search_struct_member(class_tobject,'FREE');
+                    if not assigned(freesym) or
+                       (freesym.typ<>procsym) then
+                      internalerror(2026102010);
+                    release:=internalstatements(stmts);
+                    addstatement(stmts,ccallnode.create(nil,tprocsym(freesym),freesym.owner,load.getcopy,[],nil));
+                    if not isinline then
+                      addstatement(stmts,cassignmentnode.create(load.getcopy,cnilnode.create));
+                  end;
+                urk_interface:
+                  release:=cassignmentnode.create(load.getcopy,cnilnode.create);
+                else
+                  ;
+              end;
+              if assigned(release) then
+                begin
+                  result:=ctryfinallynode.create(result,release);
+                  result.fileinfo:=pos;
+                end;
+              hp:=internalstatements(stmts);
+              addstatement(stmts,assign);
+              addstatement(stmts,result);
+              result:=hp;
+              load.free;
+            end;
+      end;
+
+
     function is_anonymous_procdef(def : tdef) : boolean;
       begin
         result:=assigned(def) and
@@ -2319,6 +2505,8 @@ implementation
              code:=with_statement;
            _TRY :
              code:=try_statement;
+           _USING :
+             code:=using_statement;
            _RAISE :
              code:=raise_statement;
            { semicolons,else until and end are ignored }

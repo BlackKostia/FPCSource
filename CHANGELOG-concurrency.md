@@ -328,6 +328,19 @@
   `eventloop.promise`.
 
 ### Додано
+- Оператор ресурсу (розділ 2.5 дорожньої карти): `{$modeswitch using}`
+  дозволяє `using var X := Expr do S`, `using var X: T := Expr do S` (змінна
+  видима лише в операторі) і `using X := Expr do S` (змінна з секції `var`,
+  після оператора `nil`); кілька ресурсів через кому. Компілюється в
+  `X := Expr; try S finally X.Free end`: ресурси звільняються у зворотному
+  порядку, також після винятку, `Exit`, `Break`, `Continue` і невдалої
+  ініціалізації наступного ресурсу. Клас звільняється `TObject.Free`,
+  COM-інтерфейс — присвоєнням `nil`; інші типи — помилка 03389. Присвоєння
+  ресурсу в операторі (також через `var`-параметр) — помилка 03388.
+  `using` зарезервоване лише з перемикачем. Тести `tests/test/tusing1`–`20`
+  (4 позитивні, модуль `uusing4`, 16 `{%FAIL}`), посібник
+  `docs/concurrency/language/using.md`, приклад
+  `docs/concurrency/examples/using_resources.pp`.
 - Змінні за місцем використання (розділ 2.3 дорожньої карти):
   `{$modeswitch inlinevars}` дозволяє `var X := Expr;`, `var X: T := Expr;`,
   `var A, B: T;` як оператори та `for var I := ... to/downto`,

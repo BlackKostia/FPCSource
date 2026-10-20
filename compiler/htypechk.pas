@@ -207,6 +207,13 @@ interface
     function  valid_for_loopvar(p:tnode; report_errors: boolean):boolean;
     function  valid_for_addr(p : tnode; report_errors: boolean) : boolean;
 
+    { the resources of the using statements being parsed ($modeswitch using):
+      in the statement they are flagged vo_is_loop_counter, an assignment is
+      reported with its own message }
+    procedure add_using_resource(sym: tabstractvarsym);
+    procedure remove_using_resource(sym: tabstractvarsym);
+    function  is_using_resource(sym: tabstractvarsym): boolean;
+
     function allowenumop(nt:tnodetype):boolean;
 
     procedure check_ranges(const location: tfileposinfo; source: tnode; destdef: tdef);
@@ -1900,7 +1907,12 @@ implementation
                           (vo_is_loop_counter in tabstractvarsym(tloadnode(hp).symtableentry).varoptions) then
                          begin
                            if report_errors then
-                             CGMessage1(parser_e_illegal_assignment_to_count_var,tloadnode(hp).symtableentry.realname);
+                             begin
+                               if is_using_resource(tabstractvarsym(tloadnode(hp).symtableentry)) then
+                                 CGMessage1(parser_e_illegal_assignment_to_using_resource,tloadnode(hp).symtableentry.realname)
+                               else
+                                 CGMessage1(parser_e_illegal_assignment_to_count_var,tloadnode(hp).symtableentry.realname);
+                             end;
                            mayberesettypeconvs;
                            exit;
                          end;
@@ -1991,6 +2003,36 @@ implementation
       begin
         valid_for_formal_const:=(p.resultdef.typ=formaldef) or
           valid_for_assign(p,[valid_void,valid_const,valid_property,valid_range],report_errors);
+      end;
+
+
+    var
+      using_resources: TFPList;
+
+
+    procedure add_using_resource(sym: tabstractvarsym);
+      begin
+        if not assigned(using_resources) then
+          using_resources:=TFPList.Create;
+        using_resources.Add(sym);
+      end;
+
+
+    procedure remove_using_resource(sym: tabstractvarsym);
+      begin
+        if assigned(using_resources) then
+          begin
+            using_resources.Remove(sym);
+            if using_resources.Count=0 then
+              FreeAndNil(using_resources);
+          end;
+      end;
+
+
+    function is_using_resource(sym: tabstractvarsym): boolean;
+      begin
+        result:=assigned(using_resources) and
+                (using_resources.IndexOf(sym)>=0);
       end;
 
 

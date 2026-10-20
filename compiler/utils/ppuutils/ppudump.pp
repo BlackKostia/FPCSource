@@ -2523,7 +2523,8 @@ const
          'm_implicit_generics',    { allow omitting specialize in objfpc mode and generic type inference }
          'm_arrow_functions',      { short lambda syntax (=>) for anonymous functions }
          'm_tuples',               { tuples and tuple deconstruction (A, B) := Expr }
-         'm_inline_vars'           { inline variable declarations: var X := Expr; for var I := ... }
+         'm_inline_vars',          { inline variable declarations: var X := Expr; for var I := ... }
+         'm_using'                 { resource statement: using var X := Expr do ... }
        );
        { optimizer }
        optimizerswitchname : array[toptimizerswitch] of string[50] =
