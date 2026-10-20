@@ -662,6 +662,7 @@ type
 
     // record
     Procedure TestRecord;
+    Procedure TestRecord_NoCopy;
     Procedure TestRecord_FieldNameEqualsTypeNameByCase;
     Procedure TestProc_ParamNameEqualsTypeName;
     Procedure TestProc_VarPointerTypesSameTarget;
@@ -10750,6 +10751,20 @@ begin
   Add('  {#TRec}TRec = record');
   Add('    {#Size}Size: longint;');
   Add('  end;');
+  Add('var');
+  Add('  {#r}{=TRec}r: TRec;');
+  Add('begin');
+  Add('  {@r}r.{@Size}Size:=3;');
+  ParseProgram;
+end;
+
+procedure TTestResolver.TestRecord_NoCopy;
+begin
+  StartProgram(false);
+  Add('type');
+  Add('  {#TRec}TRec = record');
+  Add('    {#Size}Size: longint;');
+  Add('  end nocopy;');
   Add('var');
   Add('  {#r}{=TRec}r: TRec;');
   Add('begin');

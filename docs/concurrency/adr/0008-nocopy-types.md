@@ -79,6 +79,9 @@
   дозволена під час виконання, стає помилкою компіляції; замість неї —
   `B.Reset`.
 - Delphi не знає `end nocopy` — модулі, що його використовують, огороджено
-  ознакою `FPC_HAS_NOCOPY_TYPES`. Так само `fcl-passrc` (fpdoc, makeskel,
-  pas2js) не розбирає директиву; для генерації довідника ознаку не
-  визначають (`docs/apidoc.toml`).
+  ознакою `FPC_HAS_NOCOPY_TYPES`.
+- `fcl-passrc` (парсер fpdoc, makeskel, pas2js) розбирає `end nocopy` (до чи
+  після `deprecated`/`platform`/`align`) і зберігає ознаку в
+  `TPasRecordType.NoCopy`; `GetDeclaration`, `TPasWriter` і HTML-генератор
+  fpdoc виводять `end nocopy`. Семантичних перевірок у резолвері pas2js
+  немає. Lazarus CodeTools — окремий проєкт, директиви не знає.

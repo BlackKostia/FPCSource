@@ -607,7 +607,10 @@ begin
     CodeEl := CreateCode(CreatePara(CreateTD(CreateTR(TableEl))));
     AppendText(CodeEl, ' '); // !!!: Dirty trick, necessary for current XML writer
     AppendNbSp(CodeEl, NestingLevel * 2);
-    AppendKw(CodeEl, 'end');
+    if Element.NoCopy then
+      AppendKw(CodeEl, 'end nocopy')
+    else
+      AppendKw(CodeEl, 'end');
   end;
   Result := CodeEl;
 end;

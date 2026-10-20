@@ -976,7 +976,10 @@ begin
       end;
   DecDeclSectionLevel;
   DecIndent;
-  Add('end');
+  if AType.NoCopy then
+    Add('end nocopy')
+  else
+    Add('end');
 end;
 
 procedure TPasWriter.WriteArrayType(AType: TPasArrayType; Full : Boolean = True);

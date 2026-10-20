@@ -878,6 +878,7 @@ type
     VariantEl: TPasElement; // nil or TPasVariable or TPasType
     Variants: TFPList;	// list of TPasVariant elements, may be nil!
     Align : Integer;
+    NoCopy : Boolean; // declared "end nocopy;": variables can't be copied (FPC_HAS_NOCOPY_TYPES)
     Function IsAdvancedRecord : Boolean;
 
   end;
@@ -5355,7 +5356,10 @@ begin
       end;
     S.Add(Temp);
     GetMembers(S);
-    S.Add('end');
+    if NoCopy then
+      S.Add('end nocopy')
+    else
+      S.Add('end');
     Result:=S.Text;
     if Full then
       ProcessHints(False, Result);

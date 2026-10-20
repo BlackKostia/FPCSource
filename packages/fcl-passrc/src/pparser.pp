@@ -1766,6 +1766,18 @@ begin
   Repeat
     NextToken;
     Found:=IsCurTokenHint(h);
+    // "nocopy" after the end of a record (non-copyable record type); it may
+    // precede or follow the hint directives
+    if (not Found) and (Element is TPasRecordType)
+        and CurTokenIsIdentifier('nocopy') then
+      begin
+      if TPasRecordType(Element).NoCopy then
+        ParseExc(nParserExpectTokenError,
+          'Directive "%s" specified more than once', ['nocopy']);
+      TPasRecordType(Element).NoCopy:=true;
+      Found:=true;
+      continue;
+      end;
     If Found then
       begin
       // The same hint modifier may not be specified twice (thintdir2a).

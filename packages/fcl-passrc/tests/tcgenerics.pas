@@ -16,6 +16,7 @@ Type
     // generic types
     Procedure TestObjectGenerics;
     Procedure TestRecordGenerics;
+    Procedure TestRecordGenericsNoCopy;
     Procedure TestArrayGenerics;
     Procedure TestArrayGenericsDelphi;
     Procedure TestProcTypeGenerics;
@@ -95,6 +96,22 @@ begin
     '  end;',
     '']);
   ParseDeclarations;
+end;
+
+procedure TTestGenerics.TestRecordGenericsNoCopy;
+var
+  R: TPasRecordType;
+begin
+  Add([
+    'Type',
+    '  Generic TSome<T> = Record',
+    '    b : T;',
+    '  end nocopy;',
+    '']);
+  ParseDeclarations;
+  AssertEquals('one type',1,Declarations.Classes.Count);
+  R:=TObject(Declarations.Classes[0]) as TPasRecordType;
+  AssertTrue('generic record is nocopy',R.NoCopy);
 end;
 
 procedure TTestGenerics.TestArrayGenerics;

@@ -5,7 +5,7 @@ unit tctypeparser;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, pastree, pscanner, pparser,
+  Classes, SysUtils, fpcunit, pastree, pscanner, pparser, paswrite,
   tcbaseparser, testregistry;
 
 type
@@ -382,6 +382,17 @@ type
     Procedure TestAdvRecordInitOperator;
     Procedure TestAdvRecordGenericFunction;
     Procedure TestRecordAlign;
+    // "end nocopy" (non-copyable record, FPC_HAS_NOCOPY_TYPES)
+    Procedure TestRecordNoCopy;
+    Procedure TestRecordNoCopyDefault;
+    Procedure TestRecordNoCopyDeprecated;
+    Procedure TestRecordDeprecatedNoCopy;
+    Procedure TestRecordAlignNoCopy;
+    Procedure TestRecordNoCopyDeclaration;
+    Procedure TestRecordNoCopyWriter;
+    Procedure TestRecordNoCopyTwiceFail;
+    Procedure TestNoCopyIdentifier;
+    Procedure TestClassNoCopyFail;
     Procedure TestComposition_Named;
     Procedure TestComposition_Unnamed;
     Procedure TestComposition_UnnamedDotted;
@@ -2853,6 +2864,129 @@ Const
 begin
   Source.Text:=Src;
   ParseModule;   // We're just interested in that it parses.
+end;
+
+procedure TTestRecordTypeParser.TestRecordNoCopy;
+begin
+  AddMember('x : integer;');
+  EndRecord('end nocopy');
+  ParseRecord;
+  AssertTrue('NoCopy',TheRecord.NoCopy);
+  AssertTrue('No hints',TheRecord.Hints=[]);
+  AssertEquals('One member',1,TheRecord.Members.Count);
+end;
+
+procedure TTestRecordTypeParser.TestRecordNoCopyDefault;
+begin
+  AddMember('x : integer;');
+  ParseRecord;
+  AssertFalse('NoCopy',TheRecord.NoCopy);
+end;
+
+procedure TTestRecordTypeParser.TestRecordNoCopyDeprecated;
+begin
+  AddMember('x : integer;');
+  EndRecord('end nocopy deprecated');
+  ParseRecord;
+  AssertTrue('NoCopy',TheRecord.NoCopy);
+  AssertTrue('Deprecated',TheRecord.Hints=[hDeprecated]);
+end;
+
+procedure TTestRecordTypeParser.TestRecordDeprecatedNoCopy;
+begin
+  AddMember('x : integer;');
+  EndRecord('end deprecated ''use another'' nocopy');
+  ParseRecord;
+  AssertTrue('NoCopy',TheRecord.NoCopy);
+  AssertTrue('Deprecated',TheRecord.Hints=[hDeprecated]);
+  // the parser keeps the message as written, with the quotes
+  AssertEquals('Deprecation message','''use another''',TheRecord.HintMessage);
+end;
+
+procedure TTestRecordTypeParser.TestRecordAlignNoCopy;
+begin
+  AddMember('x : integer;');
+  EndRecord('end align 16 nocopy');
+  ParseRecord;
+  AssertTrue('NoCopy',TheRecord.NoCopy);
+  AssertEquals('Align',16,TheRecord.Align);
+end;
+
+procedure TTestRecordTypeParser.TestRecordNoCopyDeclaration;
+var
+  S: String;
+begin
+  AddMember('x : integer;');
+  EndRecord('end nocopy');
+  ParseRecord;
+  S:=Trim(TheRecord.GetDeclaration(True));
+  AssertTrue('Declaration ends with "end nocopy": '+S,
+    Copy(S,Length(S)-Length('end nocopy')+1,Length('end nocopy'))='end nocopy');
+  TheRecord.NoCopy:=False;
+  S:=Trim(TheRecord.GetDeclaration(True));
+  AssertTrue('Declaration without nocopy: '+S,Pos('nocopy',S)=0);
+end;
+
+procedure TTestRecordTypeParser.TestRecordNoCopyWriter;
+var
+  Stream: TStringStream;
+  W: TPasWriter;
+begin
+  AddMember('x : integer;');
+  EndRecord('end nocopy');
+  ParseRecord;
+  Stream:=TStringStream.Create('');
+  try
+    W:=TPasWriter.Create(Stream);
+    try
+      W.WriteType(TheRecord,True);
+    finally
+      W.Free;
+    end;
+    AssertTrue('Writer emits "end nocopy": '+Stream.DataString,
+      Pos('end nocopy',Stream.DataString)>0);
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TTestRecordTypeParser.TestRecordNoCopyTwiceFail;
+begin
+  AddMember('x : integer;');
+  EndRecord('end nocopy nocopy');
+  ParseRecordFail('Directive "nocopy" specified more than once',nParserExpectTokenError);
+end;
+
+procedure TTestRecordTypeParser.TestNoCopyIdentifier;
+begin
+  { "nocopy" is not a reserved word }
+  Add('Type');
+  Add('  nocopy = integer;');
+  Add('  TRec = record');
+  Add('    x : nocopy;');
+  Add('    nocopy : integer;');
+  Add('  end;');
+  ParseDeclarations;
+  AssertEquals('Two types',2,Declarations.Types.Count);
+  AssertFalse('TRec is copyable',(TObject(Declarations.Types[1]) as TPasRecordType).NoCopy);
+end;
+
+procedure TTestRecordTypeParser.TestClassNoCopyFail;
+var
+  ok: Boolean;
+begin
+  { only records can be declared nocopy }
+  Add('Type');
+  Add('  TObj = class');
+  Add('  end nocopy;');
+  ok:=false;
+  try
+    ParseDeclarations;
+  except
+    on E: EParserError do
+      ok:=true;
+  end;
+  AssertTrue('class ... end nocopy is a syntax error',ok);
 end;
 
 procedure TTestRecordTypeParser.TestComposition_Named;

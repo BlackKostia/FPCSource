@@ -13,9 +13,8 @@
 # upstream (fpcdocs).
 
 [defaults]
-# defined by the compiler of this branch; FPC_HAS_NOCOPY_TYPES is left out:
-# fcl-passrc (makeskel, fpdoc) does not parse "end nocopy;"
-options = "-Mobjfpc -Sm -dUNIX -dLINUX -dCPU64 -dCPUX86_64 -dFPC_HAS_CONSTRAINED_GENERIC_FORWARD"
+# FPC_HAS_* are defined by the compiler of this branch, not by makeskel/fpdoc
+options = "-Mobjfpc -Sm -dUNIX -dLINUX -dCPU64 -dCPUX86_64 -dFPC_HAS_CONSTRAINED_GENERIC_FORWARD -dFPC_HAS_NOCOPY_TYPES"
 
 [[package]]
 name = "rtl-objpas"

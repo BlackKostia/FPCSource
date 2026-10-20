@@ -239,6 +239,13 @@
   `eventloop.promise`.
 
 ### Додано
+- `fcl-passrc` і fpdoc: директива `end nocopy` (ADR-0008) розбирається для
+  записів, зокрема узагальнених, разом із `deprecated`/`platform`/`align` у
+  будь-якому порядку; ознака `TPasRecordType.NoCopy`, виведення в
+  `GetDeclaration`, `TPasWriter`, HTML і Markdown-довіднику fpdoc. Раніше
+  makeskel/fpdoc/pas2js не розбирали модулі з `end nocopy`, тож генерація
+  довідника йшла без `FPC_HAS_NOCOPY_TYPES`; тепер ознаку передано
+  (`docs/apidoc.toml`). 12 нових тестів fcl-passrc (2899, 0 падінь).
 - Зрізи пам'яті — модуль `spans` (`System.Spans`) у `rtl-objpas` (розділ 3.2
   дорожньої карти): `TSpan<T>`/`TReadOnlySpan<T>` — вікна в статичний чи
   динамічний масив, рядок або `TBytes` без копіювання й алокацій; `Slice`,
