@@ -17,9 +17,17 @@
 
 { $define SYSTEM_DEBUG}
 
-{ use a trampoline which pushes the return address for proper unwinding }
+{ use a trampoline which pushes the return address for proper unwinding;
+  the faulting code need not have an aligned stack (e.g. a fault on the
+  first instruction of a called routine, or in a leaf routine without a
+  stack frame), so align it first: HandleErrorAddrFrame and the routines it
+  calls expect the stack alignment of a normal call (aligned SSE accesses
+  to locals), otherwise they fault again and the handler never ends.
+  The faulting routine does not continue, so the bytes below its stack
+  pointer are free. }
 Procedure SignalToHandleErrorAddrFrame (Errno : longint;addr : CodePointer; frame : Pointer); nostackframe; assembler;
 asm
+  andq $-16,%rsp
   pushq addr
   jmp HandleErrorAddrFrame
 end;
