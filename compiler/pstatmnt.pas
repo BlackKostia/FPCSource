@@ -82,6 +82,8 @@ implementation
       inlinevar_scopes: array of TFPList;
       inlinevar_scope_count: longint;
       inlinevar_hidden_count: longint;
+      { the hidden static variables (mangled names) }
+      inlinevar_static_count: longint;
       { the statement that is being parsed is directly in a statement list }
       inlinevar_allowed: boolean;
 
@@ -126,12 +128,41 @@ implementation
       end;
 
 
-    { declares the inline variable name of type def in the current routine }
-    function create_inlinevar(const name: TIDString; const pos: tfileposinfo; def: tdef): tlocalvarsym;
+    { declares a variable of a statement (inline variable, tuple
+      deconstruction) name of type def in the current routine. The "local"
+      symtable of the main program and of the initialization and
+      finalization of a unit is the static symtable: there the variable is
+      a hidden static variable (it is accessed directly by nested and
+      anonymous functions like a global variable, a local variable of the
+      stack frame would not be captured) }
+    function create_statement_var(const name: TIDString; const pos: tfileposinfo; def: tdef): tabstractnormalvarsym;
+      var
+        st: TSymtable;
       begin
-        result:=clocalvarsym.create(name,vs_value,def,[]);
-        result.fileinfo:=pos;
-        current_procinfo.procdef.localst.insertsym(result);
+        st:=current_procinfo.procdef.localst;
+        if st.symtabletype=staticsymtable then
+          begin
+            inc(inlinevar_static_count);
+            result:=cstaticvarsym.create(name,vs_value,def,[]);
+            { unique also when sibling blocks reuse the name }
+            tstaticvarsym(result).set_mangledbasename('$inlinevar$'+tostr(inlinevar_static_count)+'$'+name);
+            result.fileinfo:=pos;
+            st.insertsym(result);
+            cnodeutils.insertbssdata(tstaticvarsym(result));
+          end
+        else
+          begin
+            result:=clocalvarsym.create(name,vs_value,def,[]);
+            result.fileinfo:=pos;
+            st.insertsym(result);
+          end;
+      end;
+
+
+    { declares the inline variable name of type def in the current routine }
+    function create_inlinevar(const name: TIDString; const pos: tfileposinfo; def: tdef): tabstractnormalvarsym;
+      begin
+        result:=create_statement_var(name,pos,def);
         add_inlinevar_to_scope(result);
       end;
 
@@ -258,7 +289,7 @@ implementation
         init: tnode;
         old_block_type: tblock_type;
         stmts: tstatementnode;
-        vs: tlocalvarsym;
+        vs: tabstractnormalvarsym;
       begin
         consume(_VAR);
         if not allowed then
@@ -374,7 +405,7 @@ implementation
         old_block_type: tblock_type;
         init, body, release, hp: tnode;
         stmts: tstatementnode;
-        vs: tlocalvarsym;
+        vs: tabstractnormalvarsym;
         freesym: tsym;
         oldcurrent_exceptblock: integer;
       begin
@@ -1301,7 +1332,7 @@ implementation
           def: tdef;
           old_block_type: tblock_type;
           hstart, hloopvar: tnode;
-          vs: tlocalvarsym;
+          vs: tabstractnormalvarsym;
         begin
           consume(_VAR);
           pos:=current_tokenpos;
@@ -2309,7 +2340,7 @@ implementation
         rhs_temp: ttempcreatenode;
         field_sym: tfieldvarsym;
         field_ref: tnode;
-        vs: tlocalvarsym;
+        vs: tabstractnormalvarsym;
         var_def: tdef;
         i: integer;
       begin
@@ -2387,8 +2418,7 @@ implementation
                     else
                       var_def:=cshortstringtype;
                   end;
-                vs:=clocalvarsym.create(targets[i].name,vs_value,var_def,[]);
-                current_procinfo.procdef.localst.insertsym(vs);
+                vs:=create_statement_var(targets[i].name,targets[i].pos,var_def);
                 { with inlinevars, visible to the end of the statement list
                   like the other inline variables }
                 if m_inline_vars in current_settings.modeswitches then
