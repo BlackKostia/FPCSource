@@ -457,9 +457,23 @@ Type
     FClosed: Boolean;
     FWaitingReceivers: Integer;
     FWaitingSenders: Integer;
+    {$IFDEF UNIX}
+    FSyncReady: Boolean;
+    FLock: pthread_mutex_t;
+    FNotEmptyCond: pthread_cond_t;
+    FNotFullCond: pthread_cond_t;
+    procedure Lock;
+    procedure Unlock;
+    { Absolute timeout on the condvar clock (CLOCK_MONOTONIC on Linux). }
+    procedure ArmDeadline(aTimeoutMs: Cardinal; out aAbs: timespec);
+    { Lock is held on entry and on return. False: the deadline passed.
+      A pool worker is reported blocked for the duration of the wait. }
+    function WaitCond(var aCond: pthread_cond_t; aInfinite: Boolean; const aAbs: timespec): Boolean;
+    {$ELSE}
     FLock: TSpinLock;
     FNotEmptyEvent: TSimpleEvent;
     FNotFullEvent: TSimpleEvent;
+    {$ENDIF}
     procedure NotifyItemSent;
     procedure NotifyItemReceived;
     class procedure RaiseChannelClosed; static;
@@ -531,9 +545,13 @@ uses Windows;
 // Compile with -dFPC_VALGRIND to annotate TSpinLock for Helgrind/DRD.
 {$ifdef UNIX}
 {$IFDEF FPC_DOTTEDUNITS}
-uses UnixApi.Unix, UnixApi.Base, UnixApi.Pthreads;
+uses UnixApi.Unix, UnixApi.Base, UnixApi.Pthreads
+  {$IF defined(Linux) and not defined(Android)}, LinuxApi{$ENDIF}
+  {$IFDEF FPC_VALGRIND}, fpvalgrind{$ENDIF};
 {$ELSE}
-uses unix, baseunix, pthreads{$IFDEF FPC_VALGRIND}, fpvalgrind{$ENDIF};
+uses unix, baseunix, pthreads
+  {$IF defined(Linux) and not defined(Android)}, Linux{$ENDIF}
+  {$IFDEF FPC_VALGRIND}, fpvalgrind{$ENDIF};
 {$ENDIF}
 {$endif}
 
@@ -2504,11 +2522,27 @@ begin
   end;
 end;
 
+{ The pthreads unit does not declare this. Timeouts must follow
+  CLOCK_MONOTONIC, so the condvar clock is set explicitly. }
+{$IFDEF UNIX}
+{$IF DEFINED(LINUX) AND NOT DEFINED(ANDROID)}
+function pthread_condattr_setclock(__attr: ppthread_condattr_t; __clock_id: cint): cint; cdecl; external 'pthread' name 'pthread_condattr_setclock';
+{$ENDIF}
+{$ENDIF}
+
 { ---------------------------------------------------------------------
   TCustomChannel & TChannel<T>
   ---------------------------------------------------------------------}
 
 constructor TCustomChannel.Create(aCapacity: Integer);
+
+{$IFDEF UNIX}
+{$IF DEFINED(LINUX) AND NOT DEFINED(ANDROID)}
+var
+  CAttr: pthread_condattr_t;
+{$ENDIF}
+{$ENDIF}
+
 begin
   inherited Create;
   if aCapacity < 0 then
@@ -2521,10 +2555,44 @@ begin
   FClosed := False;
   FWaitingReceivers := 0;
   FWaitingSenders := 0;
+  {$IFDEF UNIX}
+  FSyncReady := False;
+  CheckOSError(pthread_mutex_init(@FLock, nil));
+  try
+    {$IF DEFINED(LINUX) AND NOT DEFINED(ANDROID)}
+    CheckOSError(pthread_condattr_init(@CAttr));
+    try
+      CheckOSError(pthread_condattr_setclock(@CAttr, CLOCK_MONOTONIC));
+      CheckOSError(pthread_cond_init(@FNotEmptyCond, @CAttr));
+      try
+        CheckOSError(pthread_cond_init(@FNotFullCond, @CAttr));
+      except
+        pthread_cond_destroy(@FNotEmptyCond);
+        raise;
+      end;
+    finally
+      pthread_condattr_destroy(@CAttr);
+    end;
+    {$ELSE}
+    CheckOSError(pthread_cond_init(@FNotEmptyCond, nil));
+    try
+      CheckOSError(pthread_cond_init(@FNotFullCond, nil));
+    except
+      pthread_cond_destroy(@FNotEmptyCond);
+      raise;
+    end;
+    {$ENDIF}
+    FSyncReady := True;
+  except
+    pthread_mutex_destroy(@FLock);
+    raise;
+  end;
+  {$ELSE}
   FLock := TSpinLock.Create(False);
   FNotEmptyEvent := TSimpleEvent.Create;
   FNotFullEvent := TSimpleEvent.Create;
   FNotFullEvent.SetEvent;
+  {$ENDIF}
   {$IFDEF FPC_VALGRIND}
   VgBenignRace(@FCount, SizeOf(FCount));
   VgBenignRace(@FClosed, SizeOf(FClosed));
@@ -2533,28 +2601,113 @@ end;
 
 destructor TCustomChannel.Destroy;
 begin
+  {$IFDEF UNIX}
+  if FSyncReady then
+  begin
+    Close;
+    pthread_cond_destroy(@FNotEmptyCond);
+    pthread_cond_destroy(@FNotFullCond);
+    pthread_mutex_destroy(@FLock);
+    FSyncReady := False;
+  end;
+  {$ELSE}
   Close;
   FreeAndNil(FNotEmptyEvent);
   FreeAndNil(FNotFullEvent);
+  {$ENDIF}
   inherited Destroy;
 end;
 
+{$IFDEF UNIX}
+procedure TCustomChannel.Lock;
+begin
+  CheckOSError(pthread_mutex_lock(@FLock));
+end;
+
+procedure TCustomChannel.Unlock;
+begin
+  CheckOSError(pthread_mutex_unlock(@FLock));
+end;
+
+procedure TCustomChannel.ArmDeadline(aTimeoutMs: Cardinal; out aAbs: timespec);
+{$IF NOT (DEFINED(LINUX) AND NOT DEFINED(ANDROID))}
+var
+  Now: timeval;
+{$ENDIF}
+begin
+  {$IF DEFINED(LINUX) AND NOT DEFINED(ANDROID)}
+  CheckOSError(clock_gettime(CLOCK_MONOTONIC, @aAbs));
+  {$ELSE}
+  fpgettimeofday(@Now, nil);
+  aAbs.tv_sec := Now.tv_sec;
+  aAbs.tv_nsec := Now.tv_usec * 1000;
+  {$ENDIF}
+  Inc(aAbs.tv_sec, aTimeoutMs div 1000);
+  Inc(aAbs.tv_nsec, clong(aTimeoutMs mod 1000) * 1000000);
+  if aAbs.tv_nsec >= 1000000000 then
+  begin
+    Inc(aAbs.tv_sec);
+    Dec(aAbs.tv_nsec, 1000000000);
+  end;
+end;
+
+function TCustomChannel.WaitCond(var aCond: pthread_cond_t; aInfinite: Boolean; const aAbs: timespec): Boolean;
+var
+  Err: cint;
+begin
+  // True for the whole sleep, including the gap before the kernel wait:
+  // the pool must grow before this worker is stuck, or the task it waits
+  // for never starts.
+  if Assigned(WorkerBlockingHook) then
+    WorkerBlockingHook(True);
+  try
+    if aInfinite then
+      Err := pthread_cond_wait(@aCond, @FLock)
+    else
+      Err := pthread_cond_timedwait(@aCond, @FLock, @aAbs);
+  finally
+    if Assigned(WorkerBlockingHook) then
+      WorkerBlockingHook(False);
+  end;
+  if (Err = 0) or (Err = ESysETIMEDOUT) then
+    Exit(Err = 0);
+  CheckOSError(Err);
+  Result := False;
+end;
+{$ENDIF}
+
 procedure TCustomChannel.NotifyItemSent;
 begin
+  {$IFDEF UNIX}
+  {$IFDEF FPC_VALGRIND}
+  VgHappensBefore(@FNotEmptyCond);
+  {$ENDIF}
+  if FWaitingReceivers > 0 then
+    CheckOSError(pthread_cond_signal(@FNotEmptyCond));
+  {$ELSE}
   {$IFDEF FPC_VALGRIND}
   VgHappensBefore(@FNotEmptyEvent);
   {$ENDIF}
   if FWaitingReceivers > 0 then
     FNotEmptyEvent.SetEvent;
+  {$ENDIF}
 end;
 
 procedure TCustomChannel.NotifyItemReceived;
 begin
+  {$IFDEF UNIX}
+  {$IFDEF FPC_VALGRIND}
+  VgHappensAfter(@FNotEmptyCond);
+  {$ENDIF}
+  if FWaitingSenders > 0 then
+    CheckOSError(pthread_cond_signal(@FNotFullCond));
+  {$ELSE}
   {$IFDEF FPC_VALGRIND}
   VgHappensAfter(@FNotEmptyEvent);
   {$ENDIF}
   if FWaitingSenders > 0 then
     FNotFullEvent.SetEvent;
+  {$ENDIF}
 end;
 
 class procedure TCustomChannel.RaiseChannelClosed;
@@ -2576,16 +2729,41 @@ end;
 
 function TCustomChannel.GetIsClosed: Boolean;
 begin
+  {$IFDEF UNIX}
+  Lock;
+  try
+    Result := FClosed;
+  finally
+    Unlock;
+  end;
+  {$ELSE}
   FLock.Enter;
   try
     Result := FClosed;
   finally
     FLock.Exit;
   end;
+  {$ENDIF}
 end;
 
 procedure TCustomChannel.Close;
 begin
+  {$IFDEF UNIX}
+  Lock;
+  try
+    if FClosed then
+      Exit;
+    FClosed := True;
+    {$IFDEF FPC_VALGRIND}
+    VgHappensBefore(@FNotEmptyCond);
+    VgHappensBefore(@FNotFullCond);
+    {$ENDIF}
+    CheckOSError(pthread_cond_broadcast(@FNotEmptyCond));
+    CheckOSError(pthread_cond_broadcast(@FNotFullCond));
+  finally
+    Unlock;
+  end;
+  {$ELSE}
   FLock.Enter;
   try
     if FClosed then
@@ -2599,6 +2777,7 @@ begin
   finally
     FLock.Exit;
   end;
+  {$ENDIF}
 end;
 
 function TChannel.TChannelEnumerator.MoveNext: Boolean;
@@ -2635,6 +2814,49 @@ begin
   FTail := FCount;
 end;
 
+{$IFDEF UNIX}
+function TChannel.TrySend(const aItem: T; aTimeout: Cardinal): Boolean;
+var
+  Deadline: timespec;
+  Armed, WaitForever: Boolean;
+begin
+  Armed := False;
+  WaitForever := aTimeout = INFINITE;
+  Deadline := Default(timespec);
+  Lock;
+  try
+    while (FBounded and (FCount >= FCapacity)) and (not FClosed) do
+    begin
+      if aTimeout = 0 then
+        Exit(False);
+      if (not WaitForever) and (not Armed) then
+      begin
+        ArmDeadline(aTimeout, Deadline);
+        Armed := True;
+      end;
+      Inc(FWaitingSenders);
+      try
+        if (not WaitCond(FNotFullCond, WaitForever, Deadline)) and
+           (FBounded and (FCount >= FCapacity)) and (not FClosed) then
+          Exit(False);
+      finally
+        Dec(FWaitingSenders);
+      end;
+    end;
+    if FClosed then
+      Exit(False);
+    if (not FBounded) and (FCount = Length(FBuffer)) then
+      GrowBuffer;
+    FBuffer[FTail] := aItem;
+    FTail := (FTail + 1) mod Length(FBuffer);
+    Inc(FCount);
+    NotifyItemSent;
+    Result := True;
+  finally
+    Unlock;
+  end;
+end;
+{$ELSE}
 function TChannel.TrySend(const aItem: T; aTimeout: Cardinal): Boolean;
 var
   StartTick, Elapsed, Rem: QWord;
@@ -2699,6 +2921,7 @@ begin
     FLock.Exit;
   end;
 end;
+{$ENDIF}
 
 {$IFNDEF VER3_2}
 function TChannel.TrySend(const aItem: T; const aTimeout: TTimeSpan): Boolean;
@@ -2713,6 +2936,58 @@ begin
     RaiseChannelClosed;
 end;
 
+{$IFDEF UNIX}
+function TChannel.TryReceive(out aItem: T; aTimeout: Cardinal): Boolean;
+var
+  Deadline: timespec;
+  Armed, WaitForever: Boolean;
+begin
+  Armed := False;
+  WaitForever := aTimeout = INFINITE;
+  Deadline := Default(timespec);
+  Lock;
+  try
+    while (FCount = 0) and (not FClosed) do
+    begin
+      if aTimeout = 0 then
+      begin
+        aItem := Default(T);
+        Exit(False);
+      end;
+      if (not WaitForever) and (not Armed) then
+      begin
+        ArmDeadline(aTimeout, Deadline);
+        Armed := True;
+      end;
+      Inc(FWaitingReceivers);
+      try
+        if (not WaitCond(FNotEmptyCond, WaitForever, Deadline)) and
+           (FCount = 0) and (not FClosed) then
+        begin
+          aItem := Default(T);
+          Exit(False);
+        end;
+      finally
+        Dec(FWaitingReceivers);
+      end;
+    end;
+    if FCount = 0 then
+    begin
+      NotifyItemReceived;
+      aItem := Default(T);
+      Exit(False);
+    end;
+    aItem := FBuffer[FHead];
+    FBuffer[FHead] := Default(T);
+    FHead := (FHead + 1) mod Length(FBuffer);
+    Dec(FCount);
+    NotifyItemReceived;
+    Result := True;
+  finally
+    Unlock;
+  end;
+end;
+{$ELSE}
 function TChannel.TryReceive(out aItem: T; aTimeout: Cardinal): Boolean;
 var
   StartTick, Elapsed, Rem: QWord;
@@ -2780,6 +3055,7 @@ begin
     FLock.Exit;
   end;
 end;
+{$ENDIF}
 
 {$IFNDEF VER3_2}
 function TChannel.TryReceive(out aItem: T; const aTimeout: TTimeSpan): Boolean;

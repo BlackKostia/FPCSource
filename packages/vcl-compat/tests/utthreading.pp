@@ -489,6 +489,14 @@ type
     procedure TestChannelDrainAfterClose;
     procedure TestChannelWrapAroundManaged;
     procedure TestChannelMPMC;
+    // 6 producers and 6 consumers, every value exactly once.
+    procedure TestChannelMPMCStress;
+    // TrySend/TryReceive(timeout) wait out the timeout, and not much longer.
+    procedure TestChannelTimeoutAccuracy;
+    // Close wakes every blocked sender and receiver, not only one.
+    procedure TestChannelCloseWakesAll;
+    // More pool tasks blocked on channels than worker threads (bench01).
+    procedure TestChannelPoolBlockingHook;
   end;
 
   { TTestContinuationsAndCancellation }
@@ -4079,6 +4087,247 @@ begin
     AssertEquals('Sum of all items', Int64(Producers) * PerProducer * (PerProducer + 1) div 2, Sum);
   finally
     Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelMPMCStress;
+const
+  Producers = 6;
+  Consumers = 6;
+  PerProducer = 8000;
+  Total = Producers * PerProducer;
+var
+  Ch: specialize TChannel<Integer>;
+  Tasks: array of ITask;
+  Seen: array of LongInt;
+  Sum, Count, Dups: Int64;
+  Live, NextId: Integer;
+  I: Integer;
+begin
+  Ch := specialize TChannel<Integer>.Create(8);
+  SetLength(Seen, Total);
+  Sum := 0;
+  Count := 0;
+  Dups := 0;
+  Live := Producers;
+  NextId := 0;
+  SetLength(Tasks, Producers + Consumers);
+  try
+    for I := 0 to Consumers - 1 do
+      Tasks[I] := TTask.Run(
+        procedure
+        var
+          V: Integer;
+        begin
+          for V in Ch do
+          begin
+            if (V < 0) or (V >= Total) then
+              AtomicIncrement(Dups)
+            else if InterlockedCompareExchange(Seen[V], 1, 0) <> 0 then
+              AtomicIncrement(Dups);
+            AtomicIncrement(Sum, V);
+            AtomicIncrement(Count);
+          end;
+        end);
+    for I := 0 to Producers - 1 do
+      Tasks[Consumers + I] := TTask.Run(
+        procedure
+        var
+          Id, K, Base: Integer;
+        begin
+          Id := AtomicIncrement(NextId) - 1;
+          Base := Id * PerProducer;
+          for K := 0 to PerProducer - 1 do
+            Ch.Send(Base + K);
+          if AtomicDecrement(Live) = 0 then
+            Ch.Close;
+        end);
+    AssertTrue('Producers and consumers finished', TTask.WaitForAll(Tasks, 30000));
+    AssertEquals('Every value received once', Int64(Total), Count);
+    AssertEquals('No duplicate or out-of-range value', Int64(0), Dups);
+    AssertEquals('Sum of 0..N-1', Int64(Total - 1) * Total div 2, Sum);
+    for I := 0 to Total - 1 do
+      if Seen[I] <> 1 then
+        Fail('Missing value ' + IntToStr(I));
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelTimeoutAccuracy;
+const
+  TimeoutMs = 200;
+  LateMs = 150;
+var
+  Ch: specialize TChannel<Integer>;
+  T0, Elapsed: QWord;
+  V: Integer;
+begin
+  Ch := specialize TChannel<Integer>.Create(1);
+  try
+    AssertTrue('Fill the channel', Ch.TrySend(1));
+    T0 := GetTickCount64;
+    AssertFalse('TrySend on a full channel times out', Ch.TrySend(2, TimeoutMs));
+    Elapsed := GetTickCount64 - T0;
+    AssertTrue('TrySend waited at least the timeout (' + IntToStr(Elapsed) + ' ms)',
+      Elapsed >= TimeoutMs);
+    AssertTrue('TrySend did not wait much longer (' + IntToStr(Elapsed) + ' ms)',
+      Elapsed <= TimeoutMs + LateMs);
+    AssertEquals('The timed-out send left the buffer', 1, Ch.Count);
+
+    AssertEquals('Drain', 1, Ch.Receive);
+    T0 := GetTickCount64;
+    AssertFalse('TryReceive on an empty channel times out', Ch.TryReceive(V, TimeoutMs));
+    Elapsed := GetTickCount64 - T0;
+    AssertTrue('TryReceive waited at least the timeout (' + IntToStr(Elapsed) + ' ms)',
+      Elapsed >= TimeoutMs);
+    AssertTrue('TryReceive did not wait much longer (' + IntToStr(Elapsed) + ' ms)',
+      Elapsed <= TimeoutMs + LateMs);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelCloseWakesAll;
+const
+  N = 8;
+var
+  Ch: specialize TChannel<Integer>;
+  Tasks: array of ITask;
+  Started, ClosedHits: Integer;
+  I: Integer;
+  T0: QWord;
+
+  procedure WaitStarted;
+  begin
+    T0 := GetTickCount64;
+    while InterlockedCompareExchange(Started, 0, 0) < N do
+    begin
+      if GetTickCount64 - T0 > 10000 then
+        Fail('Waiters did not start');
+      Sleep(1);
+    end;
+  end;
+
+begin
+  Ch := specialize TChannel<Integer>.Create(0);
+  SetLength(Tasks, N);
+  try
+    Started := 0;
+    ClosedHits := 0;
+    for I := 0 to N - 1 do
+      Tasks[I] := TTask.Run(
+        procedure
+        var
+          V: Integer;
+        begin
+          AtomicIncrement(Started);
+          if not Ch.Receive(V) then
+            AtomicIncrement(ClosedHits);
+        end);
+    WaitStarted;
+    Sleep(20);
+    AssertFalse('Receivers are blocked', TTask.WaitForAll(Tasks, 0));
+    Ch.Close;
+    AssertTrue('Close wakes every receiver', TTask.WaitForAll(Tasks, 5000));
+    AssertEquals('Every receiver saw the close', N, ClosedHits);
+  finally
+    Ch.Free;
+  end;
+
+  Ch := specialize TChannel<Integer>.Create(1);
+  try
+    AssertTrue('Fill the channel', Ch.TrySend(1));
+    Started := 0;
+    ClosedHits := 0;
+    for I := 0 to N - 1 do
+      Tasks[I] := TTask.Run(
+        procedure
+        begin
+          AtomicIncrement(Started);
+          if not Ch.TrySend(2, INFINITE) then
+            AtomicIncrement(ClosedHits);
+        end);
+    WaitStarted;
+    Sleep(20);
+    AssertFalse('Senders are blocked', TTask.WaitForAll(Tasks, 0));
+    Ch.Close;
+    AssertTrue('Close wakes every sender', TTask.WaitForAll(Tasks, 5000));
+    AssertEquals('Every sender saw the close', N, ClosedHits);
+    AssertEquals('Item sent before Close is still there', 1, Ch.Count);
+  finally
+    Ch.Free;
+  end;
+end;
+
+procedure TTestSyncObjsPhase2.TestChannelPoolBlockingHook;
+const
+  Producers = 6;
+  Workers = 6;
+  PerProducer = 200;
+var
+  Pool: TThreadPool;
+  InCh, OutCh: specialize TChannel<Integer>;
+  Prods, Wrks: array of ITask;
+  Auditor: ITask;
+  Sum: Int64;
+  Live: Integer;
+  I: Integer;
+begin
+  // Fewer workers than tasks that block on a channel. Without the pool
+  // hook the auditor never starts and WaitForAll does not return.
+  Pool := TThreadPool.Create;
+  AssertTrue('Min threads', Pool.SetMinWorkerThreads(1));
+  AssertTrue('Max threads', Pool.SetMaxWorkerThreads(4));
+  InCh := specialize TChannel<Integer>.Create(1);
+  OutCh := specialize TChannel<Integer>.Create(1);
+  Sum := 0;
+  Live := Producers;
+  SetLength(Prods, Producers);
+  SetLength(Wrks, Workers);
+  try
+    Auditor := TTask.Run(
+      procedure
+      var
+        V: Integer;
+      begin
+        for V in OutCh do
+          AtomicIncrement(Sum, V);
+      end, Pool);
+    for I := 0 to Workers - 1 do
+      Wrks[I] := TTask.Run(
+        procedure
+        var
+          V: Integer;
+        begin
+          for V in InCh do
+            OutCh.Send(V);
+        end, Pool);
+    for I := 0 to Producers - 1 do
+      Prods[I] := TTask.Run(
+        procedure
+        var
+          K: Integer;
+        begin
+          for K := 1 to PerProducer do
+            InCh.Send(K);
+          if AtomicDecrement(Live) = 0 then
+            InCh.Close;
+        end, Pool);
+    AssertTrue('Producers finished', TTask.WaitForAll(Prods, 30000));
+    InCh.Close;
+    AssertTrue('Workers finished', TTask.WaitForAll(Wrks, 30000));
+    OutCh.Close;
+    AssertTrue('Auditor finished', Auditor.Wait(30000));
+    AssertEquals('Every item audited',
+      Int64(Producers) * PerProducer * (PerProducer + 1) div 2, Sum);
+  finally
+    Auditor := nil;
+    Prods := nil;
+    Wrks := nil;
+    InCh.Free;
+    OutCh.Free;
+    Pool.Free;
   end;
 end;
 

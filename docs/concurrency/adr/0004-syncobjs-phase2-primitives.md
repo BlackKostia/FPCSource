@@ -42,7 +42,7 @@
 - Щоб уникнути дублювання коду при спеціалізації дженериків та обійти обмеження FPC щодо доступу дженериків у секції `interface` до символів секції `implementation` (`Resourcestring`, `fpvalgrind`), не-узагальнена логіка синхронізації винесена в базовий клас `TCustomChannel`.
 - `generic TChannel<T>` реалізує кільцевий буфер `FBuffer: array of T`:
   - При `aCapacity = 0` (необмежений канал) буфер динамічно подвоюється методом `GrowBuffer` із перевпорядкуванням елементів з `FHead..FTail` у `0..FCount-1`.
-  - При `aCapacity > 0` (обмежений канал) розмір буфера фіксований, а `Send` блокується на `FNotFullEvent`, забезпечуючи природний backpressure.
+  - При `aCapacity > 0` (обмежений канал) розмір буфера фіксований, а `Send` чекає місця в буфері, забезпечуючи природний backpressure. На Unix буфер під `pthread_mutex_t`, очікування — `pthread_cond_t` з пробудженням одного чекача (`pthread_cond_signal`) і тайм-аутом від `CLOCK_MONOTONIC`; `Close` будить усіх (`pthread_cond_broadcast`). На інших платформах лишаються `TSpinLock` і `TSimpleEvent`.
   - При читанні звільнена комірка буфера очищується `FBuffer[FHead] := Default(T)`, щоб коректно звільняти посилання на керовані типи (`string`, `AnsiString`, інтерфейси, динамічні масиви) і не створювати витоків пам'яті.
 - `TChannelEnumerator` реалізовано як стековий `record` (без алокації в купі), що підтримує ідіоматичний цикл `for Msg in Channel do`.
 
