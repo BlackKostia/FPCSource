@@ -54,6 +54,7 @@ type
     FCallerExceptAddr: Pointer;
     FSavedExceptObj: Pointer;
     FCallerExceptObj: Pointer;
+    FCallerStackBottom: Pointer;
     { 1 while the fiber is not executing on any thread. A resume that comes
       from another thread (a future's continuation, a pool task) waits for
       it, because the fiber may not have finished switching out yet. }
@@ -131,6 +132,10 @@ var
   FPC_THREADVAR_RELOCATE: TThreadVarRelocateFunc; external name 'FPC_THREADVAR_RELOCATE';
   U_EXCEPTADDRSTACK: array[0..15] of Byte; external name 'U_$SYSTEM_$$_EXCEPTADDRSTACK';
   U_EXCEPTOBJECTSTACK: array[0..15] of Byte; external name 'U_$SYSTEM_$$_EXCEPTOBJECTSTACK';
+  U_STACKBOTTOM: array[0..15] of Byte; external name 'U_$SYSTEM_$$_STACKBOTTOM';
+  { Typed const in System. fpc_stackcheck treats this many bytes above
+    StackBottom as already exhausted. }
+  SystemStackMargin: PtrUInt; external name 'TC_$SYSTEM_$$_STACKMARGIN';
 
 function GetExceptAddrStackPtr: PPointer;
 begin
@@ -146,6 +151,14 @@ begin
     Result := PPointer(FPC_THREADVAR_RELOCATE(PDWord(@U_EXCEPTOBJECTSTACK)^))
   else
     Result := PPointer(@U_EXCEPTOBJECTSTACK[8]);
+end;
+
+function GetStackBottomPtr: PPointer;
+begin
+  if Assigned(FPC_THREADVAR_RELOCATE) then
+    Result := PPointer(FPC_THREADVAR_RELOCATE(PDWord(@U_STACKBOTTOM)^))
+  else
+    Result := PPointer(@U_STACKBOTTOM[8]);
 end;
 
 {$IFDEF CPUX86_64}
@@ -360,7 +373,20 @@ begin
   LAddrPtr^ := FSavedExceptAddr;
   LObjPtr^ := FSavedExceptObj;
 
+  { fpc_stackcheck compares SP with this thread's stack limit and keeps
+    SystemStackMargin bytes in reserve. The fiber runs on its own mapping,
+    so the limit has to move with the context or the trampoline raises
+    EStackOverflow before the first statement. The reserve sits below the
+    guard page: a fiber stack may be only as large as that margin, and the
+    guard page is what stops a real overflow. }
+  FCallerStackBottom := GetStackBottomPtr^;
+  GetStackBottomPtr^ := PByte(FStackBase) + FiberGuardSize - SystemStackMargin;
+
   FiberSwitchContext(FCallerRsp, FSavedRsp);
+
+  { Yield restores StackBottom before switching back. Doing it here would
+    call into a stack-checked routine while SP is already on this thread
+    and the limit still belongs to the fiber. }
 
   { Context has returned to caller; Yield already saved fiber and restored caller context }
   GCurrentFiber := LPrevFiber;
@@ -404,6 +430,11 @@ begin
   LCur.FSavedExceptObj := LObjPtr^;
   LAddrPtr^ := LCur.FCallerExceptAddr;
   LObjPtr^ := LCur.FCallerExceptObj;
+
+  { Still on the fiber stack, so the stack check matches this limit.
+    Restore the caller's limit before switching: the caller's next
+    call must not be checked against the fiber. }
+  GetStackBottomPtr^ := LCur.FCallerStackBottom;
 
   FiberSwitchContext(LCur.FSavedRsp, LCur.FCallerRsp);
 
