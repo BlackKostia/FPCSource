@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("bench_csharp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2b4e4ed1b5d7b9fe933228be8bac9775bc779cf1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+526f06d1abfb731388a97e6ce81209d33681aec9")]
 [assembly: System.Reflection.AssemblyProductAttribute("bench_csharp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("bench_csharp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
