@@ -875,9 +875,15 @@ implementation
             if def.typ=procdef then
               begin
                 pd:=tprocdef(def);
+                { the local symtable of a generic routine is kept (and stored in
+                  the ppu, see tprocdef.store_localst): the parameters can refer
+                  to definitions in it, e.g. a "specialize TBox<T>" parameter,
+                  and the routine can still be specialized by other modules
+                  compiled in the same run }
                 if assigned(pd.localst) and
                    (pd.localst.symtabletype<>staticsymtable) and
-                   not(po_inline in pd.procoptions) then
+                   not(po_inline in pd.procoptions) and
+                   not(df_generic in pd.defoptions) then
                   begin
                     free_localsymtables(pd.localst);
                     pd.localst.free;
