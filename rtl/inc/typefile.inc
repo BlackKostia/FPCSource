@@ -106,7 +106,12 @@ Begin
   FileRec(f)._private[1]:=0;
 
   Reset(UnTypedFile(f),Size);
-  BlockRead(UntypedFile(f),(pbyte(@f)+sizeof(FileRec))^,1);
+  { an empty file is at eof at once, reading its first component would
+    raise a runtime error (as in fpc_reset_typed_name_iso) }
+  if not(eof(f)) then
+    BlockRead(UntypedFile(f),(pbyte(@f)+sizeof(FileRec))^,1)
+  else
+    FileRec(f)._private[1]:=1;
 End;
 
 

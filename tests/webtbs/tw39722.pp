@@ -1,5 +1,8 @@
 { %norun }
-{ %opt=-dtest\$FPCCPU -dtest\$FPCOS -dtest\$FPCCPUtest -dtest\$FPCOStest }
+{ %opt='-dtest$FPCCPU' '-dtest$FPCOS' '-dtest$FPCCPUtest' '-dtest$FPCOStest' }
+{ the single quotes keep the $ literal both when dotest runs the compiler
+  through a shell and when it uses TProcess (no shell, since 2024), where
+  a backslash escape would reach the compiler }
 
 begin
 { test the most frequent combinations }
