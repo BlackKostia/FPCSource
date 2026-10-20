@@ -36,8 +36,9 @@ begin
     P.HomepageURL := 'http://www.freepascal.org/';
     P.NeedLibC := false;
     { Fibers switch stacks with System V AMD64 assembly (async.fiber has a
-      $FATAL for other CPUs). }
-    P.OSes := AllUnixOSes;
+      $FATAL for other CPUs); the branch targets x86_64-linux only
+      (docs/concurrency/adr/0011-target-platform.md). }
+    P.OSes := [linux];
     P.CPUs := [x86_64];
 
     P.Dependencies.Add('rtl-extra');

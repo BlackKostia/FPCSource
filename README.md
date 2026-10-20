@@ -2,6 +2,8 @@
 
 > **ModernFreePascal (MFPC) is a modern fork of the Free Pascal Compiler with advanced concurrency, coroutines, and ergonomics.**
 
+> **Target platform: x86_64 Linux.** The concurrency work of this fork (`feature/concurrency`) is developed, optimized and tested on x86_64 Linux only; it is the primary audience of the project. Code for other operating systems that already exists (e.g. the `kqueue` and `IOCP` event-loop backends) is kept but neither supported nor tested. See [ADR-0011](docs/concurrency/adr/0011-target-platform.md).
+
 ---
 
 ## Mission & Vision
@@ -14,7 +16,7 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
 - **Instant native compilation** directly to optimized machine code.
 - **Zero garbage collection (GC) pauses** and predictable memory consumption.
 - **Strict, robust static type safety** with modern type inference.
-- **Unrivaled cross-platform reach** across architectures (x86_64, AArch64, RISC-V, etc.) and operating systems.
+- **Native performance on x86_64 Linux**, the target platform of the fork (the upstream compiler itself still supports many architectures and operating systems).
 - **Clean, self-documenting syntax**.
 
 ---
@@ -51,13 +53,10 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
   - **`TSlimReaderWriterLock`**: High-performance user-space reader/writer lock with RAII scope guards.
   - **`TChannel<T>`**: Go-style Communicating Sequential Processes (CSP) channels with bounded/unbounded buffers and `for Msg in Channel do` iteration.
 - **Scalable Asynchronous I/O (`fcl-eventloop`)**:
-  - Unified cross-platform event loop leveraging native OS multiplexers:
-    - **Linux**: `io_uring` / `epoll`
-    - **FreeBSD / macOS**: `kqueue`
-    - **Windows**: `IOCP`
+  - Event loop on the native Linux multiplexers `io_uring` / `epoll` (the `kqueue` and `IOCP` backends in the package are untested and unsupported).
   - Capable of sustaining 100,000+ concurrent connections on a multi-threaded worker pool.
 - **Coroutines & `async` / `await` (`fcl-coroutines`)**:
-  - Stackful fibers (`TFiber`) for AMD64 / POSIX.
+  - Stackful fibers (`TFiber`) for x86_64 Linux (the package builds only for this target).
   - Generators (`TGenerator<T>`) supporting idiomatic `for Item in Generator do`.
   - `await` operator: inside a coroutine started with `TFiber.Async`/`TFiber.Spawn` it suspends the coroutine without blocking the OS thread (outside coroutines it waits in place). The `async` directive is parsed but does not change code generation yet.
 

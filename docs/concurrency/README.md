@@ -3,6 +3,9 @@
 Документація робіт з розвитку багатопоточності, асинхронного I/O та async/await
 у цьому форку Free Pascal.
 
+**Цільова платформа — x86_64-linux**: лише на ній гілка підтримується й
+тестується ([ADR-0011](adr/0011-target-platform.md)).
+
 ## Структура
 
 | Файл / тека | Зміст |
@@ -21,7 +24,7 @@
 | `examples/` | Приклади з документації (`parallel_for.pp`, `tasks.pp`, `pool_lifetime.pp`, `valgrind_annotate.pp`, `primes_*`, `report_*`, `batch_processing.pp`, `showcase_pipeline.pp`, `syncobjs_phase2.pp`, `continuations_cancel.pp`, `eventloop_benchmark.pp`, `coroutine_showcase.pp`, `smart_pointers.pp`, `spans_parallel.pp`); кожен компілюється й запускається |
 | `valgrind.md` | Перевірка гонок даних (helgrind/drd), анотації, відомі обмеження |
 | `baseline.md` | Базова лінія тестів trunk до наших змін (відомі падіння) |
-| `adr/` | Дизайн-рішення (ADR-0001: життєвий цикл потоків пулу; ADR-0002: клієнтські запити Valgrind; ADR-0003: детермінованість `TParallel.For` і `Join`; ADR-0004: примітиви `SyncObjs` Фази 2; ADR-0005: неблокувальні продовження та `TCancellationToken`; ADR-0006: масштабований асинхронний I/O `fcl-eventloop`; ADR-0007: розумні вказівники на керованих записах; ADR-0008: некопійовані типи `end nocopy`; ADR-0009: зрізи пам'яті `TSpan<T>`; ADR-0010: ThreadSanitizer у генераторі коду) |
+| `adr/` | Дизайн-рішення (ADR-0001: життєвий цикл потоків пулу; ADR-0002: клієнтські запити Valgrind; ADR-0003: детермінованість `TParallel.For` і `Join`; ADR-0004: примітиви `SyncObjs` Фази 2; ADR-0005: неблокувальні продовження та `TCancellationToken`; ADR-0006: масштабований асинхронний I/O `fcl-eventloop`; ADR-0007: розумні вказівники на керованих записах; ADR-0008: некопійовані типи `end nocopy`; ADR-0009: зрізи пам'яті `TSpan<T>`; ADR-0010: ThreadSanitizer у генераторі коду; ADR-0011: цільова платформа x86_64-linux) |
 | `roadmap-improvements.md` | **Дорожня карта розвитку FPC**: рекомендації щодо бібліотек багатопоточності (Фази 2–4), синтаксичної ергономіки компілятора, безпеки пам'яті та інструментарію |
 | `../../packages/rtl-objpas/xml/fpvalgrind.xml` | Довідник API `fpvalgrind` у стандартному форматі `fpdoc` |
 | `../../packages/rtl-objpas/xml/spans.xml` | Довідник API модуля `spans` (`TSpan`, `TReadOnlySpan`) у стандартному форматі `fpdoc` |

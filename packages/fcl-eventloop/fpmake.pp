@@ -27,7 +27,10 @@ begin
     P.Author := 'Free Pascal development team';
     P.License := 'LGPL with modification';
     P.HomepageURL := 'www.freepascal.org';
-    P.Description := 'High-performance scalable asynchronous I/O event loop for Linux, BSD/Darwin and Windows.';
+    { only the epoll and io_uring backends are tested (x86_64-linux, see
+      docs/concurrency/adr/0011-target-platform.md); kqueue and IOCP are
+      kept but not supported }
+    P.Description := 'High-performance scalable asynchronous I/O event loop (epoll/io_uring on Linux; kqueue and IOCP backends untested).';
     P.OSes:=AllUnixOSes + AllWindowsOSes;
 
     P.SourcePath.Add('src');

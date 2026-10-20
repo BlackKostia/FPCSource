@@ -231,6 +231,11 @@
   - Тест: `TTestParallel.TestJoin`.
 
 ### Змінено
+- Цільова платформа гілки — x86_64-linux (ADR-0011): лише на ній гілка
+  підтримується й тестується. `fcl-coroutines` обмежено до `linux`
+  (раніше — усі Unix, хоча перевірявся лише Linux); у `fcl-eventloop`
+  бекенди kqueue та IOCP позначено як непідтримувані; документи більше не
+  обіцяють macOS, Windows та ARM64.
 - Модулі `async.types`, `async.fiber`, `async.generator`, `async.statemachine`,
   `fclasync` і їхні тести перенесено з `packages/fcl-async` в новий пакет
   `packages/fcl-coroutines` (лише x86_64, Unix); імена модулів не змінились.

@@ -21,10 +21,9 @@
 - **`TChannel<T>` (обмежені та необмежені потокобезпечні канали в стилі Go)** — передавання повідомлень між потоками за моделлю CSP (Communicating Sequential Processes) із підтримкою закриття (`Close`) та перебору `for Msg in Channel do`.
 
 ### 1.3. Масштабований асинхронний I/O — пакет `fcl-eventloop` (Фаза 3)
-- Єдиний кросплатформний цикл подій на базі нативних механізмів ОС:
-  - **`io_uring` / `epoll`** (Linux)
-  - **`kqueue`** (macOS, FreeBSD, OpenBSD)
-  - **`IOCP`** (Windows)
+- Цикл подій на базі нативних механізмів Linux: **`io_uring` / `epoll`**
+  (цільова платформа гілки — x86_64-linux, [ADR-0011](adr/0011-target-platform.md);
+  бекенди `kqueue` і `IOCP` лежать у пакеті, але не підтримуються й не тестуються).
 - Неблокувальні сокети, таймери, файлові операції та пайпи, здатні обслуговувати 100 000+ одночасних з'єднань на пулі з кількох робочих потоків.
 
 ### 1.4. Корутини та `async` / `await` у компіляторі (Фаза 4) [РЕАЛІЗОВАНО]
@@ -155,9 +154,9 @@
 ### 3.3. Підтримка ThreadSanitizer (`-fsanitize=thread`) та AddressSanitizer (`-fsanitize=address`) у генераторі коду [TSan x86_64-linux РЕАЛІЗОВАНО]
 - Доповнення модуля `fpvalgrind` вбудованою інструментацією читань/записів пам'яті в компіляторі для TSan та ASan:
   - у 5–10 разів менше сповільнення порівняно з Valgrind Helgrind;
-  - робота на Linux, macOS, Windows та ARM64.
+  - цільова платформа — x86_64-linux ([ADR-0011](adr/0011-target-platform.md)).
 
-**Стан:** ключ `-fsanitize=thread` для x86_64-linux (рідний генератор коду): прохід `compiler/x86/tsaninstr.pas` інструментує остаточні інструкції з операндом-пам'яттю (точний розмір доступу, без кадру процедури, `threadvar` і атомарних інструкцій), трампліни й лінкування `libtsan` — модуль `fpctsan` (`rtl-objpas`), `cthreads` під TSan викликає pthread через перехоплювачі, `TArc<T>` анотовано `TsanRelease`/`TsanAcquire`. Сповільнення стрес-тестів `smartptrs` — 2–3× (Helgrind — ~1300×). Рішення — [ADR-0010](adr/0010-tsan.md), посібник — [guides/tsan.md](guides/tsan.md), тести — `tests/concurrency/run-tsan.sh`, `tests/test/ttsan1`–`5`. Далі: ASan; інші платформи; повні стеки (`__tsan_func_entry/exit`).
+**Стан:** ключ `-fsanitize=thread` для x86_64-linux (рідний генератор коду): прохід `compiler/x86/tsaninstr.pas` інструментує остаточні інструкції з операндом-пам'яттю (точний розмір доступу, без кадру процедури, `threadvar` і атомарних інструкцій), трампліни й лінкування `libtsan` — модуль `fpctsan` (`rtl-objpas`), `cthreads` під TSan викликає pthread через перехоплювачі, `TArc<T>` анотовано `TsanRelease`/`TsanAcquire`. Сповільнення стрес-тестів `smartptrs` — 2–3× (Helgrind — ~1300×). Рішення — [ADR-0010](adr/0010-tsan.md), посібник — [guides/tsan.md](guides/tsan.md), тести — `tests/concurrency/run-tsan.sh`, `tests/test/ttsan1`–`5`. Далі: ASan; повні стеки (`__tsan_func_entry/exit`).
 
 ---
 
@@ -177,6 +176,6 @@
 | **1** | `TChannel<T>`, `TCountdownEvent`, `TBarrier`, `TCancellationToken`, `.ContinueWith` [РЕАЛІЗОВАНО] | `packages/fcl-base`, `packages/vcl-compat` | Середня | Повноцінна оркестрація потоків і передавання повідомлень без низькорівневих блокувань |
 | **2** | Розумні вказівники `TScoped<T>` / `TArc<T>` та `TSpan<T>` [РЕАЛІЗОВАНО] | `packages/rtl-objpas` | Низька–середня | Зникнення шаблонних блоків `try..finally` і витоків пам'яті в багатопоточному коді |
 | **3** | Необов'язковий `specialize` + виведення типів для дженериків [РЕАЛІЗОВАНО] | `compiler/` (`pexpr.pas`, `ptype.pas`, `pgenutil.pas`) | Середня | Суттєве очищення синтаксису `TTask.Future`, колекцій та алгоритмів |
-| **4** | Асинхронний цикл подій `fcl-eventloop` (`epoll`/`kqueue`/`IOCP`) [РЕАЛІЗОВАНО] | `packages/fcl-eventloop` | Висока | Високопродуктивні мережеві сервіси на FPC |
+| **4** | Асинхронний цикл подій `fcl-eventloop` (`epoll`/`io_uring`) [РЕАЛІЗОВАНО] | `packages/fcl-eventloop` | Висока | Високопродуктивні мережеві сервіси на FPC |
 | **5** | Короткі лямбди `=>` та `async`/`await` [РЕАЛІЗОВАНО] | `compiler/`, `packages/fcl-coroutines` | Висока | Рівень ергономіки сучасних C# / Rust / TypeScript при збереженні нативної швидкості FPC |
 
