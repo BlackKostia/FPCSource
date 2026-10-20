@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Виправлено
+- `TThread.WaitFor` у головному потоці (Unix) повертався щонайменше через
+  100 мс: його цикл `CheckSynchronize(100)` не будився завершенням потоку
+  й помічав `FFinished` лише після тайм-ауту. Тепер `ThreadFunc` виставляє
+  `SynchronizeTimeoutEvent` одразу після `FFinished` (вада є і в upstream
+  FPC). Наслідок: заміри програм, що чекають потоки через `WaitFor`,
+  більше не квантуються до 100 мс. Тест
+  `tests/test/units/classes/tthreadwaitforlatency` (WaitFor потоку на 5 мс:
+  було 101 мс, стало 6 мс).
 - Пул `System.Threading`: потік без роботи спить на події черги, а не
   крутить опитування в циклі. Завершується він лише після справжнього
   простою (`EnoughThreadsTimeOut` / `NoRequestsTimeOut`), а не після

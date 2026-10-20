@@ -140,6 +140,10 @@ begin
       exit;
     end;
   LThread.FFinished := True;
+  { WaitFor in the main thread loops on CheckSynchronize(100): wake it, or it
+    notices FFinished only when that 100 ms timeout expires }
+  if Assigned(SynchronizeTimeoutEvent) then
+    RtlEventSetEvent(SynchronizeTimeoutEvent);
   if LFreeOnTerminate then
     begin
       { threads in WaitFor join this thread and free the object }
