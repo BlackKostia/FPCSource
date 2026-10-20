@@ -281,6 +281,27 @@ Var
 
 Var
   PthreadDLL : Pointer;
+  PthreadScope : Pointer;
+  { set by LoadPthreads; RTLD_DEFAULT is nil, like PthreadDLL after
+    UnloadPthreads, so the scope can't tell it }
+  PthreadInterposed : Boolean;
+
+{ Looks up a pthread function. Normally in libpthread itself; when a
+  sanitizer that interposes the pthread API is loaded (ThreadSanitizer),
+  in the global scope, so that its interceptors are called: otherwise it
+  would not know about the threads, mutexes etc. of the program. }
+Function PthreadSym(Name : PAnsiChar) : Pointer;
+begin
+  Result:=dlsym(PthreadScope,Name);
+  if (Result=nil) and PthreadInterposed then
+    Result:=dlsym(PthreadDLL,Name);
+end;
+
+{ True if the pthread functions are interposed by a sanitizer, see PthreadSym }
+Function PthreadsInterposed : Boolean;
+begin
+  Result:=PthreadInterposed;
+end;
 
 Function LoadPthreads : Boolean;
 
@@ -293,84 +314,93 @@ begin
   Result:=PThreadDLL<>Nil;
   If Not Result then
     exit;
-  Pointer(pthread_create) := dlsym(PthreadDLL,'pthread_create');
-  Pointer(pthread_self) := dlsym(PthreadDLL,'pthread_self');
-  Pointer(pthread_equal) := dlsym(PthreadDLL,'pthread_equal');
-  Pointer(pthread_exit) := dlsym(PthreadDLL,'pthread_exit');
-  Pointer(pthread_join) := dlsym(PthreadDLL,'pthread_join');
-  Pointer(pthread_detach) := dlsym(PthreadDLL,'pthread_detach');
-  Pointer(pthread_attr_init) := dlsym(PthreadDLL,'pthread_attr_init');
-  Pointer(pthread_attr_destroy) := dlsym(PthreadDLL,'pthread_attr_destroy');
-  Pointer(pthread_attr_setdetachstate) := dlsym(PthreadDLL,'pthread_attr_setdetachstate');
-  Pointer(pthread_attr_getdetachstate) := dlsym(PthreadDLL,'pthread_attr_getdetachstate');
-  Pointer(pthread_attr_setschedparam) := dlsym(PthreadDLL,'pthread_attr_setschedparam');
-  Pointer(pthread_attr_getschedparam) := dlsym(PthreadDLL,'pthread_attr_getschedparam');
-  Pointer(pthread_attr_setschedpolicy) := dlsym(PthreadDLL,'pthread_attr_setschedpolicy');
-  Pointer(pthread_attr_getschedpolicy) := dlsym(PthreadDLL,'pthread_attr_getschedpolicy');
+  PthreadScope:=PthreadDLL;
+  PthreadInterposed:=false;
 {$ifndef ANDROID}
-  Pointer(pthread_attr_setinheritsched) := dlsym(PthreadDLL,'pthread_attr_setinheritsched');
-  Pointer(pthread_attr_getinheritsched) := dlsym(PthreadDLL,'pthread_attr_getinheritsched');
+  if dlsym(RTLD_DEFAULT,'__tsan_init')<>nil then
+    begin
+      PthreadScope:=RTLD_DEFAULT;
+      PthreadInterposed:=true;
+    end;
 {$endif}
-  Pointer(pthread_attr_setscope) := dlsym(PthreadDLL,'pthread_attr_setscope');
-  Pointer(pthread_attr_getscope) := dlsym(PthreadDLL,'pthread_attr_getscope');
-  Pointer(pthread_attr_setstacksize) := dlsym(PthreadDLL,'pthread_attr_setstacksize');
-  Pointer(pthread_setschedparam) := dlsym(PthreadDLL,'pthread_setschedparam');
-  Pointer(pthread_getschedparam) := dlsym(PthreadDLL,'pthread_getschedparam');
-  Pointer(pthread_mutex_init) := dlsym(PthreadDLL,'pthread_mutex_init');
-  Pointer(pthread_mutex_destroy) := dlsym(PthreadDLL,'pthread_mutex_destroy');
-  Pointer(pthread_mutex_trylock) := dlsym(PthreadDLL,'pthread_mutex_trylock');
-  Pointer(pthread_mutex_timedlock) := dlsym(PthreadDLL,'pthread_mutex_timedlock');
-  Pointer(pthread_mutex_lock) := dlsym(PthreadDLL,'pthread_mutex_lock');
-  Pointer(pthread_mutex_unlock) := dlsym(PthreadDLL,'pthread_mutex_unlock');
-  Pointer(pthread_mutexattr_init) := dlsym(PthreadDLL,'pthread_mutexattr_init');
-  Pointer(pthread_mutexattr_destroy) := dlsym(PthreadDLL,'pthread_mutexattr_destroy');
+  Pointer(pthread_create) := PthreadSym('pthread_create');
+  Pointer(pthread_self) := PthreadSym('pthread_self');
+  Pointer(pthread_equal) := PthreadSym('pthread_equal');
+  Pointer(pthread_exit) := PthreadSym('pthread_exit');
+  Pointer(pthread_join) := PthreadSym('pthread_join');
+  Pointer(pthread_detach) := PthreadSym('pthread_detach');
+  Pointer(pthread_attr_init) := PthreadSym('pthread_attr_init');
+  Pointer(pthread_attr_destroy) := PthreadSym('pthread_attr_destroy');
+  Pointer(pthread_attr_setdetachstate) := PthreadSym('pthread_attr_setdetachstate');
+  Pointer(pthread_attr_getdetachstate) := PthreadSym('pthread_attr_getdetachstate');
+  Pointer(pthread_attr_setschedparam) := PthreadSym('pthread_attr_setschedparam');
+  Pointer(pthread_attr_getschedparam) := PthreadSym('pthread_attr_getschedparam');
+  Pointer(pthread_attr_setschedpolicy) := PthreadSym('pthread_attr_setschedpolicy');
+  Pointer(pthread_attr_getschedpolicy) := PthreadSym('pthread_attr_getschedpolicy');
 {$ifndef ANDROID}
-  Pointer(pthread_mutexattr_setkind_np) := dlsym(PthreadDLL,'pthread_mutexattr_setkind_np');
-  Pointer(pthread_mutexattr_getkind_np) := dlsym(PthreadDLL,'pthread_mutexattr_getkind_np');
+  Pointer(pthread_attr_setinheritsched) := PthreadSym('pthread_attr_setinheritsched');
+  Pointer(pthread_attr_getinheritsched) := PthreadSym('pthread_attr_getinheritsched');
 {$endif}
-  Pointer(pthread_cond_init) := dlsym(PthreadDLL,'pthread_cond_init');
-  Pointer(pthread_cond_destroy) := dlsym(PthreadDLL,'pthread_cond_destroy');
-  Pointer(pthread_cond_signal) := dlsym(PthreadDLL,'pthread_cond_signal');
-  Pointer(pthread_cond_broadcast) := dlsym(PthreadDLL,'pthread_cond_broadcast');
-  Pointer(pthread_cond_wait) := dlsym(PthreadDLL,'pthread_cond_wait');
-  Pointer(pthread_cond_timedwait) := dlsym(PthreadDLL,'pthread_cond_timedwait');
+  Pointer(pthread_attr_setscope) := PthreadSym('pthread_attr_setscope');
+  Pointer(pthread_attr_getscope) := PthreadSym('pthread_attr_getscope');
+  Pointer(pthread_attr_setstacksize) := PthreadSym('pthread_attr_setstacksize');
+  Pointer(pthread_setschedparam) := PthreadSym('pthread_setschedparam');
+  Pointer(pthread_getschedparam) := PthreadSym('pthread_getschedparam');
+  Pointer(pthread_mutex_init) := PthreadSym('pthread_mutex_init');
+  Pointer(pthread_mutex_destroy) := PthreadSym('pthread_mutex_destroy');
+  Pointer(pthread_mutex_trylock) := PthreadSym('pthread_mutex_trylock');
+  Pointer(pthread_mutex_timedlock) := PthreadSym('pthread_mutex_timedlock');
+  Pointer(pthread_mutex_lock) := PthreadSym('pthread_mutex_lock');
+  Pointer(pthread_mutex_unlock) := PthreadSym('pthread_mutex_unlock');
+  Pointer(pthread_mutexattr_init) := PthreadSym('pthread_mutexattr_init');
+  Pointer(pthread_mutexattr_destroy) := PthreadSym('pthread_mutexattr_destroy');
 {$ifndef ANDROID}
-  Pointer(pthread_condattr_init) := dlsym(PthreadDLL,'pthread_condattr_init');
-  Pointer(pthread_condattr_destroy) := dlsym(PthreadDLL,'pthread_condattr_destroy');
-  Pointer(pthread_condattr_setclock) := dlsym(PthreadDLL,'pthread_condattr_setclock');
+  Pointer(pthread_mutexattr_setkind_np) := PthreadSym('pthread_mutexattr_setkind_np');
+  Pointer(pthread_mutexattr_getkind_np) := PthreadSym('pthread_mutexattr_getkind_np');
 {$endif}
-  Pointer(pthread_key_create) := dlsym(PthreadDLL,'pthread_key_create');
-  Pointer(pthread_key_delete) := dlsym(PthreadDLL,'pthread_key_delete');
-  Pointer(pthread_setspecific) := dlsym(PthreadDLL,'pthread_setspecific');
-  Pointer(pthread_getspecific) := dlsym(PthreadDLL,'pthread_getspecific');
-{  Pointer(pthread_once) := dlsym(PthreadDLL,'pthread_once');}
+  Pointer(pthread_cond_init) := PthreadSym('pthread_cond_init');
+  Pointer(pthread_cond_destroy) := PthreadSym('pthread_cond_destroy');
+  Pointer(pthread_cond_signal) := PthreadSym('pthread_cond_signal');
+  Pointer(pthread_cond_broadcast) := PthreadSym('pthread_cond_broadcast');
+  Pointer(pthread_cond_wait) := PthreadSym('pthread_cond_wait');
+  Pointer(pthread_cond_timedwait) := PthreadSym('pthread_cond_timedwait');
 {$ifndef ANDROID}
-  Pointer(pthread_setcancelstate) := dlsym(PthreadDLL,'pthread_setcancelstate');
-  Pointer(pthread_setcanceltype) := dlsym(PthreadDLL,'pthread_setcanceltype');
-  Pointer(pthread_cancel) := dlsym(PthreadDLL,'pthread_cancel');
-  Pointer(pthread_testcancel) := dlsym(PthreadDLL,'pthread_testcancel');
+  Pointer(pthread_condattr_init) := PthreadSym('pthread_condattr_init');
+  Pointer(pthread_condattr_destroy) := PthreadSym('pthread_condattr_destroy');
+  Pointer(pthread_condattr_setclock) := PthreadSym('pthread_condattr_setclock');
 {$endif}
-{  Pointer(_pthread_cleanup_push) := dlsym(PthreadDLL,'_pthread_cleanup_push');}
-{  Pointer(_pthread_cleanup_push_defer) := dlsym(PthreadDLL,'_pthread_cleanup_push_defer');}
-{  Pointer(pthread_sigmask) := dlsym(PthreadDLL,'pthread_sigmask');}
-  Pointer(pthread_kill)  := dlsym(PthreadDLL,'pthread_kill');
+  Pointer(pthread_key_create) := PthreadSym('pthread_key_create');
+  Pointer(pthread_key_delete) := PthreadSym('pthread_key_delete');
+  Pointer(pthread_setspecific) := PthreadSym('pthread_setspecific');
+  Pointer(pthread_getspecific) := PthreadSym('pthread_getspecific');
+{  Pointer(pthread_once) := PthreadSym('pthread_once');}
 {$ifndef ANDROID}
-  Pointer(pthread_atfork):= dlsym(PthreadDLL,'pthread_atfork');
-  Pointer(pthread_kill_other_threads_np) := dlsym(PthreadDLL,'pthread_kill_other_threads_np');
+  Pointer(pthread_setcancelstate) := PthreadSym('pthread_setcancelstate');
+  Pointer(pthread_setcanceltype) := PthreadSym('pthread_setcanceltype');
+  Pointer(pthread_cancel) := PthreadSym('pthread_cancel');
+  Pointer(pthread_testcancel) := PthreadSym('pthread_testcancel');
 {$endif}
-  Pointer(pthread_sigmask) := dlsym(PthreadDLL,'pthread_sigmask');
-  Pointer(sem_init     ) := dlsym(PthreadDLL,'sem_init');
-  Pointer(sem_destroy  ) := dlsym(PthreadDLL,'sem_destroy');
-  Pointer(sem_close    ) := dlsym(PthreadDLL,'sem_close');
-  Pointer(sem_unlink   ) := dlsym(PthreadDLL,'sem_unlink');
-  Pointer(sem_wait     ) := dlsym(PthreadDLL,'sem_wait');
-  Pointer(sem_timedwait) := dlsym(PthreadDLL,'sem_timedwait');
-  Pointer(sem_trywait  ) := dlsym(PthreadDLL,'sem_trywait');
-  Pointer(sem_post     ) := dlsym(PthreadDLL,'sem_post');
-  Pointer(sem_getvalue ) := dlsym(PthreadDLL,'sem_getvalue');
-  Pointer(pthread_mutexattr_settype) := dlsym(PthreadDLL,'pthread_mutexattr_settype');
-  Pointer(pthread_setname_np) := dlsym(PthreadDLL,'pthread_setname_np');
-  Pointer(pthread_timedjoin_np) := dlsym(PthreadDLL,'pthread_timedjoin_np');
+{  Pointer(_pthread_cleanup_push) := PthreadSym('_pthread_cleanup_push');}
+{  Pointer(_pthread_cleanup_push_defer) := PthreadSym('_pthread_cleanup_push_defer');}
+{  Pointer(pthread_sigmask) := PthreadSym('pthread_sigmask');}
+  Pointer(pthread_kill)  := PthreadSym('pthread_kill');
+{$ifndef ANDROID}
+  Pointer(pthread_atfork):= PthreadSym('pthread_atfork');
+  Pointer(pthread_kill_other_threads_np) := PthreadSym('pthread_kill_other_threads_np');
+{$endif}
+  Pointer(pthread_sigmask) := PthreadSym('pthread_sigmask');
+  Pointer(sem_init     ) := PthreadSym('sem_init');
+  Pointer(sem_destroy  ) := PthreadSym('sem_destroy');
+  Pointer(sem_close    ) := PthreadSym('sem_close');
+  Pointer(sem_unlink   ) := PthreadSym('sem_unlink');
+  Pointer(sem_wait     ) := PthreadSym('sem_wait');
+  Pointer(sem_timedwait) := PthreadSym('sem_timedwait');
+  Pointer(sem_trywait  ) := PthreadSym('sem_trywait');
+  Pointer(sem_post     ) := PthreadSym('sem_post');
+  Pointer(sem_getvalue ) := PthreadSym('sem_getvalue');
+  Pointer(pthread_mutexattr_settype) := PthreadSym('pthread_mutexattr_settype');
+  Pointer(pthread_setname_np) := PthreadSym('pthread_setname_np');
+  Pointer(pthread_timedjoin_np) := PthreadSym('pthread_timedjoin_np');
 end;
 
 Function UnLoadPthreads : Boolean;

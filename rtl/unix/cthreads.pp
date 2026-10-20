@@ -1021,9 +1021,15 @@ Type  PINTRTLEvent = ^TINTRTLEvent;
     procedure CDoneCriticalSection(var CS);
       begin
          { unlock as long as unlocking works to unlock it if it is recursive
-           some Delphi code might call this function with a locked mutex      }
-         while pthread_mutex_unlock(@CS)=0 do
-           ;
+           some Delphi code might call this function with a locked mutex.
+           ThreadSanitizer reports unlocking a mutex that is not held as a
+           bug (and destroying a locked one as well, which is the real bug
+           of such code), so don't do it under its interceptors }
+{$if defined(linux) and defined(dynpthreads)}
+         if not PthreadsInterposed then
+{$endif}
+           while pthread_mutex_unlock(@CS)=0 do
+             ;
 
          if pthread_mutex_destroy(@CS) <> 0 then
            fpc_threaderror;
