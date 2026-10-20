@@ -16,6 +16,14 @@
 
 {$ifdef supported}
 
+{ a program that uses shared libraries on linux has to link to glibc:
+  the dynamic loader of current glibc versions looks up calloc etc. in
+  libc (as in tlibrary2 and the other library tests) }
+{$if (FPC_FULLVERSION<=30301) and defined(linux)}
+  uses
+    initc;
+{$endif (FPC_FULLVERSION<=30301) and defined(linux)}
+
 const
 {$ifdef windows}
   libname='tlibrary1.dll';

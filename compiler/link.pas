@@ -84,6 +84,7 @@ interface
          Function WriteSymbolOrderFile: TCmdStr;
          Function GetSanitizerLibName(const basename: TCmdStr; withArch: boolean): TCmdStr;
          Function AddSanitizerLibrariesAndGetSearchDir(const platformname: TCmdStr; out sanitizerlibrarydir: TCmdStr): boolean;
+         procedure AddGCCLibraryPath(const filename: TCmdStr);
       public
          Info : TLinkerInfo;
          Constructor Create;override;
@@ -719,10 +720,52 @@ Implementation
       end;
 
 
+    { Adds the directory of a file of the run time of gcc (crtbegin.o,
+      libgcc.a, libtsan.so...) to the library search path when the file is
+      not found there: the library directory of gcc is normally listed in
+      fpc.cfg, but not always (e.g. when compiling with -n). Asks the gcc of
+      the target (utilsprefix), the gcc of the host only when not cross
+      compiling; does nothing when there is no such gcc. }
+    procedure TExternalLinker.AddGCCLibraryPath(const filename: TCmdStr);
+      var
+        gcc,
+        found,
+        textline,
+        tmpname: TCmdStr;
+        tmpfile: text;
+      begin
+        if (cs_link_on_target in current_settings.globalswitches) or
+           LibrarySearchPath.FindFile(filename,false,found) then
+          exit;
+        if (utilsprefix='') and (source_info.system<>target_info.system) then
+          exit;
+        gcc:=FindUtil(utilsprefix+'gcc',false);
+        if gcc='' then
+          exit;
+        tmpname:=outputexedir+UniqueName('gccpath');
+        if shell(maybequoted(gcc)+' -print-file-name='+filename+' > '+maybequoted(tmpname))=0 then
+          begin
+            AssignFile(tmpfile,tmpname);
+{$push}{$i-}
+            reset(tmpfile);
+{$pop}
+            if ioresult=0 then
+              begin
+                readln(tmpfile,textline);
+                closefile(tmpfile);
+                { without the file gcc prints just the name }
+                if (ExtractFilePath(textline)<>'') and FileExists(textline,false) then
+                  LibrarySearchPath.AddLibraryPath('',ExtractFilePath(textline),false);
+              end;
+          end;
+        if FileExists(tmpname,false) then
+          DeleteFile(tmpname);
+      end;
+
+
     function TExternalLinker.AddSanitizerLibrariesAndGetSearchDir(const platformname: TCmdStr; out sanitizerlibrarydir: TCmdStr): boolean;
       var
         clang,
-        gcc,
         clangsearchdirs,
         textline,
         clangsearchdirspath,
@@ -785,41 +828,13 @@ Implementation
         sanitizerlibraryfiles := nil;
         { ThreadSanitizer and AddressSanitizer of the native code generator
           (units fpctsan and fpcasan link libtsan/libasan): the unversioned
-          library is only in the library directory of gcc, which fpc.cfg
-          does not always list. The run time loader finds the versioned
-          library in the system directories, so no rpath is needed. }
+          library is only in the library directory of gcc. The run time
+          loader finds the versioned library in the system directories, so
+          no rpath is needed. }
         if assigned(SharedLibFiles.Find('tsan')) then
-          sanitizerlibname:='libtsan.so'
+          AddGCCLibraryPath('libtsan.so')
         else if assigned(SharedLibFiles.Find('asan')) then
-          sanitizerlibname:='libasan.so'
-        else
-          sanitizerlibname:='';
-        if (sanitizerlibname<>'') and
-           not(cs_link_on_target in current_settings.globalswitches) then
-          begin
-            gcc:=FindUtil('gcc');
-            if gcc<>'' then
-              begin
-                clangsearchdirspath:=outputexedir+UniqueName('gccsanpath');
-                if shell(maybequoted(gcc)+' -print-file-name='+sanitizerlibname+' > '+maybequoted(clangsearchdirspath))=0 then
-                  begin
-                    AssignFile(clangsearchdirsfile,clangsearchdirspath);
-{$push}{$i-}
-                    reset(clangsearchdirsfile);
-{$pop}
-                    if ioresult=0 then
-                      begin
-                        readln(clangsearchdirsfile,textline);
-                        closefile(clangsearchdirsfile);
-                        { without the library gcc prints just the name }
-                        if (ExtractFilePath(textline)<>'') and FileExists(textline,false) then
-                          LibrarySearchPath.AddLibraryPath('',ExtractFilePath(textline),false);
-                      end;
-                  end;
-                if FileExists(clangsearchdirspath,false) then
-                  DeleteFile(clangsearchdirspath);
-              end;
-          end;
+          AddGCCLibraryPath('libasan.so');
       end;
 
 

@@ -65,6 +65,21 @@ procedure __libc_csu_init; public name '__libc_csu_init'; assembler;
   end;
 {$endif FPC_FULLVERSION>30202}
 
+{ glibc built with static-pie support (2.27+) calls _dl_relocate_static_pie
+  from __libc_start_main. The crt1.o of a static program that is not
+  position independent defines it as an empty routine; this startup code
+  replaces crt1.o, so it has to define it as well, otherwise linking a
+  static program (-Xt) pulls the version of libc.a, which needs _DYNAMIC
+  that such a program does not have. Weak, so that a real definition wins
+  (the assembler of FPC 3.2.2, which only builds the compiler, has no
+  .weak). }
+{$if FPC_FULLVERSION>30202}
+procedure _dl_relocate_static_pie; public name '_dl_relocate_static_pie'; assembler;
+  asm
+    .weak _dl_relocate_static_pie
+  end;
+{$endif FPC_FULLVERSION>30202}
+
 procedure ___libc_csu_fini; external name '__libc_csu_fini';
 
 {$if FPC_FULLVERSION>30202}

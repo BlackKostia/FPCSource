@@ -602,6 +602,13 @@ begin
      AddSharedLibrary('c');
    end;
 
+  { the start and end files (crtbegin*.o, crtend*.o) and libgcc of the C
+    run time are in the library directory of gcc }
+  if linklibc and (libctype<>uclibc) then
+    AddGCCLibraryPath('crtbegin.o');
+  if cs_link_staticflag in current_settings.globalswitches then
+    AddGCCLibraryPath('libgcc.a');
+
   { Open link.res file }
   LinkRes:=TLinkRes.Create(outputexedir+Info.ResName,true);
   with linkres do
