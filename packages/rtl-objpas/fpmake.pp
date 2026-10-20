@@ -73,6 +73,9 @@ begin
       T.Dependencies.AddUnit('system.uitypes');
 
     T:=P.Targets.AddUnit('tuples.pp');
+    { Valgrind client requests; used by smartptrs and by fcl-base/vcl-compat
+      when compiled with -dFPC_VALGRIND }
+    T:=P.Targets.AddUnit('fpvalgrind.pp');
     T:=P.Targets.AddUnit('smartptrs.pp');
       T.ResourceStrings:=true;
     T:=P.Targets.AddUnit('strutils.pp',StrUtilsOses);

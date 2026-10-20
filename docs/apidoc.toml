@@ -13,7 +13,22 @@
 # upstream (fpcdocs).
 
 [defaults]
-options = "-Mobjfpc -Sm -dUNIX -dLINUX -dCPU64 -dCPUX86_64"
+# defined by the compiler of this branch; FPC_HAS_NOCOPY_TYPES is left out:
+# fcl-passrc (makeskel, fpdoc) does not parse "end nocopy;"
+options = "-Mobjfpc -Sm -dUNIX -dLINUX -dCPU64 -dCPUX86_64 -dFPC_HAS_CONSTRAINED_GENERIC_FORWARD"
+
+[[package]]
+name = "rtl-objpas"
+title = "fpvalgrind and smart pointers"
+units = ["packages/rtl-objpas/src/inc/fpvalgrind.pp", "packages/rtl-objpas/src/inc/smartptrs.pp"]
+descr = ["packages/rtl-objpas/xml/fpvalgrind.xml", "packages/rtl-objpas/xml/smartptrs.xml"]
+internal = [
+  # management operators: their behaviour is described with the types
+  "*.initialize(*",
+  "*.finalize(*",
+  "*.addref(*",
+  "*.copy(*",
+]
 
 [[package]]
 name = "vcl-compat"
@@ -82,9 +97,9 @@ internal = [
 
 [[package]]
 name = "fcl-base"
-title = "SyncObjs (additions) and fpvalgrind"
-units = ["packages/fcl-base/src/syncobjs.pp", "packages/fcl-base/src/fpvalgrind.pp"]
-descr = ["packages/fcl-base/xml/syncobjs-phase2.xml", "packages/fcl-base/xml/fpvalgrind.xml"]
+title = "SyncObjs (additions)"
+units = ["packages/fcl-base/src/syncobjs.pp"]
+descr = ["packages/fcl-base/xml/syncobjs-phase2.xml"]
 internal = [
   "TCustomChannel.NotifyItem*",
 ]

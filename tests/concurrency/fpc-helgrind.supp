@@ -25,3 +25,16 @@
    fun:CTHREADS_$$_CDONECRITICALSECTION$formal
 }
 
+
+# Менеджер купи RTL (rtl/inc/heap.inc): пам'ять, звільнена в іншому потоці,
+# повертається власникові через стек без блокувань incomingToFree —
+# PushIncomingToFree публікує ланцюжок через AtomicCmpExchange після
+# WriteBarrier, FlushIncomingToFree забирає його через AtomicExchange, а
+# FreeToFreeList читає next з ReadDependencyBarrier. Синхронізація
+# атомарна, helgrind її не бачить (помітно, коли об'єкт звільняє не той
+# потік, що його створив, напр. останній власник TArc<T>).
+{
+   fpc-heap-incoming-tofree-lockfree
+   Helgrind:Race
+   fun:SYSTEM$_$HEAPINC_$_THREADSTATE_$__$$_FREETOFREELIST$HeapInc.PFREECHUNK
+}

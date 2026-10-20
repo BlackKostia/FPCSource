@@ -164,6 +164,14 @@ procedure ArcWeakRelease(ABlock: PArcBlock);
 
 implementation
 
+{ Compile with -dFPC_VALGRIND to annotate the reference counts for
+  Helgrind/DRD: they order memory accesses through atomic operations,
+  which the tools do not see as synchronization. }
+{$IFDEF FPC_VALGRIND}
+uses
+  fpvalgrind;
+{$ENDIF FPC_VALGRIND}
+
 resourcestring
   SScopedCopy = 'TScoped<T> owns its object exclusively and cannot be copied; '
     + 'pass it as const/var and transfer ownership with Move, Release or Reset';
@@ -210,8 +218,15 @@ end;
 
 procedure ArcStrongRelease(ABlock: PArcBlock);
 begin
+  {$IFDEF FPC_VALGRIND}
+  { everything this owner did with the object happens before its release }
+  VgHappensBefore(@ABlock^.Strong);
+  {$ENDIF FPC_VALGRIND}
   if InterlockedDecrement(ABlock^.Strong) = 0 then
     try
+      {$IFDEF FPC_VALGRIND}
+      VgHappensAfter(@ABlock^.Strong);
+      {$ENDIF FPC_VALGRIND}
       ABlock^.Obj.Free;
     finally
       ABlock^.Obj := nil;
@@ -226,8 +241,19 @@ end;
 
 procedure ArcWeakRelease(ABlock: PArcBlock);
 begin
+  {$IFDEF FPC_VALGRIND}
+  VgHappensBefore(@ABlock^.Weak);
+  {$ENDIF FPC_VALGRIND}
   if InterlockedDecrement(ABlock^.Weak) = 0 then
-    Dispose(ABlock);
+    begin
+      {$IFDEF FPC_VALGRIND}
+      VgHappensAfter(@ABlock^.Weak);
+      { the decrements of the other owners are atomic accesses to the block
+        after their VgHappensBefore; this thread is provably the last user }
+      VgCleanMemory(ABlock, SizeOf(TArcBlock));
+      {$ENDIF FPC_VALGRIND}
+      Dispose(ABlock);
+    end;
 end;
 
 { Factories }

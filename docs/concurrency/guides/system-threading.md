@@ -285,7 +285,7 @@ end;
 ## 8. Верифікація та тестування багатопоточного коду
 
 1. **Перевірка гонок даних під Valgrind Helgrind / DRD**:
-   - Модуль `fpvalgrind` (пакет `fcl-base`) надає клієнтські запити `VgHappensBefore`, `VgHappensAfter`, `VgCleanMemory`, `VgBenignRace`, `VgForgetAll`, `VgRunningOnValgrind`.
+   - Модуль `fpvalgrind` (пакет `rtl-objpas`) надає клієнтські запити `VgHappensBefore`, `VgHappensAfter`, `VgCleanMemory`, `VgBenignRace`, `VgForgetAll`, `VgRunningOnValgrind`.
    - При компіляції з `-dFPC_VALGRIND` (`tests/concurrency/build-testcompat-valgrind.sh`) примітиви `TSpinLock` і `System.Threading` автоматично передають Helgrind/DRD інформацію про синхронізацію.
 2. **Перевірки у робочих потоках під час модульного тестування**:
    - Не викликайте `Assert*` безпосередньо в робочих потоках `fpcunit`: використовуйте `ThreadCheck` та `ThreadCheckSame` із `TThreadedTestCase` (`packages/vcl-compat/tests/utthreading.pp`), які потокобезпечно фіксують помилки й звітують про них у `TearDown` після приєднання потоків.

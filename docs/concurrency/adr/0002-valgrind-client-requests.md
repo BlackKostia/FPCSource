@@ -12,7 +12,7 @@
 Без підказок для Valgrind прогін одного тесту `TParallel.For` породжував 600–1500 хибних попереджень (`possible data race`), унеможливлюючи пошук справжніх гонок даних.
 
 ## Рішення
-1. Створено модуль `fpvalgrind` у пакеті `fcl-base` (`packages/fcl-base/src/fpvalgrind.pp`), який реалізує стандартний механізм клієнтських запитів Valgrind для `x86_64` (System V ABI) без зовнішніх залежностей від C-бібліотек:
+1. Створено модуль `fpvalgrind` у пакеті `fcl-base` (з 2026-10-20 — `packages/rtl-objpas/src/inc/fpvalgrind.pp`: модуль не має залежностей, а `smartptrs` з `rtl-objpas` не може залежати від `fcl-base`), який реалізує стандартний механізм клієнтських запитів Valgrind для `x86_64` (System V ABI) без зовнішніх залежностей від C-бібліотек:
    - `VgHappensBefore` / `VgHappensAfter` / `VgForgetAll`
    - `VgCleanMemory`
    - `VgBenignRace`

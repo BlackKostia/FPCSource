@@ -6,7 +6,7 @@
 `TSpinLock` (цикл на `CompareExchange`), атомарні лічильники, кеш об'єктів.
 Helgrind і DRD цього не бачать і видають сотні хибних «possible data race».
 
-Модуль `fcl-base/src/fpvalgrind.pp` надсилає valgrind клієнтські запити:
+Модуль `rtl-objpas/src/inc/fpvalgrind.pp` (до 2026-10-20 — у `fcl-base`) надсилає valgrind клієнтські запити:
 
 | Процедура | Запит valgrind | Де використано |
 |---|---|---|

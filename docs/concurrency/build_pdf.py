@@ -503,7 +503,7 @@ def build():
     s.append(p("4. Перевірка гонок даних: модуль fpvalgrind", S_H1))
     s.append(p("helgrind і drd не бачать синхронізації без " + c("pthread_mutex") + ": "
                "спін-блокувань, атомарних операцій, кешу об'єктів. Модуль "
-               + c("fpvalgrind") + " (пакет fcl-base) передає valgrind підказки. Код "
+               + c("fpvalgrind") + " (пакет rtl-objpas) передає valgrind підказки. Код "
                "анотацій є лише в збірці з " + c("-dFPC_VALGRIND") + "; у звичайній збірці "
                "його немає. Запити реалізовано для x86_64 (System V); на інших "
                "платформах це порожні процедури."))
@@ -618,7 +618,7 @@ def build():
     s.append(p("Докладніше: " + c("docs/concurrency/guide-system-threading.md") + ", "
                + c("docs/concurrency/valgrind.md") + ", " + c("docs/concurrency/adr/")
                + ", " + c("docs/concurrency/baseline.md") + ", fpdoc-описи "
-               + c("packages/fcl-base/xml/fpvalgrind.xml") + " і "
+               + c("packages/rtl-objpas/xml/fpvalgrind.xml") + " і "
                + c("packages/vcl-compat/xml/system.threading.xml") + ", "
                + c("CHANGELOG-concurrency.md") + ".", S_NOTE))
 
