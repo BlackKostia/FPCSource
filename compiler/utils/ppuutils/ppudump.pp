@@ -2522,7 +2522,8 @@ const
          'm_record_composition',   { enables record composition }
          'm_implicit_generics',    { allow omitting specialize in objfpc mode and generic type inference }
          'm_arrow_functions',      { short lambda syntax (=>) for anonymous functions }
-         'm_tuples'                { tuples and tuple deconstruction (A, B) := Expr }
+         'm_tuples',               { tuples and tuple deconstruction (A, B) := Expr }
+         'm_inline_vars'           { inline variable declarations: var X := Expr; for var I := ... }
        );
        { optimizer }
        optimizerswitchname : array[toptimizerswitch] of string[50] =

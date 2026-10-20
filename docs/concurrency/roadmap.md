@@ -88,14 +88,16 @@
   - Детальний посібник: [`guide-arrow-functions.md`](guide-arrow-functions.md).
   - Тестовий набір: [`tests/concurrency/test_arrow_functions.pp`](../../tests/concurrency/test_arrow_functions.pp).
 
-### 2.3. Оголошення локальних змінних за місцем використання (`inlinevars`)
-- За опціональним `{$modeswitch inlinevars}` (сумісно з Delphi 10.3+) дозволити:
+### 2.3. Оголошення локальних змінних за місцем використання (`inlinevars`) [РЕАЛІЗОВАНО]
+- За опціональним `{$modeswitch inlinevars}` (сумісно з Delphi 10.3+) дозволено:
   ```pascal
   var Fastest := TTask.WaitForAny([R0, R1, R2], 1000);
   for var E in Agg do
     WriteLn(E.Message);
   ```
   Особливо корисно для складних спеціалізацій дженериків та змінних-лічильників циклів, де область видимості обмежується самим циклом.
+
+**Стан:** `var X := Expr;`, `var X: T := Expr;`, `var A, B: T;`, `for var I := ... to/downto`, `for var E in ...` (тип елемента масиву, рядка, множини, переліку, нумератора). Тип виводиться з ініціалізації (цілі константи — `Integer`/`Int64`, рядкові — рядковий тип режиму) і далі статичний. Видимість — до кінця списку операторів (`begin..end`, `repeat..until`, частини `try`), `for var` — лише в циклі; повтор імені в сусідніх блоках дозволений. Змінна живе в кадрі підпрограми (керовані типи фіналізуються на виході з неї). Без перемикача компілятор поводиться як FPC. Посібник — [language/inline-vars.md](language/inline-vars.md), приклад — `examples/inline_vars.pp`, тести — `tests/test/tinlinevar1`–`24`.
 
 ### 2.4. Кортежі (Tuples) та деконструкція `(A, B) := Func()` [РЕАЛІЗОВАНО]
 - **Статус**: Повністю реалізовано в компіляторі (`{$modeswitch tuples}`).

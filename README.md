@@ -31,6 +31,10 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
   - Deconstruction: `(Quot, Rem) := DivMod(17, 5);`
   - Inline declaration deconstruction: `var (Quot, Rem) := DivMod(17, 5);`
   - Zero-temp-variable parallel swap: `(X, Y) := (Y, X);`
+- **Inline Variables (`{$modeswitch inlinevars}`, Delphi 10.3+ syntax)**:
+  - Declared where they are needed, the type inferred and static: `var Cache := TDictionary<string, TAccount>.Create;`
+  - Loop variables scoped to the loop: `for var I := 0 to N - 1 do`, `for var Item in List do`
+  - Block scope; without the mode switch the compiler behaves like FPC.
 - **Short Lambda / Arrow Functions (`{$modeswitch arrowfunctions}`)**:
   - Concise syntax: `TParallel.&For(0, N - 1, I => ProcessItem(I));`
   - Contextual parameter and return type inference.

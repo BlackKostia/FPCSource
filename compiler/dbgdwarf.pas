@@ -2974,6 +2974,14 @@ implementation
     function TDebugInfoDwarf.symdebugname(sym: tsym): String;
     begin
       result := sym.name;
+      { an inline variable ($modeswitch inlinevars) is renamed to
+        "$inlinevar$<n>$<name>" at the end of its block, the debugger shows
+        its name }
+      if copy(result,1,11)='$inlinevar$' then
+        begin
+          delete(result,1,11);
+          delete(result,1,pos('$',result));
+        end;
     end;
 
 

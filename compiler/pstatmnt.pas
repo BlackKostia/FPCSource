@@ -68,6 +68,259 @@ implementation
     function statement : tnode;forward;
 
 
+{****************************************************************************
+                    Inline variables (modeswitch inlinevars)
+****************************************************************************}
+
+    { An inline variable is a local variable of the routine (it lives in its
+      frame and is finalized with its other locals), which can be found by
+      name only from its declaration to the end of the enclosing statement
+      list: at the end of the list it is renamed to a name that is not an
+      identifier. So "for var I" can be repeated in the next loop. }
+    var
+      { the inline variables of the enclosing statement lists }
+      inlinevar_scopes: array of TFPList;
+      inlinevar_scope_count: longint;
+      inlinevar_hidden_count: longint;
+      { the statement that is being parsed is directly in a statement list }
+      inlinevar_allowed: boolean;
+
+
+    procedure push_inlinevar_scope;
+      begin
+        if inlinevar_scope_count>=length(inlinevar_scopes) then
+          setlength(inlinevar_scopes,inlinevar_scope_count*2+8);
+        inlinevar_scopes[inlinevar_scope_count]:=nil;
+        inc(inlinevar_scope_count);
+      end;
+
+
+    procedure pop_inlinevar_scope;
+      var
+        list: TFPList;
+        i: longint;
+      begin
+        if inlinevar_scope_count=0 then
+          internalerror(2026102001);
+        dec(inlinevar_scope_count);
+        list:=inlinevar_scopes[inlinevar_scope_count];
+        inlinevar_scopes[inlinevar_scope_count]:=nil;
+        if not assigned(list) then
+          exit;
+        for i:=0 to list.count-1 do
+          begin
+            inc(inlinevar_hidden_count);
+            tsym(list[i]).Rename('$inlinevar$'+tostr(inlinevar_hidden_count)+'$'+tsym(list[i]).Name);
+          end;
+        list.free;
+      end;
+
+
+    procedure add_inlinevar_to_scope(sym: tsym);
+      begin
+        if inlinevar_scope_count=0 then
+          exit;
+        if not assigned(inlinevar_scopes[inlinevar_scope_count-1]) then
+          inlinevar_scopes[inlinevar_scope_count-1]:=TFPList.Create;
+        inlinevar_scopes[inlinevar_scope_count-1].add(sym);
+      end;
+
+
+    { declares the inline variable name of type def in the current routine }
+    function create_inlinevar(const name: TIDString; const pos: tfileposinfo; def: tdef): tlocalvarsym;
+      begin
+        result:=clocalvarsym.create(name,vs_value,def,[]);
+        result.fileinfo:=pos;
+        current_procinfo.procdef.localst.insertsym(result);
+        add_inlinevar_to_scope(result);
+      end;
+
+
+    { the string type of a variable initialized with a string constant }
+    function inlinevar_string_def: tdef;
+      begin
+        if cs_refcountedstrings in current_settings.localswitches then
+          begin
+            if m_default_unicodestring in current_settings.modeswitches then
+              result:=cunicodestringtype
+            else
+              result:=cansistringtype;
+          end
+        else
+          result:=cshortstringtype;
+      end;
+
+
+    { the type of an inline variable initialized with the (type checked) node
+      init: constants get the type of a variable rather than the smallest
+      type of the constant (Integer/Int64, a string type) }
+    function inlinevar_inferred_def(init: tnode; const name: TIDString; const pos: tfileposinfo): tdef;
+      begin
+        result:=init.resultdef;
+        if not assigned(result) or (result.typ=errordef) then
+          exit(generrordef);
+        if (init.nodetype=ordconstn) and is_integer(result) then
+          begin
+            if (tordconstnode(init).value>=low(longint)) and (tordconstnode(init).value<=high(longint)) then
+              result:=s32inttype
+            else if tordconstnode(init).value<=high(int64) then
+              result:=s64inttype
+            else
+              result:=u64inttype;
+          end
+        else if (init.nodetype=stringconstn) or is_conststring_array(result) then
+          result:=inlinevar_string_def
+        else if (init.nodetype in [niln,arrayconstructorn]) or
+                is_void(result) or
+                is_array_constructor(result) or
+                (result.typ=procdef) then
+          begin
+            MessagePos1(pos,parser_e_inline_var_cannot_infer,name);
+            result:=generrordef;
+          end;
+      end;
+
+
+    { the element type of "for var Name in expr" }
+    function inlinevar_for_in_elementdef(expr: tnode; const name: TIDString; const pos: tfileposinfo): tdef;
+      var
+        pd: tprocdef;
+        helperdef: tobjectdef;
+        current: tsym;
+      begin
+        result:=nil;
+        do_typecheckpass(expr);
+        if not assigned(expr.resultdef) or (expr.resultdef.typ=errordef) then
+          exit(generrordef);
+        if expr.nodetype=typen then
+          begin
+            if expr.resultdef.typ in [enumdef,orddef] then
+              result:=expr.resultdef;
+          end
+        else
+          case expr.resultdef.typ of
+            objectdef,
+            recorddef:
+              begin
+                pd:=nil;
+                if search_last_objectpascal_helper(expr.resultdef,nil,helperdef) then
+                  repeat
+                    pd:=helperdef.search_enumerator_get;
+                    helperdef:=helperdef.childof;
+                  until (pd<>nil) or (helperdef=nil);
+                if pd=nil then
+                  pd:=tabstractrecorddef(expr.resultdef).search_enumerator_get;
+                if assigned(pd) and (pd.returndef.typ in [objectdef,recorddef]) then
+                  begin
+                    current:=tabstractrecorddef(pd.returndef).search_enumerator_current;
+                    if assigned(current) and (current.typ=propertysym) then
+                      result:=tpropertysym(current).propdef;
+                  end;
+              end;
+            arraydef:
+              begin
+                result:=tarraydef(expr.resultdef).elementdef;
+                if is_array_constructor(expr.resultdef) then
+                  begin
+                    if is_void(result) then
+                      result:=nil
+                    else if is_integer(result) then
+                      result:=s32inttype
+                    else if (result.typ=stringdef) or is_conststring_array(result) then
+                      result:=inlinevar_string_def;
+                  end;
+              end;
+            stringdef:
+              if tstringdef(expr.resultdef).stringtype in [st_widestring,st_unicodestring] then
+                result:=cwidechartype
+              else
+                result:=cansichartype;
+            setdef:
+              result:=tsetdef(expr.resultdef).elementdef;
+            else
+              ;
+          end;
+        if not assigned(result) then
+          begin
+            MessagePos1(pos,parser_e_inline_var_cannot_infer,name);
+            result:=generrordef;
+          end;
+      end;
+
+
+    { var Name[, Name...]: Type; / var Name: Type := Expr; / var Name := Expr; }
+    function inline_var_statement(allowed: boolean): tnode;
+      var
+        names: array of TIDString;
+        poss: array of tfileposinfo;
+        count, i: longint;
+        def: tdef;
+        init: tnode;
+        old_block_type: tblock_type;
+        stmts: tstatementnode;
+        vs: tlocalvarsym;
+      begin
+        consume(_VAR);
+        if not allowed then
+          Message(parser_e_inline_var_not_allowed);
+        count:=0;
+        setlength(names,4);
+        setlength(poss,4);
+        repeat
+          if count>=length(names) then
+            begin
+              setlength(names,count*2);
+              setlength(poss,count*2);
+            end;
+          poss[count]:=current_tokenpos;
+          names[count]:=current_scanner.orgpattern;
+          consume(_ID);
+          inc(count);
+        until not try_to_consume(_COMMA);
+        def:=nil;
+        if try_to_consume(_COLON) then
+          begin
+            old_block_type:=block_type;
+            block_type:=bt_var_type;
+            read_anon_type(def,false,nil);
+            block_type:=old_block_type;
+          end;
+        init:=nil;
+        if try_to_consume(_ASSIGNMENT) then
+          begin
+            if count>1 then
+              Message(parser_e_inline_var_init_needs_single);
+            { the variable is declared after its initialization: the
+              initialization cannot refer to it }
+            init:=comp_expr([ef_accept_equal]);
+            if not assigned(def) then
+              begin
+                do_typecheckpass(init);
+                def:=inlinevar_inferred_def(init,names[0],poss[0]);
+              end;
+          end
+        else if not assigned(def) then
+          begin
+            MessagePos1(poss[0],parser_e_inline_var_no_type,names[0]);
+            def:=generrordef;
+          end;
+        result:=internalstatements(stmts);
+        for i:=0 to count-1 do
+          begin
+            vs:=create_inlinevar(names[i],poss[i],def);
+            if assigned(init) then
+              begin
+                if i=0 then
+                  addstatement(stmts,cassignmentnode.create(cloadnode.create(vs,vs.owner),init));
+              end
+            { a variable of a managed type declared in a loop starts empty at
+              every iteration }
+            else if is_managed_type(def) then
+              addstatement(stmts,cnodeutils.finalize_data_node(cloadnode.create(vs,vs.owner)));
+          end;
+      end;
+
+
     function is_anonymous_procdef(def : tdef) : boolean;
       begin
         result:=assigned(def) and
@@ -260,8 +513,10 @@ implementation
       begin
          first:=nil;
          last:=nil;
+         push_inlinevar_scope;
          while current_scanner.token<>_END do
            begin
+              inlinevar_allowed:=true;
               if first=nil then
                 begin
                    last:=cstatementnode.create(statement,nil);
@@ -276,6 +531,7 @@ implementation
                 break;
               consume_emptystats;
            end;
+         pop_inlinevar_scope;
          consume(_END);
          statements_til_end:=cblocknode.create(first);
          if assigned(first) then
@@ -589,8 +845,11 @@ implementation
 
          first:=nil;
          last:=nil;
+         { the variables declared in the loop body are visible in the condition }
+         push_inlinevar_scope;
          while current_scanner.token<>_UNTIL do
            begin
+              inlinevar_allowed:=true;
               if first=nil then
                 begin
                    last:=cstatementnode.create(statement,nil);
@@ -609,6 +868,7 @@ implementation
 
          first:=cblocknode.create(first);
          p_e:=comp_expr([ef_accept_equal]);
+         pop_inlinevar_scope;
          result:=cwhilerepeatnode.create(p_e,first,false,true);
       end;
 
@@ -656,7 +916,7 @@ implementation
               adaptrange(fordef,tordconstnode(hp).value,false,false,true);
           end;
 
-        function for_loop_create(hloopvar: tnode): tnode;
+        function for_loop_create(hloopvar, hfromgiven: tnode): tnode;
           var
              hp,
              hblock,
@@ -758,7 +1018,10 @@ implementation
              else
                MessagePos(hloopvar.fileinfo,type_e_illegal_count_var);
 
-             hfrom:=comp_expr([ef_accept_equal]);
+             if assigned(hfromgiven) then
+               hfrom:=hfromgiven
+             else
+               hfrom:=comp_expr([ef_accept_equal]);
 
              if try_to_consume(_DOWNTO) then
                backward:=true
@@ -808,7 +1071,7 @@ implementation
           end;
 
 
-          function for_in_loop_create(hloopvar: tnode): tnode;
+          function for_in_loop_create(hloopvar, exprgiven: tnode): tnode;
             var
               expr,hloopbody,hp: tnode;
               loopvarsym: tabstractvarsym;
@@ -822,7 +1085,10 @@ implementation
               else
                 loopvarsym:=nil;
 
-              expr:=comp_expr([ef_accept_equal]);
+              if assigned(exprgiven) then
+                expr:=exprgiven
+              else
+                expr:=comp_expr([ef_accept_equal]);
 
               consume(_DO);
 
@@ -839,19 +1105,78 @@ implementation
             end;
 
 
+      { for var Name[: Type] := ... to ... / for var Name[: Type] in ...: the
+        variable is declared from the start value or the element type and
+        is visible in the loop only }
+      function for_inlinevar_create: tnode;
+        var
+          name: TIDString;
+          pos: tfileposinfo;
+          def: tdef;
+          old_block_type: tblock_type;
+          hstart, hloopvar: tnode;
+          vs: tlocalvarsym;
+        begin
+          consume(_VAR);
+          pos:=current_tokenpos;
+          name:=current_scanner.orgpattern;
+          consume(_ID);
+          def:=nil;
+          if try_to_consume(_COLON) then
+            begin
+              old_block_type:=block_type;
+              block_type:=bt_var_type;
+              read_anon_type(def,false,nil);
+              block_type:=old_block_type;
+            end;
+          push_inlinevar_scope;
+          if try_to_consume(_ASSIGNMENT) then
+            begin
+              hstart:=comp_expr([ef_accept_equal]);
+              if not assigned(def) then
+                begin
+                  do_typecheckpass(hstart);
+                  def:=inlinevar_inferred_def(hstart,name,pos);
+                end;
+              vs:=create_inlinevar(name,pos,def);
+              hloopvar:=cloadnode.create(vs,vs.owner);
+              typecheckpass(hloopvar);
+              result:=for_loop_create(hloopvar,hstart);
+            end
+          else
+            begin
+              consume(_IN);
+              hstart:=comp_expr([ef_accept_equal]);
+              if not assigned(def) then
+                def:=inlinevar_for_in_elementdef(hstart,name,pos);
+              vs:=create_inlinevar(name,pos,def);
+              hloopvar:=cloadnode.create(vs,vs.owner);
+              typecheckpass(hloopvar);
+              result:=for_in_loop_create(hloopvar,hstart);
+            end;
+          pop_inlinevar_scope;
+        end;
+
       var
          hloopvar: tnode;
       begin
          { parse loop header }
          consume(_FOR);
 
+         if (current_scanner.token=_VAR) and
+            (m_inline_vars in current_settings.modeswitches) then
+           begin
+             result:=for_inlinevar_create;
+             exit;
+           end;
+
          hloopvar:=factor(false,[]);
          valid_for_loopvar(hloopvar,true);
 
          if try_to_consume(_ASSIGNMENT) then
-           result:=for_loop_create(hloopvar)
+           result:=for_loop_create(hloopvar,nil)
          else if try_to_consume(_IN) then
-           result:=for_in_loop_create(hloopvar)
+           result:=for_in_loop_create(hloopvar,nil)
          else
            begin
              consume(_ASSIGNMENT); // fail
@@ -1303,8 +1628,10 @@ implementation
         old_block_type := block_type;
         block_type := bt_body;
 
+        push_inlinevar_scope;
         while (current_scanner.token<>_FINALLY) and (current_scanner.token<>_EXCEPT) do
           begin
+            inlinevar_allowed:=true;
             if first=nil then
               begin
                 last:=cstatementnode.create(statement,nil);
@@ -1319,6 +1646,7 @@ implementation
               break;
             consume_emptystats;
           end;
+        pop_inlinevar_scope;
         p_try_block:=cblocknode.create(first);
 
         if try_to_consume(_FINALLY) then
@@ -1875,6 +2203,10 @@ implementation
                   end;
                 vs:=clocalvarsym.create(targets[i].name,vs_value,var_def,[]);
                 current_procinfo.procdef.localst.insertsym(vs);
+                { with inlinevars, visible to the end of the statement list
+                  like the other inline variables }
+                if m_inline_vars in current_settings.modeswitches then
+                  add_inlinevar_to_scope(vs);
                 target_node:=cloadnode.create(vs,vs.owner);
               end
             else
@@ -1897,9 +2229,14 @@ implementation
          srsym      : tsym;
          srsymtable : TSymtable;
          s          : TIDString;
+         allowinlinevar : boolean;
       begin
          filepos:=current_tokenpos;
          code:=nil;
+         { an inline variable declaration must be directly in a statement
+           list, not e.g. the single statement of an if }
+         allowinlinevar:=inlinevar_allowed;
+         inlinevar_allowed:=false;
          case current_scanner.token of
            _GOTO :
              begin
@@ -2021,6 +2358,16 @@ implementation
                Message(scan_f_end_of_file);
          else
            begin
+             if (current_scanner.token=_VAR) and
+                (m_inline_vars in current_settings.modeswitches) and
+                not((m_tuples in current_settings.modeswitches) and
+                    current_scanner.is_tuple_deconstruction) then
+               begin
+                 code:=inline_var_statement(allowinlinevar);
+                 code.fileinfo:=filepos;
+                 statement:=code;
+                 exit;
+               end;
              if (current_scanner.token in [_VAR, _LKLAMMER]) and
                 (m_tuples in current_settings.modeswitches) and
                 current_scanner.is_tuple_deconstruction then
@@ -2160,8 +2507,10 @@ implementation
          filepos:=current_tokenpos;
          consume(starttoken);
 
+         push_inlinevar_scope;
          while not((current_scanner.token=_END) or (current_scanner.token=_FINALIZATION)) do
            begin
+              inlinevar_allowed:=true;
               if first=nil then
                 begin
                    last:=cstatementnode.create(statement,nil);
@@ -2186,6 +2535,7 @@ implementation
                 end;
               consume_emptystats;
            end;
+         pop_inlinevar_scope;
 
          { don't consume the finalization token, it is consumed when
            reading the finalization block, but allow it only after

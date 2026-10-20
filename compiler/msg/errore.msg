@@ -1745,6 +1745,17 @@ parser_e_nocopy_value_para=03383_E_Type "$1" cannot be copied, it must not be pa
 % A value parameter is a copy of the argument. A non-copyable type (a record declared
 % \var{end nocopy;} or a type containing one) can only be passed as \var{const},
 % \var{constref}, \var{var} or \var{out} parameter.
+parser_e_inline_var_not_allowed=03384_E_Inline variable declarations are only allowed as statements of a statement list
+% With \var{\{\$modeswitch inlinevars\}}, \var{var X := Expr;} is a statement of a
+% \var{begin..end}, \var{repeat..until} or \var{try} block, not e.g. the single
+% statement of an \var{if} or \var{while}.
+parser_e_inline_var_no_type=03385_E_Inline variable "$1" needs a type or an initialization
+% \var{var X;} without \var{: Type} and without \var{:= Expr} does not determine the type.
+parser_e_inline_var_cannot_infer=03386_E_The type of inline variable "$1" cannot be inferred from the initialization, declare it explicitly
+% The initialization has no single type, e.g. \var{nil}, an array constructor
+% \var{[1, 2]} or a procedure call without result; write \var{var X: Type := Expr;}.
+parser_e_inline_var_init_needs_single=03387_E_An initialization can only follow a single inline variable
+% \var{var A, B: Integer := 0;} is not allowed, declare the variables separately.
 %
 % \end{description}
 %
