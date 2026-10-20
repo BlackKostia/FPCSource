@@ -62,6 +62,7 @@
      Next := R.ThenBy(function(const Prev: ITask): Integer begin Result := Length(IFuture<string>(Prev).Value); end);
      ```
   3. Повний набір тестів додано до `tests/concurrency/test_implicit_generics.pp`.
+  4. Розширене виведення працює лише з `{$modeswitch implicitgenerics}`; штатний `implicitfunctionspecialization` поводиться як у FPC (тест upstream `timpfuncspez15`, тести форку `timplgen1`/`timplgen2`). Посібник — [language/implicit-generics.md](language/implicit-generics.md).
 
 ### 2.2. Короткий синтаксис лямбда-виразів (`=>`) [РЕАЛІЗОВАНО]
 - **Статус**: Повністю реалізовано в компіляторі (`{$modeswitch arrowfunctions}`) разом із контекстним виведенням типів параметрів і результату.

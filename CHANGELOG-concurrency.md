@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Виправлено
+- Компілятор: розширене виведення типів форку (`36cb34ccbc`: процедурні
+  типи з константами, анонімні функції й `reference to`, приховані
+  параметри) діяло й у штатному `{$modeswitch implicitfunctionspecialization}`,
+  тож форк компілював код, який FPC відхиляє (тест upstream
+  `timpfuncspez15`, `{%FAIL}`). Тепер розширена версія `handle_procvars`
+  (`pgenutil.pas`) працює лише з `{$modeswitch implicitgenerics}`, а без
+  нього — повернута функція upstream. Нові тести `tests/test/timplgen1`
+  (виведення через `TProc<T, 10>` з `implicitgenerics`) і `timplgen2`
+  (невідповідний тип відхиляється); посібник
+  `docs/concurrency/language/implicit-generics.md`. Падінь у `tests/` — 9.
 - Тести `timplements4a`/`4b` (2008) чекали винятку від `QueryInterface`
   інтерфейсу, отриманого через `implements` властивістю класового типу,
   після `o1.fi := nil` / `o1.free`. Але такий інтерфейс — це інтерфейс

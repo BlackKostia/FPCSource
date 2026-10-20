@@ -1125,6 +1125,120 @@ uses
         with "integer", as they are both parameter #1
       }
 
+      { the inference through procedural variables of upstream FPC, for
+        implicitfunctionspecialization without implicitgenerics: both sides
+        must be procedural variables with the same number of parameters,
+        and generics with constants are rejected }
+      function handle_procvars_upstream(genericparams:tfphashlist;callerparams:tfplist;target_def:tdef;caller_def:tdef):boolean;
+        var
+          newparams : tfphashlist;
+
+        procedure handle_generic_param(targetparadef,callerparadef:tdef);
+          var
+            key : string;
+            index : integer;
+          begin
+            if not assigned(callerparadef.typesym) then
+              internalerror(2021020908);
+
+            key:=generic_param_hash(targetparadef);
+
+            { the generic param must not already be used }
+            index:=genericparams.findindexof(key);
+            if index<0 then
+              begin
+                { add the type to the list }
+                index:=newparams.findindexof(key);
+                if index<0 then
+                  newparams.add(key,callerparadef.typesym);
+              end;
+          end;
+
+        var
+          i,j : integer;
+          paravar : tparavarsym;
+          target_proc,
+          caller_proc : tprocvardef;
+          target_proc_para,
+          caller_proc_para : tparavarsym;
+          valid_params : integer;
+        begin
+          result := false;
+
+          target_proc:=tprocvardef(target_def);
+          caller_proc:=tprocvardef(caller_def);
+
+          { parameter count must match exactly
+            currently default values are not considered }
+          if target_proc.paras.count<>caller_proc.paras.count then
+            exit;
+
+          { a mixture of functions and procedures is not allowed }
+          if (not assigned(target_proc.returndef) or is_void(target_proc.returndef)) xor
+              (not assigned(caller_proc.returndef) or is_void(caller_proc.returndef)) then
+            exit;
+
+          { reject generics with constants }
+          for i:=0 to target_proc.genericdef.genericparas.count-1 do
+            if tsym(target_proc.genericdef.genericparas[i]).typ=constsym then
+              exit;
+
+          newparams:=tfphashlist.create;
+          valid_params:=0;
+
+          for i:=0 to target_proc.paras.count-1 do
+            begin
+              target_proc_para:=tparavarsym(target_proc.paras[i]);
+              caller_proc_para:=tparavarsym(caller_proc.paras[i]);
+
+              { the parameters are not compatible }
+              if compare_defs(caller_proc_para.vardef,target_proc_para.vardef,nothingn)=te_incompatible then
+                begin
+                  newparams.free;
+                  newparams := nil;
+                  exit(false);
+                end;
+
+              if sp_generic_para in target_proc_para.vardef.typesym.symoptions then
+                begin
+                  paravar:=tparavarsym(tprocvardef(target_proc.genericdef).paras[i]);
+
+                  { find the generic param name in the generic def parameters }
+                  j:=target_proc.genericdef.genericparas.findindexof(paravar.vardef.typesym.name);
+
+                  handle_generic_param(ttypesym(target_proc.genericparas[j]).typedef,caller_proc_para.vardef);
+                end;
+
+              inc(valid_params);
+            end;
+
+          if assigned(target_proc.returndef) and not is_void(target_proc.returndef) then
+            begin
+              { or check for exact? }
+              if compare_defs(caller_proc.returndef,target_proc.returndef,nothingn)<te_equal then
+                begin
+                  newparams.free;
+                  newparams := nil;
+                  exit(false);
+                end;
+
+              if sp_generic_para in target_proc.returndef.typesym.symoptions then
+                begin
+                  handle_generic_param(target_proc.returndef,caller_proc.returndef);
+                end;
+            end;
+
+          { if the count of valid params matches the target then
+            transfer the temporary params to the actual params }
+          result:=valid_params=target_proc.paras.count;
+          if result then
+            for i := 0 to newparams.count-1 do
+              genericparams.add(newparams.nameofindex(i),newparams[i]);
+
+          newparams.free;
+          newparams := nil;
+        end;
+
        function is_proc_or_funcref(def: tdef): boolean; inline;
          begin
            result := assigned(def) and (
@@ -1429,10 +1543,21 @@ uses
                   caller_def:=caller_element;
                   target_key:=generic_param_hash(target_def);
                 end
-              { handle generic procvars and function references }
-              else if is_proc_or_funcref(caller_def) and
+              { handle generic procvars and function references: the extended
+                inference of the fork only with implicitgenerics, plain
+                implicitfunctionspecialization behaves like upstream FPC }
+              else if (m_implicit_generics in current_settings.modeswitches) and
+                is_proc_or_funcref(caller_def) and
                 is_proc_or_funcref(target_def) and
                 handle_procvars(genericdef,genericparams,callerparams,target_def,caller_def,unnamed_syms) then
+                begin
+                  continue;
+                end
+              else if not(m_implicit_generics in current_settings.modeswitches) and
+                (caller_def.typ=procvardef) and
+                (target_def.typ=procvardef) and
+                tprocvardef(target_def).is_specialization and
+                handle_procvars_upstream(genericparams,callerparams,target_def,caller_def) then
                 begin
                   continue;
                 end
