@@ -1,10 +1,13 @@
 { Interpolated strings ({$modeswitch interpolation}): $'Text {Expr}' with
   the formatting of WriteStr ({Expr:Width}, {Expr:Width:Precision}),
-  checked by the compiler. See docs/concurrency/language/interpolation.md }
+  checked by the compiler; $`...` over several lines (multilinestrings).
+  See docs/concurrency/language/interpolation.md }
 program interpolation;
 
 {$mode objfpc}{$H+}
 {$modeswitch interpolation}
+{$modeswitch multilinestrings}
+{$MULTILINESTRINGLINEENDING LF}
 
 uses
   SysUtils;
@@ -47,6 +50,16 @@ begin
   WriteLn($'|{'':6}|{'sum':10}|{Sum:10:2}|');
 end;
 
+{ a multi-line template }
+function ToHtml(const O: TOrder): string;
+begin
+  Result := $`<tr class="{O.Status}">
+  <td>{O.Id}</td>
+  <td>{O.Customer}</td>
+  <td>{O.Total:0:2}</td>
+</tr>`;
+end;
+
 procedure Withdraw(const O: TOrder; Amount: Double);
 begin
   if Amount > O.Total then
@@ -67,6 +80,7 @@ begin
   WriteLn($'Urgent: {Orders[0].Urgent}, orders: {Length(Orders)}');
   { braces and apostrophes as characters }
   WriteLn($'JSON: {{"id": {Orders[0].Id}, "name": "{Orders[0].Customer}"}}, it''s ok');
+  WriteLn(ToHtml(Orders[0]));
   try
     Withdraw(Orders[1], 500);
   except

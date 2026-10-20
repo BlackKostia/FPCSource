@@ -283,7 +283,7 @@ interface
           function  readlongcomment(include_special_char: boolean = false):RawByteString;
           function  readlongquotedstring:RawByteString;
           function readstringconstant: boolean;
-          procedure readinterpolatedstring;
+          procedure readinterpolatedstring(backtick: boolean);
           function  readstate:char;
           function  readoptionalstate(fallback:char):char;
           function  readstatedefault:char;
@@ -6881,20 +6881,47 @@ type
        the parameters of WriteStr. The texts become ordinary string constants
        (scanned again with the code page of the source, doubled apostrophes
        are kept), {{ and }} are the braces. An expression may contain string
-       constants; it ends at the first } outside of them. *)
-    procedure tscannerfile.readinterpolatedstring;
+       constants; it ends at the first } outside of them.
+       With backtick ($`...`, modeswitch multilinestrings) the string ends
+       with ` (`` is the character), apostrophes are characters and it may
+       span several lines: a line break is the line ending of
+       $MULTILINESTRINGLINEENDING and also a line break of the generated
+       text, so the expressions keep their lines and columns. *)
+    procedure tscannerfile.readinterpolatedstring(backtick: boolean);
       var
-        gen, lit, expr: ansistring;
-        hasparts: boolean;
-        line, fileindex, tokenpos, exprcolumn: longint;
+        gen, lit, expr, ending: ansistring;
+        hasparts, needcomma: boolean;
+        line, column, fileindex, tokenpos, exprcolumn, commapos: longint;
         filepos: tfileposinfo;
+
+      { the length of the last line of the generated text }
+      function genlinelength: longint;
+        var
+          i: longint;
+        begin
+          i:=length(gen);
+          while (i>0) and (gen[i]<>#10) do
+            dec(i);
+          result:=length(gen)-i;
+        end;
+
+      { the line ending as character constants }
+      function lineendingcodes(const s: ansistring): ansistring;
+        var
+          i: longint;
+        begin
+          result:='';
+          for i:=1 to length(s) do
+            result:=result+'#'+tostr(ord(s[i]));
+        end;
 
       procedure addpart(const s: ansistring);
         begin
-          if hasparts then
+          if needcomma then
             gen:=gen+',';
           gen:=gen+s;
           hasparts:=true;
+          needcomma:=true;
         end;
 
       procedure flushlit;
@@ -6910,24 +6937,56 @@ type
         done;
       begin
         line:=line_no;
+        do_gettokenpos(tokenpos,filepos);
+        column:=filepos.column;
         fileindex:=inputfile.ref_index;
         gen:='(';
         lit:='';
         hasparts:=false;
+        needcomma:=false;
+        commapos:=0;
         { skip the opening apostrophe }
         readchar;
         repeat
           case c of
             '''' :
               begin
-                readchar;
-                if c='''' then
+                if backtick then
                   begin
+                    { a character, doubled in the generated constant }
                     lit:=lit+'''''';
                     readchar;
                   end
                 else
-                  break;
+                  begin
+                    readchar;
+                    if c='''' then
+                      begin
+                        lit:=lit+'''''';
+                        readchar;
+                      end
+                    else
+                      break;
+                  end;
+              end;
+            '`' :
+              begin
+                if not backtick then
+                  begin
+                    lit:=lit+c;
+                    readchar;
+                  end
+                else
+                  begin
+                    readchar;
+                    if c='`' then
+                      begin
+                        lit:=lit+'`';
+                        readchar;
+                      end
+                    else
+                      break;
+                  end;
               end;
             '{' :
               begin
@@ -6973,14 +7032,15 @@ type
                       Message(scan_e_interpolation_empty_expr)
                     else
                       begin
-                        if hasparts then
+                        if needcomma then
                           gen:=gen+',';
                         { messages about the expression show its column:
                           it starts at the same column of the generated line }
-                        if length(gen)<exprcolumn-1 then
-                          gen:=gen+StringOfChar(' ',exprcolumn-1-length(gen));
+                        if genlinelength<exprcolumn-1 then
+                          gen:=gen+StringOfChar(' ',exprcolumn-1-genlinelength);
                         gen:=gen+expr;
                         hasparts:=true;
+                        needcomma:=true;
                       end;
                   end;
               end;
@@ -6995,8 +7055,50 @@ type
                 else
                   Message(scan_e_interpolation_single_brace);
               end;
-            #10,#13,#26 :
-              Message(scan_f_string_exceeds_line);
+            #10,#13 :
+              begin
+                if not backtick then
+                  Message(scan_f_string_exceeds_line);
+                { the line ending of the source }
+                ending:=c;
+{$ifdef CHECK_INPUTPOINTER_LIMITS}
+                if (c=#13) and (get_inputpointer_char=#10) then
+{$else not CHECK_INPUTPOINTER_LIMITS}
+                if (c=#13) and (inputpointer^=#10) then
+{$endif CHECK_INPUTPOINTER_LIMITS}
+                  ending:=#13#10;
+                case current_settings.lineendingtype of
+                  le_cr :
+                    ending:=#13;
+                  le_crlf :
+                    ending:=#13#10;
+                  le_lf :
+                    ending:=#10;
+                  le_platform :
+                    ending:=target_info.newline;
+                  le_source :
+                    ;
+                end;
+                if lit<>'' then
+                  addpart(''''+lit+''''+lineendingcodes(ending))
+                else
+                  addpart(lineendingcodes(ending));
+                lit:='';
+                { the next line of the source is the next line of the
+                  generated text; the comma ends the line, so an
+                  expression at the start of a line keeps its column }
+                gen:=gen+',';
+                commapos:=length(gen);
+                needcomma:=false;
+                gen:=gen+#10;
+                linebreak;
+                readchar;
+              end;
+            #26 :
+              if backtick then
+                Message2(scan_f_unterminated_multiline_string,tostr(line),tostr(column))
+              else
+                Message(scan_f_string_exceeds_line);
             else
               begin
                 lit:=lit+c;
@@ -7006,6 +7108,9 @@ type
         until false;
       done:
         flushlit;
+        { a line break at the end: no part follows its comma }
+        if not needcomma and (commapos>0) then
+          gen[commapos]:=' ';
         if not hasparts then
           addpart('''''');
         gen:=gen+')';
@@ -7162,9 +7267,13 @@ type
              '$' :
                begin
                  readnumber;
-                 if (c='''') and (pattern='$') and
+                 if (c in ['''','`']) and (pattern='$') and
                     (m_interpolation in current_settings.modeswitches) then
-                   readinterpolatedstring
+                   begin
+                     if (c='`') and not(m_multiline_strings in current_settings.modeswitches) then
+                       Illegal_Char(c);
+                     readinterpolatedstring(c='`');
+                   end
                  else
                    token:=_INTCONST;
                  goto exit_label;
