@@ -334,7 +334,15 @@ implementation
             if assigned(init) then
               begin
                 if i=0 then
-                  addstatement(stmts,cassignmentnode.create(cloadnode.create(vs,vs.owner),init));
+                  begin
+                    { The assignment is typechecked only together with the whole
+                      block, but every following statement is typechecked as it
+                      is parsed. Mark the variable initialized now, as a var
+                      section does for "var X: T = ...", so those reads do not
+                      warn that it does not seem to be initialized. }
+                    vs.varstate:=vs_initialised;
+                    addstatement(stmts,cassignmentnode.create(cloadnode.create(vs,vs.owner),init));
+                  end;
               end
             { a variable of a managed type declared in a loop starts empty at
               every iteration }
@@ -2411,6 +2419,9 @@ implementation
                       var_def:=cshortstringtype;
                   end;
                 vs:=create_statement_var(targets[i].name,targets[i].pos,var_def);
+                { same ordering as an inline variable with initialization:
+                  the assignment is typechecked only with the whole block }
+                vs.varstate:=vs_initialised;
                 { with inlinevars, visible to the end of the statement list
                   like the other inline variables }
                 if m_inline_vars in current_settings.modeswitches then
