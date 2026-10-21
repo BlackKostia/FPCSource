@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Додано
+- Модуль `System.Threading.ForkJoin` (пакет `vcl-compat`) для мільйонів дрібних
+  обчислювальних задач: `TTaskGroup` (`Spawn` з анонімною функцією, з аргументом
+  за значенням або зі звичайною процедурою; `Wait`, `Cancel`), `TForkJoin.Each`
+  (паралельний цикл з рекурсивним поділом діапазону) і `TForkJoin.Join`. Задача —
+  запис без керованих полів у деці Чейза–Лева потоку, що її поставив; вільні
+  потоки крадуть задачі, `Wait` виконує їх сам, тож вкладені групи не
+  блокуються. Статус, перший виняток і скасування — на групу. bench06 (мільйон
+  задач): `TTask.Run` ~1250 мс, `TTaskGroup` з тим самим `TCountdownEvent`
+  ~250–300 мс (C# ~250–300 мс), з `Group.Wait` ~80–90 мс. ADR-0013, посібник
+  `docs/concurrency/guides/forkjoin.md`, приклад `examples/forkjoin.pp`, 16 тестів
+  у `packages/vcl-compat/tests/utforkjoin.pp` (50 прогонів поспіль і на 1–2 ядрах
+  без збоїв).
+
 ### Змінено
 - `threadvar` на x86_64-Linux тепер у секції TLS ELF і доступні через `%fs`,
   а не через `pthread_getspecific` (`CRelocateThreadVar`). Режим є в upstream

@@ -115,6 +115,8 @@ begin
     T.Dependencies.AddUnit('system.regularexpressionscore',[Win64,Linux,darwin,wasip1,wasip1threads]);
     T:=P.Targets.AddUnit('system.threading.pp',AllOSes-[go32v2,nativent,atari]);
     T.ResourceStrings := True;
+    T:=P.Targets.AddUnit('system.threading.forkjoin.pp',AllOSes-[go32v2,nativent,atari]);
+    T.Dependencies.AddUnit('system.threading');
 
 {$ifndef ALLPACKAGES}
     Run;
