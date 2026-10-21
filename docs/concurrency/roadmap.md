@@ -30,8 +30,7 @@
 - **Крок 1 (бібліотечний)**: легковагові стекові корутини (fibers) `TFiber`, `generic TGenerator<T>` з підтримкою `for..in`, `generic TChannel<T>` CSP-канали та скінченні автомати `TTaskCompletionSource<T>`.
 - **Крок 2 (у компіляторі `compiler/ppcx64`)**:
   - Директива/модифікатор `async;` для процедур і функцій з обов'язковою строгою перевіркою повернення `ITask` або `specialize IFuture<T>`.
-  - Директива `{$ASYNCMODE AUTO|FIBER|STATEMACHINE}` для налаштування моделі диспетчеризації.
-  - Оператор `await` із неблокуючим перемиканням контексту файбера через `TaskAwaitHook`.
+  - Директива `{$ASYNCMODE AUTO|FIBER|STATEMACHINE}` для налаштування моделі диспетчеризації. `AUTO` і `FIBER` лишають файбер (`TaskAwaitHook`). `STATEMACHINE` знижує тіло `async` до автомата на купі: `await` призупиняє його, `Result` функції `IFuture<T>` — це внутрішній `T`, `TTask.Delay` чекає на одному спільному таймері. `await` в умові, у виразі, у `case` і в `on E:` — помилка компіляції, а не блокуючий `Wait`. Посібник — [guides/statemachine.md](guides/statemachine.md).
   - Високорівневі методи `RunAsync<T>`, `SpawnAsync`, `AsyncSleep` у `fclasync`.
   - Повний набір із 10 порівняльних бенчмарків Pascal vs C# у `tests/concurrency/comparison/` (10/10 успішних тестів).
 

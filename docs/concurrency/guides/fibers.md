@@ -186,6 +186,11 @@ end;
 
 ## 5. `async` та `await`: що вони роблять насправді
 
+Цей розділ описує типовий режим `{$ASYNCMODE AUTO}` і `{$ASYNCMODE FIBER}`:
+`await` лишається очікуванням файбера. `{$ASYNCMODE STATEMACHINE}` знижує
+тіло до автомата на купі і не викликає `Wait`. Його семантика `Result`,
+дозволені конструкції і `TTask.Delay` — у [statemachine.md](statemachine.md).
+
 ### 5.1. Оператор `await`
 
 `await E` компілятор перетворює на `E.Value`, якщо `E` має член `Value`

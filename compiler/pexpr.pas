@@ -3872,6 +3872,15 @@ implementation
       end;
 
 
+    procedure mark_statemachine_await(n: tnode);
+      begin
+        while assigned(n) and (n.nodetype=typeconvn) do
+          n:=ttypeconvnode(n).left;
+        if assigned(n) and (n.nodetype=calln) then
+          include(tcallnode(n).callnodeflags,cnf_await);
+      end;
+
+
     function factor(getaddr:boolean;flags:texprflags) : tnode;
 
          {---------------------------------------------
@@ -4351,6 +4360,12 @@ implementation
                              end;
                          end;
                      end;
+                   { State-machine async routines keep the call recognizable
+                     until the body is rewritten. Fibers still block in Wait. }
+                   if assigned(current_module) and (current_module.asyncmode=2) and
+                      assigned(current_procinfo) and assigned(current_procinfo.procdef) and
+                      (pio_async in current_procinfo.procdef.implprocoptions) then
+                     mark_statemachine_await(p1);
                  end;
                again:=false;
              end

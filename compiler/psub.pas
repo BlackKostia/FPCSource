@@ -157,6 +157,7 @@ implementation
        { parser }
        scanner,gendef,
        pbase,pstatmnt,pdecl,pdecsub,pexports,pgenutil,pparautl,ptype,pexpr,parabase,
+       nasync,
        { codegen }
        tgobj,cgbase,cgobj,hlcgobj,hlcgcpu,dbgbase,
 {$if defined(x86_64) and not defined(llvm)}
@@ -2546,7 +2547,9 @@ implementation
            end;
 
          { parse the code ... }
+         prepare_async_statemachine_result(procdef);
          code:=block(current_module.islibrary);
+         finish_async_statemachine_parse(procdef);
 
          postprocess_capturer(self);
 
@@ -2578,8 +2581,17 @@ implementation
              { get a better entry point }
              entrypos:=code.fileinfo;
 
-             { Finish type checking pass }
-             do_typecheckpass(code);
+             { Rewrite async under $ASYNCMODE STATEMACHINE before typecheck,
+               so the generated call is specialized with the body. The
+               function references are created by that typecheck, so the
+               capturer VMT has to be built afterwards. }
+             if lower_async_statemachine(procdef,code) then
+               begin
+                 do_typecheckpass(code);
+                 postprocess_capturer(self);
+               end
+             else
+               do_typecheckpass(code);
 
              if assigned(procdef.parentfpinitblock) then
                begin

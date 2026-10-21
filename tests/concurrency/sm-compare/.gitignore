@@ -1,0 +1,5 @@
+out/
+csharp/bin/
+csharp/obj/
+csharp/stress/bin/
+csharp/stress/obj/

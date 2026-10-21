@@ -56,6 +56,7 @@ uses
     function could_be_generic(const name:tidstring):boolean;inline;
     function try_implicit_specialization(sym:tsym;para:tnode;pdoverloadlist:tfpobjectlist;var unnamed_syms:tfplist;var first_procsym:tsym;var hasoverload:boolean):boolean;
     function finalize_specialization(var pd:tprocdef;spezcontext:tspecializationcontext):boolean;
+    procedure make_prettystring(paramtype:tdef;first:boolean;constprettyname:ansistring;var prettyname,specializename:ansistring);
 
     procedure generate_specialization_procs;
     procedure generate_specializations_for_forwarddef(def:tdef);

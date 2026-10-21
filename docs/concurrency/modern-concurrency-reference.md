@@ -795,6 +795,10 @@ end;
 
 ### 5.4. Компілятор: Директива `async`, оператор `await` та директива `{$ASYNCMODE}`
 
+Посібник режиму `STATEMACHINE` — [guides/statemachine.md](guides/statemachine.md),
+приклад — [examples/statemachine.pp](examples/statemachine.pp). Файберний
+шлях — [guides/fibers.md](guides/fibers.md).
+
 У компіляторі trunk `compiler/ppcx64`:
 - **Строга валідація сигнатур**: Процедурна директива `async` маркує процедури та функції. Компілятор перевіряє типи повернення:
   - Функції з `async;` зобов'язані повертати дескриптор задачі (`ITask`, `specialize IFuture<T>`). Спроба повернути примітивний тип (`function Calc: Integer; async;`) призводить до помилки компіляції `parser_e_async_must_return_task_or_future` (03380):
@@ -803,22 +807,22 @@ end;
     ```
   - Процедури з `async;` є асинхронними fire-and-forget задачами.
 - **Директива вибору бекенду `{$ASYNCMODE}`**:
-  - `{$ASYNCMODE AUTO}` (за замовчуванням) — компілятор обирає оптимальний режим диспетчеризації.
-  - `{$ASYNCMODE FIBER}` — примусове виконання через контекст файбера.
-  - `{$ASYNCMODE STATEMACHINE}` — трансформація у кінцевий автомат (Roslyn-style state machine).
-- **Оператор `await <expr>`**:
-  - Розпаковує типізовані `IFuture<T>` або очікує виконання `ITask`.
-  - Всередині файбера через внутрішній хук `TaskAwaitHook` очікування є **повністю неблокуючим**: файбер поступається квантом часу, вивільняючи системний потік ОС.
+  - `{$ASYNCMODE AUTO}` (за замовчуванням) і `{$ASYNCMODE FIBER}` лишають `await` очікуванням файбера: `TaskAwaitHook` віддає потік, не блокуючи його. Існуючий код із `Result := RunAsync(...)` компілюється як і раніше.
+  - `{$ASYNCMODE STATEMACHINE}` знижує тіло процедури з `async` до купи стану. `await` стає призупиненням цього автомата, а не викликом `Wait`. Локальні змінні, що живуть через `await`, компілятор переносить на захоплювач. Виклик повертає задачу одразу; перший крок виконується в цьому ж виклику, доки не зустріне незавершене очікування.
+- **`Result` в режимі `STATEMACHINE`**: у `function ...: specialize IFuture<T>; async` і `Result`, і `Exit(значення)` означають внутрішній `T`. Сам `IFuture<T>` публікує згенерований код. У `AUTO`/`FIBER` `Result` як і раніше є самим future.
+- **Що вже знижується**: прямий рядок операторів, `X := await Future`, `await Task`, `if`/`else` (але не умова), `while`/`for` (але не межа циклу), `break`/`continue`/`exit`, `try`/`finally` і `try`/`except` без `on`. `finally` виконується на справжньому виході, а не в мить призупинення. Збій очікуваної задачі піднімається знову, тож `except` у тілі його бачить.
+- **Що є помилкою компіляції** (`parser_e_await_unsupported`, 03390), а не тихим блокуючим `Wait`: `await` в умові, у більшому виразі (`await A + await B`), у межі `for`, у `case` і в гілці `on E:`.
+- **`TTask.Delay`**: одна спільна черга дедлайнів і один потік таймера. `Delay(0)` завершується одразу. Очікування не викликає `Sleep` на потоці пулу.
   ```pascal
-  var
-    V: Integer;
-    T: ITask;
+  {$ASYNCMODE STATEMACHINE}
+
+  function Pipeline: specialize IFuture<Integer>; async;
   begin
-    V := await FetchNumberAsync; // V отримує значення Integer безпосередньо
-    T := TTask.Run(procedure begin DoWork; end);
-    await T;                     // Неблокуюче очікування задачі
+    await TTask.Delay(200);
+    Result := 42;
   end;
   ```
+  Виклик `Pipeline` повертається раніше, ніж спливуть 200 мс, і ще не завершений. `Pipeline.Value` дочекається і поверне 42.
 
 ### 5.5. Високорівневі хелпери: модуль `fclasync`
 

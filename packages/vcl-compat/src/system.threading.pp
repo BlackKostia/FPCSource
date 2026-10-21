@@ -209,10 +209,6 @@ type
       // One worker per CPU. Two per CPU made idle threads fight over the queue
       // spin lock on micro-tasks (bench06) without helping the CPU-bound benches.
       MaxThreadsPerCPU = 1;
-      // Workers blocked in a wait do not count against MaxThreads, so a task
-      // that waits for queued work cannot starve the pool. At most this many
-      // times MaxThreads are added for blocked workers.
-      MaxBlockedThreadsFactor = 4;
       ThreadToRequestRatio = 8; // Number of requests per thread.
       IdleTimeout = 40 * 1000;  // Idle timeout
       MonitorThreadDelay = 500; // Delay between ticks
@@ -248,7 +244,6 @@ type
     FRequestCount : Integer; // Number of work items in queue
     FPreviousRequestCount : Integer; // During monitor check, this is used to determine whether the number of request grows/shrinks
     FWakePosted : Integer; // 1 once a sleeper has been signalled for the current batch
-    FBlockedThreads : Integer; // Workers blocked in a wait outside of the pool queue
     FRecruitCount : Integer; // Counts task starts, to recruit extra workers rarely
     FThreadCreationAt : Int64; // Tick at which the last thread was created.
     FRetireEvent : TEvent;
@@ -788,6 +783,9 @@ type
   Public
   public
     class function CurrentTask: ITask; static;
+    { Completes after aMilliseconds on one shared timer thread, not by
+      sleeping a pool worker. The returned task has no result value. }
+    class function Delay(aMilliseconds: Cardinal): ITask; static;
     constructor Create(const aParams : TTaskParams); overload;
     constructor Create; overload;
     destructor Destroy; override;
@@ -1327,6 +1325,14 @@ var
   once in the calling thread if it already has. Unlike ContinueWith it
   creates no task, so it is never canceled and needs no pool thread. }
 procedure TaskOnComplete(const aTask: ITask; const aProc: TProcRef);
+
+{ Called by a state-machine step. True means the step must suspend. }
+function AsyncAwait(const aTask: ITask): Boolean;
+{ The state machine holds an exception as a pointer between steps. }
+procedure AsyncReleaseException(aError: Pointer);
+procedure AsyncReraise(aError: Pointer);
+function AsyncStateRunTask(const aStep: TAsyncStepFunc): ITask;
+generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc; const aGetResult: specialize TFunc<T>): specialize IFuture<T>;
 
 {
   These must be exposed, otherwise they cannot be used inside generic methods :/
@@ -2542,18 +2548,12 @@ procedure TThreadPool.GrowPool;
 
 Var
   DoGrow,NeedMinimum,IdleDeficit,HaveRoom : Boolean;
-  Blocked : Integer;
 
 begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GrowPool','Enter');{$ENDIF USE_THREADLOG}
   NeedMinimum:=(FThreadCount<FMinThreads);
   IdleDeficit:=(FIdleThreads<FRequestCount);
-  // A blocked worker does not run queued work: the work it waits for may be
-  // behind it in the queue. Give it a stand-in beyond MaxThreads.
-  Blocked:=FBlockedThreads;
-  if Blocked>MaxBlockedThreadsFactor*FMaxThreads then
-    Blocked:=MaxBlockedThreadsFactor*FMaxThreads;
-  HaveRoom:=(FThreadCount<FMaxThreads+Blocked);
+  HaveRoom:=(FThreadCount<FMaxThreads);
   DoGrow:=NeedMinimum or (IdleDeficit and HaveRoom);
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GrowPool','DoGrow: %s, NeedMinimum: %s, IdleDeficit: %s, HaveRoom: %s',[BToS(DoGrow),BToS(NeedMinimum),BToS(IdleDeficit),BToS(HaveRoom)]);{$ENDIF USE_THREADLOG}
   if Not DoGrow then
@@ -2737,7 +2737,6 @@ begin
   VgBenignRace(@FAvgCPUUsage,SizeOf(FAvgCPUUsage));
   VgBenignRace(@FThreadCreationAt,SizeOf(FThreadCreationAt));
   VgBenignRace(@FWakePosted,SizeOf(FWakePosted));
-  VgBenignRace(@FBlockedThreads,SizeOf(FBlockedThreads));
   VgBenignRace(@FRecruitCount,SizeOf(FRecruitCount));
   {$ENDIF}
   FMinThreads:=PC div 4;
@@ -3581,12 +3580,17 @@ end;
 
 procedure TThreadPool.TQueueWorkerThread.Execute;
 
+const
+  TerminateCheckInterval = 256;
+
 var
   Itm: IThreadPoolWorkItem;
+  SinceCheck: Integer;
 
 begin
   // Set event
   inherited Execute;
+  SinceCheck:=0;
   ThreadPool.RegisterWorkerThread(Self);
   try
     While not Terminated do
@@ -3605,18 +3609,20 @@ begin
         begin
         {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Calling WrapExecute. Idle: %s',[BToS(Idle)]);{$ENDIF USE_THREADLOG}
         WrapExecute(Itm);
+        Inc(SinceCheck);
         {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Called WrapExecute. Idle: %s',[BToS(Idle)]);{$ENDIF USE_THREADLOG}
         end;
-      // CheckShouldTerminate reads the clock (GetTickCount64, a system call
-      // here) after every item. Checking only every 256th item was measured:
-      // bench06 (a million micro-tasks) became slower, 2.0-2.6 s instead of
-      // 1.8 s, with more CPU, because workers then drain the queue faster and
-      // contend with the producer on the queue spin lock. Keep the check per
-      // item until the queues no longer depend on such pacing.
-      if ThreadPool.CheckShouldTerminate(Self) then
+      // CheckShouldTerminate reads the clock. A million tasks must not each
+      // pay for that; the suspend heuristic only looks at multi-second windows.
+      // An idle thread is blocked in GetWorkItemForThread, not in this check.
+      if (not Assigned(Itm)) or (SinceCheck>=TerminateCheckInterval) then
         begin
-        {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Threadpool said to stop; terminating');{$ENDIF USE_THREADLOG}
-        Terminate;
+        SinceCheck:=0;
+        if ThreadPool.CheckShouldTerminate(Self) then
+          begin
+          {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Threadpool said to stop; terminating');{$ENDIF USE_THREADLOG}
+          Terminate;
+          end;
         end;
       if Terminated then
         {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.TQueueWorkerThread.Execute','Thread Terminated');{$ENDIF USE_THREADLOG}
@@ -4531,16 +4537,11 @@ begin
   if Not NeedSync then
     begin
     {$IFDEF USE_THREADLOG}ThreadLog('TTask.Wait','Waiting for done event (%d)',[aTimeout]);{$ENDIF USE_THREADLOG}
-    // A task that this worker queued and nobody has started yet sits on its
-    // own local queue: run it here instead of blocking for it (as
-    // DoWaitForAll does), so waiting for a child cannot starve the pool.
-    if aTimeout=INFINITE then
-      InternalExecuteNow;
-    Ev:=EnsureDoneEvent(AlreadyDone);
     // Nested wait: this worker cannot run the task it is waiting for.
-    if not AlreadyDone and Assigned(TThreadPool.QueueThread) and
+    if Assigned(TThreadPool.QueueThread) and
        (TThreadPool.QueueThread.ThreadPool=FParams.Pool) then
       FParams.Pool.ReleaseSleeper;
+    Ev:=EnsureDoneEvent(AlreadyDone);
     if AlreadyDone then
       Result:=True
     else
@@ -7127,6 +7128,46 @@ end;
   TAsyncStateMachine
   *********************************************************************}
 
+threadvar
+  GCurrentAsync: TAsyncStateMachine;
+
+type
+  TAsyncTaskMachine = class(TAsyncStateMachine)
+  private
+    FSource: specialize TTaskCompletionSource<Byte>;
+  protected
+    procedure Complete; override;
+    procedure Fail(aError: Exception); override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function Task: ITask;
+  end;
+
+  TDelayEntry = class
+    DueMs: QWord;
+    Source: specialize TTaskCompletionSource<Byte>;
+  end;
+
+  TDelayQueue = class(TThread)
+  private
+    FLock: TCriticalSection;
+    FWake: TEvent;
+    FItems: TFPList;
+    FStop: Boolean;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Stop;
+    function Add(aMilliseconds: Cardinal): ITask;
+  end;
+
+var
+  GDelayLock: TCriticalSection;
+  GDelay: TDelayQueue;
+
 procedure TAsyncStateMachine.Start(const aStep: TAsyncStepFunc);
 begin
   FStep:=aStep;
@@ -7134,19 +7175,35 @@ begin
 end;
 
 procedure TAsyncStateMachine.Run;
+var
+  Prev: TAsyncStateMachine;
+  Suspended: Boolean;
 begin
+  Prev:=GCurrentAsync;
+  GCurrentAsync:=Self;
+  Suspended:=False;
   try
-    // After a suspending step another thread may already run the next one
-    // and free this object: touch nothing once the step returned True.
-    if FStep() then
-      Exit;
-    Complete;
-  except
-    Fail(Exception(AcquireExceptionObject));
+    try
+      // After a suspending step another thread may already run the next one
+      // and free this object: touch nothing once the step returned True.
+      if FStep() then
+        begin
+        Suspended:=True;
+        Exit;
+        end;
+      Complete;
+    except
+      Fail(Exception(AcquireExceptionObject));
+    end;
+  finally
+    GCurrentAsync:=Prev;
+    if not Suspended then
+      begin
+      // Drop the step (and with it the routine's captured variables).
+      FStep:=nil;
+      Free;
+      end;
   end;
-  // Drop the step (and with it the routine's captured variables).
-  FStep:=nil;
-  Free;
 end;
 
 function TAsyncStateMachine.AwaitTask(const aTask: ITask): Boolean;
@@ -7203,6 +7260,202 @@ begin
   FSource.SetException(aError);
 end;
 
+constructor TAsyncTaskMachine.Create;
+begin
+  inherited Create;
+  FSource:=specialize TTaskCompletionSource<Byte>.Create;
+end;
+
+destructor TAsyncTaskMachine.Destroy;
+begin
+  FreeAndNil(FSource);
+  inherited Destroy;
+end;
+
+function TAsyncTaskMachine.Task: ITask;
+begin
+  Result:=FSource.Task;
+end;
+
+procedure TAsyncTaskMachine.Complete;
+begin
+  FSource.SetResult(0);
+end;
+
+procedure TAsyncTaskMachine.Fail(aError: Exception);
+begin
+  FSource.SetException(aError);
+end;
+
+function AsyncAwait(const aTask: ITask): Boolean;
+begin
+  if not Assigned(GCurrentAsync) then
+    Result:=False
+  else
+    Result:=GCurrentAsync.AwaitTask(aTask);
+end;
+
+procedure AsyncReleaseException(aError: Pointer);
+begin
+  if Assigned(aError) then
+    TObject(aError).Free;
+end;
+
+procedure AsyncReraise(aError: Pointer);
+begin
+  if aError=nil then
+    raise Exception.Create('Async exception was lost');
+  raise TObject(aError);
+end;
+
+function AsyncStateRunTask(const aStep: TAsyncStepFunc): ITask;
+var
+  M: TAsyncTaskMachine;
+begin
+  M:=TAsyncTaskMachine.Create;
+  // Start may free M once the step finishes, so keep the task first.
+  Result:=M.Task;
+  M.Start(aStep);
+end;
+
+generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc; const aGetResult: specialize TFunc<T>): specialize IFuture<T>;
+var
+  M: specialize TAsyncStateMachineOf<T>;
+begin
+  M:=specialize TAsyncStateMachineOf<T>.Create(aGetResult);
+  Result:=M.Task;
+  M.Start(aStep);
+end;
+
+constructor TDelayQueue.Create;
+begin
+  inherited Create(True);
+  FreeOnTerminate:=False;
+  FLock:=TCriticalSection.Create;
+  FWake:=TEvent.Create(nil,True,False,'');
+  FItems:=TFPList.Create;
+  Start;
+end;
+
+destructor TDelayQueue.Destroy;
+var
+  I: Integer;
+begin
+  Stop;
+  WaitFor;
+  for I:=0 to FItems.Count-1 do
+    TDelayEntry(FItems[I]).Free;
+  FItems.Free;
+  FWake.Free;
+  FLock.Free;
+  inherited Destroy;
+end;
+
+procedure TDelayQueue.Stop;
+begin
+  FLock.Enter;
+  try
+    FStop:=True;
+    FWake.SetEvent;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TDelayQueue.Execute;
+var
+  Timeout: QWord;
+  NowMs: QWord;
+  Due: TFPList;
+  I: Integer;
+  Entry: TDelayEntry;
+begin
+  while True do
+    begin
+    Due:=TFPList.Create;
+    FLock.Enter;
+    try
+      if FStop then
+        begin
+        Due.Free;
+        Exit;
+        end;
+      FWake.ResetEvent;
+      NowMs:=GetTickCount64;
+      while (FItems.Count>0) and (TDelayEntry(FItems[0]).DueMs<=NowMs) do
+        begin
+        Due.Add(FItems[0]);
+        FItems.Delete(0);
+        end;
+      if FItems.Count=0 then
+        Timeout:=High(LongInt)
+      else
+        begin
+        Timeout:=TDelayEntry(FItems[0]).DueMs-NowMs;
+        if Timeout>High(LongInt) then
+          Timeout:=High(LongInt);
+        end;
+    finally
+      FLock.Leave;
+    end;
+    for I:=0 to Due.Count-1 do
+      begin
+      Entry:=TDelayEntry(Due[I]);
+      Entry.Source.SetResult(0);
+      Entry.Source.Free;
+      Entry.Free;
+      end;
+    Due.Free;
+    if FStop then
+      Exit;
+    FWake.WaitFor(Timeout);
+    end;
+end;
+
+function TDelayQueue.Add(aMilliseconds: Cardinal): ITask;
+var
+  Entry: TDelayEntry;
+  I: Integer;
+begin
+  Entry:=TDelayEntry.Create;
+  Entry.Source:=specialize TTaskCompletionSource<Byte>.Create;
+  Entry.DueMs:=GetTickCount64+aMilliseconds;
+  Result:=Entry.Source.Task;
+  FLock.Enter;
+  try
+    I:=FItems.Count;
+    while (I>0) and (TDelayEntry(FItems[I-1]).DueMs>Entry.DueMs) do
+      Dec(I);
+    FItems.Insert(I,Entry);
+    if I=0 then
+      FWake.SetEvent;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+class function TTask.Delay(aMilliseconds: Cardinal): ITask;
+var
+  Source: specialize TTaskCompletionSource<Byte>;
+begin
+  if aMilliseconds=0 then
+    begin
+    Source:=specialize TTaskCompletionSource<Byte>.Create;
+    Source.SetResult(0);
+    Result:=Source.Task;
+    Source.Free;
+    Exit;
+    end;
+  GDelayLock.Enter;
+  try
+    if not Assigned(GDelay) then
+      GDelay:=TDelayQueue.Create;
+  finally
+    GDelayLock.Leave;
+  end;
+  Result:=GDelay.Add(aMilliseconds);
+end;
+
 Procedure InitThreading;
 
 begin
@@ -7223,32 +7476,25 @@ begin
 end;
 
 procedure PoolWorkerBlocking(aBlocking: Boolean);
-
-var
-  Pool: TThreadPool;
-
 begin
+  if not aBlocking then
+    exit;
   if TThreadPool.FBlockingFromPool then
     exit;
   if not Assigned(TThreadPool.QueueThread) then
     exit;
-  Pool:=TThreadPool.QueueThread.ThreadPool;
-  if not Assigned(Pool) then
+  if not Assigned(TThreadPool.QueueThread.ThreadPool) then
     exit;
-  // Called in pairs around one wait of this thread (a blocked thread cannot
-  // start another wait), with the same pool both times.
-  if aBlocking then
-    begin
-    AtomicIncrement(Pool.FBlockedThreads);
-    Pool.ReleaseSleeper;
-    end
-  else
-    AtomicDecrement(Pool.FBlockedThreads);
+  TThreadPool.QueueThread.ThreadPool.ReleaseSleeper;
 end;
 
 Initialization
+  GDelayLock:=TCriticalSection.Create;
   SetWorkerBlockingHook(@PoolWorkerBlocking);
   InitThreading;
 Finalization
+  if Assigned(GDelay) then
+    FreeAndNil(GDelay);
+  FreeAndNil(GDelayLock);
   DoneThreading;
 end.

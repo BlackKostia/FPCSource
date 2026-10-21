@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 ### Додано
+- `{$ASYNCMODE STATEMACHINE}` знижує процедуру з `async` до автомата на купі
+  (`compiler/nasync.pas`). `await` призупиняє крок і продовжує його на пулі,
+  коли задача завершується; уже завершена задача крок не призупиняє. У цьому
+  режимі `Result` функції `specialize IFuture<T>` — внутрішнє `T`, а сам
+  future публікує згенерований код. `AUTO` і `FIBER` лишаються файберами.
+  `TTask.Delay` більше не спить на потоці пулу: одна черга дедлайнів і один
+  потік таймера. `await` в умові, у більшому виразі, у `case` і в `on E:` —
+  помилка 03390. Тести `tests/concurrency/test_statemachine_async.pp`,
+  `test_sm_min.pp`; бенчмарк 20 000 `await TTask.Delay(20)` —
+  `tests/concurrency/comparison/pascal/bench03_c100k_tasks.pp` (поза таймованим
+  набором, файберний bench03 не змінювався). Посібник —
+  `docs/concurrency/guides/statemachine.md`, приклад —
+  `docs/concurrency/examples/statemachine.pp`. Порівняння з C# —
+  `tests/concurrency/sm-compare` (20 парних тестів, поза таймованим набором).
+  Стрес `await` — `pascal/stress15.pp` і `csharp/stress/Stress15.cs`, звіт
+  `tests/concurrency/sm-compare/stress-report.md`.
+
 - Модуль `System.Threading.ForkJoin` (пакет `vcl-compat`) для мільйонів дрібних
   обчислювальних задач: `TTaskGroup` (`Spawn` з анонімною функцією, з аргументом
   за значенням або зі звичайною процедурою; `Wait`, `Cancel`), `TForkJoin.Each`
@@ -18,6 +35,15 @@
   `docs/concurrency/guides/forkjoin.md`, приклад `examples/forkjoin.pp`, 16 тестів
   у `packages/vcl-compat/tests/utforkjoin.pp` (50 прогонів поспіль і на 1–2 ядрах
   без збоїв).
+
+### Виправлено
+- `continue` в автоматі `for` пропускав крок змінної циклу, тож цикл лишався на
+  тому самому значенні. `continue` в `repeat` ішов на початок тіла, а не на
+  перевірку `until`.
+- Прапорець `continue` лишався виставленим на наступну ітерацію. `finally`
+  всередині `for` сприймав його як новий вихід і перестрибував крок циклу,
+  тож цикл не закінчувався. На вході в перевірку циклу прапорець тепер
+  скидається.
 
 ### Змінено
 - `threadvar` на x86_64-Linux тепер у секції TLS ELF і доступні через `%fs`,

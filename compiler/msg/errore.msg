@@ -1770,6 +1770,11 @@ parser_e_illegal_assignment_to_using_resource=03388_E_Illegal assignment to reso
 parser_e_using_resource_type=03389_E_Type "$1" cannot be the resource of a "using" statement, a class or a COM interface is expected
 % The resource of a \var{using} statement is freed with \var{TObject.Free} (a class
 % instance) or released by assigning \var{nil} (a reference counted COM interface).
+parser_e_await_unsupported=03390_E_This await is not supported by the state-machine transform: $1
+% \var{\{\$ASYNCMODE STATEMACHINE\}} rewrites an \var{async} routine into a
+% state machine. \var{await} is only allowed as a statement or as the whole
+% right-hand side of an assignment, and not in the condition of \var{if},
+% \var{while}, \var{for} or \var{case}.
 %
 % \end{description}
 %

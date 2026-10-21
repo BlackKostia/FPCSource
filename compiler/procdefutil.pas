@@ -980,6 +980,10 @@ implementation
       pd.aliasnames.clear;
 
       pd.procsym:=ps;
+      { The copy inherits the nested routine's hidden visibility. The wrapper
+        calls this method from outside the capturer, so it must be public. }
+      pd.visibility:=vis_public;
+      ps.visibility:=vis_public;
       pd.struct:=capturedef;
       pd.changeowner(capturedef.symtable);
       pd.parast.symtablelevel:=normal_function_level;
@@ -1046,6 +1050,10 @@ implementation
         pinested.procdef.calcparas;
 
       insert_self_and_vmt_para(pd);
+      { Self is inserted after the first calcparas. Rebuild the parameter
+        list so later location calculation includes it. Locations themselves
+        are created after the capturer VMT is built. }
+      pd.calcparas;
 
       if assigned(pinested) then
         begin
@@ -1445,6 +1453,7 @@ implementation
   procedure postprocess_capturer(ctx: tprocinfo);
     var
       def: tobjectdef;
+      i: longint;
     begin
       if not ctx.procdef.has_capturer then
         exit;
@@ -1454,8 +1463,18 @@ implementation
       { These two are delayed until this point because
         ... we have been adding fields on-the-fly }
       tabstractrecordsymtable(def.symtable).addalignmentpadding;
+      { A state-machine body is typechecked before this runs, so its methods
+        may already have parameter locations. Drop them: build_vmt inserts
+        hidden parameters and refuses to run otherwise. }
+      for i:=0 to def.symtable.DefList.Count-1 do
+        if (tdef(def.symtable.DefList[i]).typ=procdef) and
+           (tprocdef(def.symtable.DefList[i]).has_paraloc_info<>callnoside) then
+          tprocdef(def.symtable.DefList[i]).done_paraloc_info(callbothsides);
       { ... we have been adding interfaces on-the-fly }
       build_vmt(def);
+      for i:=0 to def.symtable.DefList.Count-1 do
+        if tdef(def.symtable.DefList[i]).typ=procdef then
+          tprocdef(def.symtable.DefList[i]).init_paraloc_info(callbothsides);
     end;
 
 
