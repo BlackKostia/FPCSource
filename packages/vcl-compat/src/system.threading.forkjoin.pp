@@ -88,6 +88,7 @@ const
   CMaxDeques = 256;
   CMaxParked = 512;
   CSpinRounds = 64;
+  CMaxBatch = 32;
 
 type
   TTaskKind = (tkRef, tkArg, tkPlain, tkRange);
@@ -102,13 +103,18 @@ type
     Kind: TTaskKind;
   end;
 
-  // Chase-Lev deque: the owner pushes and pops at Bottom, thieves take at Top
+  // Chase-Lev deque: the owner pushes and pops at Bottom, thieves take at Top.
+  // The queue of a thread that is not a worker is a ring instead (Batch): its
+  // owner never pops at Bottom, so a thief may take several items with one
+  // CAS. Without that, all workers took the tasks of a spawning loop one CAS
+  // at a time from one cache line.
   PDeque = ^TDeque;
   TDeque = record
     Top: Int64;
     Pad1: array[0..6] of Int64;
     Bottom: Int64;
     Pad2: array[0..6] of Int64;
+    Batch: Boolean;
     Items: array[0..CDequeSize - 1] of TTask;
   end;
 
@@ -142,7 +148,7 @@ type
     FParkedCount: LongInt;
     FIdleWorkers: LongInt;
     FWakeToken: LongInt;
-    function NewDeque: PDeque;
+    function NewDeque(aBatch: Boolean): PDeque;
     function TryPark(aKey: Pointer; aEvent: PRTLEvent): Boolean;
     procedure Unpark(aEvent: PRTLEvent);
   public
@@ -291,6 +297,33 @@ begin
   Result := InterlockedCompareExchange64(aDeque^.Top, T + 1, T) = T;
 end;
 
+// Takes up to half of a ring, at most CMaxBatch items, with one CAS. Only
+// for a ring: its owner never takes items at Bottom, so the items between
+// Top and the Bottom read here stay put until Top moves.
+function DequeStealBatch(aDeque: PDeque; var aTasks: array of TTask): Integer;
+
+var
+  B, T, K, I: Int64;
+
+begin
+  T := Volatile(aDeque^.Top);
+{$IF not (defined(CPUX86_64) or defined(CPUI386))}
+  ReadBarrier;
+{$ENDIF}
+  B := Volatile(aDeque^.Bottom);
+  if T >= B then
+    Exit(0);
+  K := (B - T + 1) div 2;
+  if K > Length(aTasks) then
+    K := Length(aTasks);
+  for I := 0 to K - 1 do
+    aTasks[I] := aDeque^.Items[(T + I) and CDequeMask];
+  if InterlockedCompareExchange64(aDeque^.Top, T + K, T) = T then
+    Result := K
+  else
+    Result := 0;
+end;
+
 { Tasks }
 
 procedure CallRef(aCode: Pointer); inline;
@@ -407,6 +440,18 @@ begin
     RunTask(aTask);
 end;
 
+// A worker pops its deque at Bottom; the owner of a ring takes at Top
+function TakeOwn(aOwn: PDeque; out aTask: TTask): Boolean;
+
+begin
+  if aOwn = nil then
+    Exit(False);
+  if aOwn^.Batch then
+    Result := DequeSteal(aOwn, aTask)
+  else
+    Result := DequePop(aOwn, aTask);
+end;
+
 { TWorker }
 
 constructor TWorker.Create(aPool: TPool; aDeque: PDeque);
@@ -466,7 +511,7 @@ begin
     Count := 1;
   SetLength(FWorkers, Count);
   for I := 0 to Count - 1 do
-    FWorkers[I] := TWorker.Create(Self, NewDeque);
+    FWorkers[I] := TWorker.Create(Self, NewDeque(False));
 end;
 
 destructor TPool.Destroy;
@@ -495,7 +540,7 @@ begin
   inherited Destroy;
 end;
 
-function TPool.NewDeque: PDeque;
+function TPool.NewDeque(aBatch: Boolean): PDeque;
 
 var
   Slot: LongInt;
@@ -510,6 +555,7 @@ begin
   Result := GetMem(SizeOf(TDeque));
   Result^.Top := 0;
   Result^.Bottom := 0;
+  Result^.Batch := aBatch;
   // Thieves skip a slot that is still nil
   Volatile(FDeques[Slot]) := Result;
 end;
@@ -520,7 +566,7 @@ begin
   Result := tvDeque;
   if (Result = nil) and not tvNoDeque then
     begin
-    Result := NewDeque;
+    Result := NewDeque(True);
     if Result = nil then
       tvNoDeque := True
     else
@@ -531,8 +577,9 @@ end;
 function TPool.TrySteal(aSelf: PDeque; out aTask: TTask): Boolean;
 
 var
-  Count, Start, I: LongInt;
+  Count, Start, I, J, Taken: LongInt;
   Victim: PDeque;
+  Batch: array[0..CMaxBatch - 1] of TTask;
 
 begin
   Count := Volatile(FDequeCount);
@@ -544,8 +591,23 @@ begin
   for I := 0 to Count - 1 do
     begin
     Victim := Volatile(FDeques[(Start + I) mod Count]);
-    if (Victim <> nil) and (Victim <> aSelf) and DequeSteal(Victim, aTask) then
-      Exit(True);
+    if (Victim = nil) or (Victim = aSelf) then
+      Continue;
+    if not Victim^.Batch then
+      begin
+      if DequeSteal(Victim, aTask) then
+        Exit(True);
+      Continue;
+      end;
+    Taken := DequeStealBatch(Victim, Batch);
+    if Taken = 0 then
+      Continue;
+    aTask := Batch[0];
+    // The rest goes to this thread's queue, where others can steal it
+    for J := 1 to Taken - 1 do
+      if (aSelf = nil) or not DequePush(aSelf, Batch[J]) then
+        RunTask(Batch[J]);
+    Exit(True);
     end;
   Result := False;
 end;
@@ -553,7 +615,7 @@ end;
 function TPool.FindTask(aOwn: PDeque; out aTask: TTask): Boolean;
 
 begin
-  Result := ((aOwn <> nil) and DequePop(aOwn, aTask)) or TrySteal(aOwn, aTask);
+  Result := TakeOwn(aOwn, aTask) or TrySteal(aOwn, aTask);
   // More work may wait: pass the wake-up on to the next idle worker
   if Result and (Volatile(FIdleWorkers) > 0) then
     Notify;
@@ -655,7 +717,7 @@ begin
     Exit;
     end;
   // Last look after raising the idle count: a push after this sees the count
-  if not FStop and (((aDeque <> nil) and DequePop(aDeque, Task)) or TrySteal(aDeque, Task)) then
+  if not FStop and (TakeOwn(aDeque, Task) or TrySteal(aDeque, Task)) then
     begin
     Unpark(Event);
     InterlockedDecrement(FIdleWorkers);

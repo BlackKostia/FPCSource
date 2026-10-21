@@ -40,7 +40,7 @@
 
 ### 1.5. Дрібні задачі та fork-join — `System.Threading.ForkJoin` [РЕАЛІЗОВАНО]
 - `TTask` — повноцінний об'єкт із семантикою Delphi; на мільйоні дрібних задач (bench06) він коштує ~1,2 мкс на задачу.
-- **Стан:** модуль `System.Threading.ForkJoin` (пакет `vcl-compat`): `TTaskGroup` (`Spawn` у трьох формах, `Wait`, `Cancel`), `TForkJoin.Each`, `TForkJoin.Join`. Задачі — записи без керованих полів у деках Чейза–Лева з крадіжкою роботи, `Wait` сам виконує задачі. bench06: ~80–90 мс проти ~1250 мс через `TTask`. Рішення — [adr/0013-forkjoin-fine-grained-tasks.md](adr/0013-forkjoin-fine-grained-tasks.md), посібник — [guides/forkjoin.md](guides/forkjoin.md), приклад — `examples/forkjoin.pp`, тести — `packages/vcl-compat/tests/utforkjoin.pp`.
+- **Стан:** модуль `System.Threading.ForkJoin` (пакет `vcl-compat`): `TTaskGroup` (`Spawn` у трьох формах, `Wait`, `Cancel`), `TForkJoin.Each`, `TForkJoin.Join`. Задачі — записи без керованих полів у деках Чейза–Лева з крадіжкою роботи, `Wait` сам виконує задачі. bench06: 50–300 мс проти ~1250 мс через `TTask`; без спільних лічильників у задачі — ~33 мс на мільйон задач. Рішення — [adr/0013-forkjoin-fine-grained-tasks.md](adr/0013-forkjoin-fine-grained-tasks.md), посібник — [guides/forkjoin.md](guides/forkjoin.md), приклад — `examples/forkjoin.pp`, тести — `packages/vcl-compat/tests/utforkjoin.pp`.
 
 ## 2. Синтаксична ергономіка мови (рівень компілятора `compiler/`)
 
