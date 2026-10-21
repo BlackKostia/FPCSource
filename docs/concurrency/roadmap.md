@@ -89,7 +89,7 @@
   LogAndWork := (I) => begin Log(I); Work(I); end;
   ```
 - **Документація та тести**:
-  - Детальний посібник: [`guide-arrow-functions.md`](guide-arrow-functions.md).
+  - Детальний посібник: [`language/arrow-functions.md`](language/arrow-functions.md).
   - Тестовий набір: [`tests/concurrency/test_arrow_functions.pp`](../../tests/concurrency/test_arrow_functions.pp).
 
 ### 2.3. Оголошення локальних змінних за місцем використання (`inlinevars`) [РЕАЛІЗОВАНО]
@@ -138,7 +138,7 @@
   T2 := T1; // Сумісні за структурою
   ```
 - **Документація та тести**:
-  - Детальний посібник: [`guide-tuples.md`](guide-tuples.md).
+  - Детальний посібник: [`language/tuples.md`](language/tuples.md).
   - Тестовий набір: [`tests/concurrency/test_tuples.pp`](../../tests/concurrency/test_tuples.pp).
 
 ### 2.5. Оператор ресурсу `using .. do` (`{$modeswitch using}`) [РЕАЛІЗОВАНО]

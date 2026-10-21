@@ -91,12 +91,12 @@ MFPC brings Pascal to parity with—and positions it as a competitive native alt
   - `packages/fcl-eventloop/`: High-performance asynchronous event loop.
   - `packages/fcl-coroutines/`: Coroutines, fibers, generators and async state machines.
 - `docs/concurrency/`: Detailed architectural documentation, user guides, and roadmaps:
-  - [`guide-tuples.md`](docs/concurrency/guide-tuples.md): Tuples & deconstruction reference.
-  - [`guide-arrow-functions.md`](docs/concurrency/guide-arrow-functions.md): Arrow functions reference.
-  - [`guide-system-threading.md`](docs/concurrency/guide-system-threading.md): `System.Threading` guide.
-  - [`guide-syncobjs.md`](docs/concurrency/guide-syncobjs.md): Synchronization primitives guide.
-  - [`guide-eventloop.md`](docs/concurrency/guide-eventloop.md): Asynchronous I/O event loop guide.
-  - [`roadmap-improvements.md`](docs/concurrency/roadmap-improvements.md): Long-term development roadmap.
+  - [`language/tuples.md`](docs/concurrency/language/tuples.md): Tuples & deconstruction reference.
+  - [`language/arrow-functions.md`](docs/concurrency/language/arrow-functions.md): Arrow functions reference.
+  - [`guides/system-threading.md`](docs/concurrency/guides/system-threading.md): `System.Threading` guide.
+  - [`guides/syncobjs.md`](docs/concurrency/guides/syncobjs.md): Synchronization primitives guide.
+  - [`guides/eventloop.md`](docs/concurrency/guides/eventloop.md): Asynchronous I/O event loop guide.
+  - [`roadmap.md`](docs/concurrency/roadmap.md): Long-term development roadmap.
 - `tests/`: Extensive compiler and runtime test suite (including `tests/concurrency/`).
 - `utils/`: Utilities and tools distributed with the compiler.
 
