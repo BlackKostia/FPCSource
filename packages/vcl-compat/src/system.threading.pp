@@ -926,6 +926,11 @@ type
     constructor Create;
     destructor Destroy; override;
     function SetResult(const AResult: TResult): Boolean;
+    { Same value as SetResult, but the task body runs on this thread and the
+      returned future is already Completed. The state machine uses this when
+      the result is known, so the caller does not wait for a pool thread.
+      SetResult itself still queues, which is what TTask.Run relies on. }
+    function SetResultHere(const AResult: TResult): Boolean;
     { Takes ownership of AException, also when it returns False. }
     function SetException(const AException: Exception): Boolean;
     function SetCanceled: Boolean;
@@ -7120,6 +7125,22 @@ begin
   FTask.Start;
 end;
 
+function TTaskCompletionSource.SetResultHere(const AResult: TResult): Boolean;
+var
+  Obj: TTask;
+begin
+  Result:=Claim;
+  if not Result then
+    Exit;
+  FState.Value:=AResult;
+  Obj:=FTask as TTask;
+  if not Obj.MarkAsStarted then
+    Exit;
+  { Do not QueueEvents: the body only copies the value already stored above. }
+  if not Obj.InternalWork(False) then
+    Obj.QueueEvents;
+end;
+
 function TTaskCompletionSource.SetException(const AException: Exception): Boolean;
 begin
   Result:=Claim;
@@ -7267,9 +7288,9 @@ end;
 procedure TAsyncStateMachineOf.Complete;
 begin
   if Assigned(FGetResult) then
-    FSource.SetResult(FGetResult())
+    FSource.SetResultHere(FGetResult())
   else
-    FSource.SetResult(Default(T));
+    FSource.SetResultHere(Default(T));
 end;
 
 procedure TAsyncStateMachineOf.Fail(aError: Exception);
@@ -7296,7 +7317,7 @@ end;
 
 procedure TAsyncTaskMachine.Complete;
 begin
-  FSource.SetResult(0);
+  FSource.SetResultHere(0);
 end;
 
 procedure TAsyncTaskMachine.Fail(aError: Exception);

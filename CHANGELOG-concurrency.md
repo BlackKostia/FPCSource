@@ -59,6 +59,11 @@
   скидається.
 
 ### Змінено
+- Автомат публікує вже порахований результат на тому ж потоці
+  (`TTaskCompletionSource.SetResultHere`): future одразу `Completed`, без
+  постановки тіла в пул. `SetResult` для звичайного `TTask.Run` як і раніше
+  ставить задачу в чергу. Крок без `try/except` і `try/finally` більше не
+  ставить кадр винятку на кожен перехід стану.
 - `threadvar` на x86_64-Linux тепер у секції TLS ELF і доступні через `%fs`,
   а не через `pthread_getspecific` (`CRelocateThreadVar`). Режим є в upstream
   з 2019 року (коміт 597a23d278, «not yet enabled by default») за символом

@@ -60,6 +60,9 @@ implementation
         except_sym, raise_sym, result_sym: tsym;
         awaitproc, runproc: tprocsym;
         handlerid: integer;
+        { True when the body has try/finally or try/except. Only then does
+          the step dispatcher need an exception frame on every state. }
+        catch_exceptions: boolean;
         stepinfo, getinfo: tprocinfo;
         constructor create(aproc: tprocdef; aouter: tprocinfo);
         destructor destroy; override;
@@ -783,6 +786,7 @@ implementation
             end;
           tryfinallyn:
             begin
+              catch_exceptions:=true;
               body:=ttryfinallynode(n).left;
               other:=ttryfinallynode(n).right;
               ttryfinallynode(n).left:=nil;
@@ -813,6 +817,7 @@ implementation
             end;
           tryexceptn:
             begin
+              catch_exceptions:=true;
               if assigned(ttryexceptnode(n).right) and has_await(n) then
                 begin
                   fail(n,'await in an ''on'' handler');
@@ -916,13 +921,22 @@ implementation
           ccallnode.createintern('ACQUIREEXCEPTIONOBJECT',nil)));
         addstatement(last,copy_assign(state_sym,handler_sym));
         addstatement(last,assign_const(handler_sym,-1));
-        trap:=cifnode.create(
-                caddnode.create(gten,load_sym(handler_sym),int_const(0)),
-                handler,
-                craisenode.create(nil,nil,nil));
+        { TAsyncStateMachine.Run already catches an exception that leaves the
+          step. A frame on every state is only needed to divert a raise into
+          a user finally or except handler. }
+        if catch_exceptions then
+          begin
+            trap:=cifnode.create(
+                    caddnode.create(gten,load_sym(handler_sym),int_const(0)),
+                    handler,
+                    craisenode.create(nil,nil,nil));
+            chain:=ctryexceptnode.create(chain,nil,trap);
+          end
+        else
+          handler.free;
         result:=cwhilerepeatnode.create(
                   cordconstnode.create(1,booldef,false),
-                  ctryexceptnode.create(chain,nil,trap),
+                  chain,
                   true,false);
       end;
 
