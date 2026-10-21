@@ -469,6 +469,11 @@ Type
     { Lock is held on entry and on return. False: the deadline passed.
       A pool worker is reported blocked for the duration of the wait. }
     function WaitCond(var aCond: pthread_cond_t; aInfinite: Boolean; const aAbs: timespec): Boolean;
+    { Lock is not held. Spin briefly before sleeping on the condvar: under
+      a steady flow the other side fills or drains the buffer within
+      microseconds, and a sleep and a wakeup per item cost two syscalls. }
+    procedure SpinForItem;
+    procedure SpinForRoom;
     {$ELSE}
     FLock: TSpinLock;
     FNotEmptyEvent: TSimpleEvent;
@@ -660,16 +665,22 @@ end;
 
 function THandleObject.WaitFor(Timeout : Cardinal) : TWaitResult;
 
+var
+  Hook: TWorkerBlockingHook;
+
 begin
   // Timeout 0 is a poll. A pool worker blocked for real work must hand the
   // pool to someone who can still run; the pool's own queue wait opts out.
-  if (Timeout<>0) and Assigned(WorkerBlockingHook) then
+  // Read the hook once: the pool unit clears it at finalization while its
+  // workers may still be in this wait, and both calls must reach the same hook.
+  Hook:=WorkerBlockingHook;
+  if (Timeout<>0) and Assigned(Hook) then
     begin
-    WorkerBlockingHook(True);
+    Hook(True);
     try
       Result := TWaitResult(basiceventWaitFor(Timeout, Handle));
     finally
-      WorkerBlockingHook(False);
+      Hook(False);
     end;
     end
   else
@@ -2651,23 +2662,54 @@ begin
   end;
 end;
 
+const
+  ChannelSpinCount = 2000;
+
+// The fields are read without the lock: the asm block keeps them out of
+// registers, and the caller checks again under the lock.
+procedure TCustomChannel.SpinForItem;
+var
+  I: Integer;
+begin
+  for I := 1 to ChannelSpinCount do
+  begin
+    if (FCount <> 0) or FClosed then
+      Exit;
+    asm pause end;
+  end;
+end;
+
+procedure TCustomChannel.SpinForRoom;
+var
+  I: Integer;
+begin
+  for I := 1 to ChannelSpinCount do
+  begin
+    if (FCount < FCapacity) or FClosed then
+      Exit;
+    asm pause end;
+  end;
+end;
+
 function TCustomChannel.WaitCond(var aCond: pthread_cond_t; aInfinite: Boolean; const aAbs: timespec): Boolean;
 var
   Err: cint;
+  Hook: TWorkerBlockingHook;
 begin
   // True for the whole sleep, including the gap before the kernel wait:
   // the pool must grow before this worker is stuck, or the task it waits
-  // for never starts.
-  if Assigned(WorkerBlockingHook) then
-    WorkerBlockingHook(True);
+  // for never starts. Read the hook once, as in THandleObject.WaitFor.
+  Hook := WorkerBlockingHook;
+  if Assigned(Hook) then
+    Hook(True);
   try
     if aInfinite then
       Err := pthread_cond_wait(@aCond, @FLock)
     else
       Err := pthread_cond_timedwait(@aCond, @FLock, @aAbs);
   finally
-    if Assigned(WorkerBlockingHook) then
-      WorkerBlockingHook(False);
+    if Assigned(Hook) then
+      Hook(False);
   end;
   if (Err = 0) or (Err = ESysETIMEDOUT) then
     Exit(Err = 0);
@@ -2818,9 +2860,10 @@ end;
 function TChannel.TrySend(const aItem: T; aTimeout: Cardinal): Boolean;
 var
   Deadline: timespec;
-  Armed, WaitForever: Boolean;
+  Armed, WaitForever, Spun: Boolean;
 begin
   Armed := False;
+  Spun := False;
   WaitForever := aTimeout = INFINITE;
   Deadline := Default(timespec);
   Lock;
@@ -2833,6 +2876,14 @@ begin
       begin
         ArmDeadline(aTimeout, Deadline);
         Armed := True;
+      end;
+      if not Spun then
+      begin
+        Spun := True;
+        Unlock;
+        SpinForRoom;
+        Lock;
+        Continue;
       end;
       Inc(FWaitingSenders);
       try
@@ -2940,9 +2991,10 @@ end;
 function TChannel.TryReceive(out aItem: T; aTimeout: Cardinal): Boolean;
 var
   Deadline: timespec;
-  Armed, WaitForever: Boolean;
+  Armed, WaitForever, Spun: Boolean;
 begin
   Armed := False;
+  Spun := False;
   WaitForever := aTimeout = INFINITE;
   Deadline := Default(timespec);
   Lock;
@@ -2958,6 +3010,14 @@ begin
       begin
         ArmDeadline(aTimeout, Deadline);
         Armed := True;
+      end;
+      if not Spun then
+      begin
+        Spun := True;
+        Unlock;
+        SpinForItem;
+        Lock;
+        Continue;
       end;
       Inc(FWaitingReceivers);
       try
