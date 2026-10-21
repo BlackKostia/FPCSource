@@ -5,7 +5,8 @@
 N="${1:-20}"
 LIMIT="${2:-30}"
 RUNNER="${3:-$(dirname "$0")/out-eventloop/testeventloop}"
-SUITES="TTestEventLoopCore TTestPipes TTestSockets TTestEventLoopGroup TTestBufferPool TTestAsyncFiles"
+SUITES="TTestEventLoopCore TTestEpollBackend TTestIOUringBackend TTestPipes TTestSockets TTestEventLoopGroup
+TTestEventLoopGroupLifetime TTestBufferPool TTestAsyncFiles"
 LOGDIR=$(mktemp -d)
 total_bad=0
 for s in $SUITES; do

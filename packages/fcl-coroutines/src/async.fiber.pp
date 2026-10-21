@@ -125,6 +125,35 @@ implementation
 threadvar
   GCurrentFiber: TFiber;
 
+{$IFDEF FPC_SECTION_THREADVARS}
+{ Threadvars live in the ELF TLS section: the private exception stacks of
+  System are declared as external threadvars and reached through %fs.
+  Referencing them as plain variables fails to link (TLS definition
+  mismatches non-TLS reference). }
+threadvar
+  U_EXCEPTADDRSTACK: Pointer; external name 'U_$SYSTEM_$$_EXCEPTADDRSTACK';
+  U_EXCEPTOBJECTSTACK: Pointer; external name 'U_$SYSTEM_$$_EXCEPTOBJECTSTACK';
+
+var
+  { Typed const in System. fpc_stackcheck treats this many bytes above
+    StackBottom as already exhausted. }
+  SystemStackMargin: PtrUInt; external name 'TC_$SYSTEM_$$_STACKMARGIN';
+
+function GetExceptAddrStackPtr: PPointer;
+begin
+  Result := @U_EXCEPTADDRSTACK;
+end;
+
+function GetExceptObjectStackPtr: PPointer;
+begin
+  Result := @U_EXCEPTOBJECTSTACK;
+end;
+
+function GetStackBottomPtr: PPointer;
+begin
+  Result := @StackBottom;
+end;
+{$ELSE FPC_SECTION_THREADVARS}
 type
   TThreadVarRelocateFunc = function(offset: DWord): Pointer;
 
@@ -160,6 +189,7 @@ begin
   else
     Result := PPointer(@U_STACKBOTTOM[8]);
 end;
+{$ENDIF FPC_SECTION_THREADVARS}
 
 {$IFDEF CPUX86_64}
 {
