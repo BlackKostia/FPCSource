@@ -209,6 +209,10 @@ type
       // One worker per CPU. Two per CPU made idle threads fight over the queue
       // spin lock on micro-tasks (bench06) without helping the CPU-bound benches.
       MaxThreadsPerCPU = 1;
+      // Workers blocked in a wait do not count against MaxThreads, so a task
+      // that waits for queued work cannot starve the pool. At most this many
+      // times MaxThreads are added for blocked workers.
+      MaxBlockedThreadsFactor = 4;
       ThreadToRequestRatio = 8; // Number of requests per thread.
       IdleTimeout = 40 * 1000;  // Idle timeout
       MonitorThreadDelay = 500; // Delay between ticks
@@ -244,6 +248,7 @@ type
     FRequestCount : Integer; // Number of work items in queue
     FPreviousRequestCount : Integer; // During monitor check, this is used to determine whether the number of request grows/shrinks
     FWakePosted : Integer; // 1 once a sleeper has been signalled for the current batch
+    FBlockedThreads : Integer; // Workers blocked in a wait outside of the pool queue
     FRecruitCount : Integer; // Counts task starts, to recruit extra workers rarely
     FThreadCreationAt : Int64; // Tick at which the last thread was created.
     FRetireEvent : TEvent;
@@ -2548,12 +2553,18 @@ procedure TThreadPool.GrowPool;
 
 Var
   DoGrow,NeedMinimum,IdleDeficit,HaveRoom : Boolean;
+  Blocked : Integer;
 
 begin
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GrowPool','Enter');{$ENDIF USE_THREADLOG}
   NeedMinimum:=(FThreadCount<FMinThreads);
   IdleDeficit:=(FIdleThreads<FRequestCount);
-  HaveRoom:=(FThreadCount<FMaxThreads);
+  // A blocked worker does not run queued work: the work it waits for may be
+  // behind it in the queue. Give it a stand-in beyond MaxThreads.
+  Blocked:=FBlockedThreads;
+  if Blocked>MaxBlockedThreadsFactor*FMaxThreads then
+    Blocked:=MaxBlockedThreadsFactor*FMaxThreads;
+  HaveRoom:=(FThreadCount<FMaxThreads+Blocked);
   DoGrow:=NeedMinimum or (IdleDeficit and HaveRoom);
   {$IFDEF USE_THREADLOG}ThreadLog('TThreadPool.GrowPool','DoGrow: %s, NeedMinimum: %s, IdleDeficit: %s, HaveRoom: %s',[BToS(DoGrow),BToS(NeedMinimum),BToS(IdleDeficit),BToS(HaveRoom)]);{$ENDIF USE_THREADLOG}
   if Not DoGrow then
@@ -2737,6 +2748,7 @@ begin
   VgBenignRace(@FAvgCPUUsage,SizeOf(FAvgCPUUsage));
   VgBenignRace(@FThreadCreationAt,SizeOf(FThreadCreationAt));
   VgBenignRace(@FWakePosted,SizeOf(FWakePosted));
+  VgBenignRace(@FBlockedThreads,SizeOf(FBlockedThreads));
   VgBenignRace(@FRecruitCount,SizeOf(FRecruitCount));
   {$ENDIF}
   FMinThreads:=PC div 4;
@@ -4537,11 +4549,16 @@ begin
   if Not NeedSync then
     begin
     {$IFDEF USE_THREADLOG}ThreadLog('TTask.Wait','Waiting for done event (%d)',[aTimeout]);{$ENDIF USE_THREADLOG}
+    // A task that this worker queued and nobody has started yet sits on its
+    // own local queue: run it here instead of blocking for it (as
+    // DoWaitForAll does), so waiting for a child cannot starve the pool.
+    if aTimeout=INFINITE then
+      InternalExecuteNow;
+    Ev:=EnsureDoneEvent(AlreadyDone);
     // Nested wait: this worker cannot run the task it is waiting for.
-    if Assigned(TThreadPool.QueueThread) and
+    if not AlreadyDone and Assigned(TThreadPool.QueueThread) and
        (TThreadPool.QueueThread.ThreadPool=FParams.Pool) then
       FParams.Pool.ReleaseSleeper;
-    Ev:=EnsureDoneEvent(AlreadyDone);
     if AlreadyDone then
       Result:=True
     else
@@ -7476,16 +7493,27 @@ begin
 end;
 
 procedure PoolWorkerBlocking(aBlocking: Boolean);
+
+var
+  Pool: TThreadPool;
+
 begin
-  if not aBlocking then
-    exit;
   if TThreadPool.FBlockingFromPool then
     exit;
   if not Assigned(TThreadPool.QueueThread) then
     exit;
-  if not Assigned(TThreadPool.QueueThread.ThreadPool) then
+  Pool:=TThreadPool.QueueThread.ThreadPool;
+  if not Assigned(Pool) then
     exit;
-  TThreadPool.QueueThread.ThreadPool.ReleaseSleeper;
+  // Called in pairs around one wait of this thread (a blocked thread cannot
+  // start another wait), with the same pool both times.
+  if aBlocking then
+    begin
+    AtomicIncrement(Pool.FBlockedThreads);
+    Pool.ReleaseSleeper;
+    end
+  else
+    AtomicDecrement(Pool.FBlockedThreads);
 end;
 
 Initialization

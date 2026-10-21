@@ -37,6 +37,19 @@
   без збоїв).
 
 ### Виправлено
+- Коміт `28de371835` (`async`/`await` як автомат) разом з новим кодом
+  повернув у `System.Threading` старий пул і цим скасував виправлення
+  `256d60fabf`: заблоковані воркери знову не отримували заміни понад
+  `MaxThreads`, а `TTask.Wait` не виконував сам дочірню задачу зі своєї черги.
+  Вкладений `Wait` зависав (`TestNestedWaitDoesNotStarve`), а
+  `TestBlockedWorkersGrowPool` і `TestChannelPoolBlockingHook` падали.
+  Відновлено облік заблокованих воркерів (`FBlockedThreads`,
+  `MaxBlockedThreadsFactor`, `PoolWorkerBlocking`) і `InternalExecuteNow` у
+  `TTask.Wait`. Перевірка `CheckShouldTerminate` раз на 256 задач із
+  `28de371835` лишилась: на мільйоні мікрозадач `TTask` вона тепер не
+  повільніша за перевірку на кожній задачі. `testcompat`: 764 тести, ті самі
+  2 давні відмови; тести автомата (`test_statemachine_async`, `stress15`,
+  `sm20`) проходять.
 - `continue` в автоматі `for` пропускав крок змінної циклу, тож цикл лишався на
   тому самому значенні. `continue` в `repeat` ішов на початок тіла, а не на
   перевірку `until`.
@@ -564,7 +577,7 @@
   `docs/concurrency/guides/asan.md`.
 - ThreadSanitizer у рідному генераторі коду (розділ 3.3 дорожньої карти,
   ADR-0010): ключ `-fsanitize=thread` для x86_64-linux, макрос
-  `FPC_SANITIZE_THREAD`. Прохід `compiler/x86/tsaninstr.pas` після
+  `FPC_SANITIZE_THREAD`. Прохід `compiler/x86/tsaninstr.pas` (тепер `saninstr.pas`) після
   розподілу регістрів вставляє перед кожною інструкцією з операндом-пам'яттю
   виклик трампліна з точним розміром доступу; не інструментуються кадр
   процедури, `threadvar`, GOT, атомарні інструкції й блоки `asm`. Новий
@@ -682,14 +695,14 @@
     циклу `for Msg in Channel do` без алокацій у купі.
   - Набір тестів `TTestSyncObjsPhase2` у `packages/vcl-compat/tests/utthreading.pp`,
     демонстраційна програма `docs/concurrency/examples/syncobjs_phase2.pp`,
-    посібник `docs/concurrency/guide-syncobjs.md`, ADR-0004 та fpdoc-опис
+    посібник `docs/concurrency/guides/syncobjs.md`, ADR-0004 та fpdoc-опис
     `packages/fcl-base/xml/syncobjs-phase2.xml`.
 - `docs/concurrency/examples/`: приклади порівняння «класичний TThread vs
   System.Threading» (`primes_*`, `report_*`, `batch_processing.pp`,
   `showcase_pipeline.pp`, `syncobjs_phase2.pp`, `continuations_cancel.pp`) і розділ 10 у PDF.
 - `fcl-base/src/fpvalgrind.pp`: клієнтські запити valgrind (happens-before/after,
   clean memory, benign race); анотації в `TSpinLock` і `System.Threading`
-  під `-dFPC_VALGRIND`. Див. `docs/concurrency/valgrind.md`.
+  під `-dFPC_VALGRIND`. Див. `docs/concurrency/dev/valgrind.md`.
 - `tests/concurrency/build-testcompat-valgrind.sh`, `fpc-helgrind.supp`,
   `hgsummary.py`: збірка й аналіз прогонів helgrind/drd.
 - Документація: `docs/concurrency/` (огляд, шаблон ADR, базова лінія тестів).
@@ -704,7 +717,7 @@
     - Методи `TFiber.Await<T>(IFuture<T>)` та `TFiber.Await(ITask)` для неблокуючого призупинення корутини без блокування системного потоку ОС, `TFiber.Sleep(ms, loop)` через таймери `fcl-eventloop` та неблокуюче читання/запис сокетів `TFiber.AwaitRead` / `TFiber.AwaitWrite`.
     - `generic TGenerator<T>` (`async.generator.pp`): ледачі генератори послідовностей на базі корутин із зворотним викликом `YieldValue`, повною підтримкою `IEnumerator<T>` / `IEnumerable<T>` та прямим обходом у циклі `for..in`.
     - Фундамент скінченних автоматів (`async.statemachine.pp`): `generic TTaskCompletionSource<TResult>` (`Task`, `SetResult`, `SetException`, `SetCanceled`), `TAsyncTaskMethodBuilder<TResult>` та `TAsyncTaskBuilder` за контрактом C# Roslyn.
-    - Модульні тести `packages/fcl-async/tests/utasync.pp` (12 тестів: `TTestFibers`, `TTestGenerators`, `TTestStateMachines`), скрипт `tests/concurrency/build-async.sh`.
+    - Модульні тести `packages/fcl-coroutines/tests/utasync.pp` (12 тестів: `TTestFibers`, `TTestGenerators`, `TTestStateMachines`), скрипт `tests/concurrency/build-async.sh`.
   - **Крок 2 (у компіляторі `compiler/ppcx64`)**:
     - Додано процедурний модифікатор/директиву `async` (`pio_async` у `timplprocoption` в `compiler/symconst.pas`, парсер `compiler/pdecsub.pas`) для маркування процедур та функцій.
     - Реалізовано строгу типізаційну перевірку повернення: функції з `async;` зобов'язані повертати `ITask` або `specialize IFuture<T>` (помилка `parser_e_async_must_return_task_or_future` = 03380 у `compiler/pdecsub.pas`, `compiler/msg/errore.msg`).
@@ -714,7 +727,7 @@
     - Модуль `packages/fcl-coroutines/src/fclasync.pp`: додано ергономічні методи `RunAsync<T>`, `SpawnAsync` та `AsyncSleep(ms)` для сучасного асинхронного стилю програмування.
     - Створено пакет із 10 порівняльних програм-бенчмарків ModernFreePascal vs C# (.NET) у `tests/concurrency/comparison/` (всі 10/10 тестів успішно пройдено).
     - Збережено 100% сумісність двійкових файлів PPU (`tppuset1` / `tppuset8`) та чинних модулів RTL завдяки контекстному аналізу без додавання зарезервованих слів у загальний лексер.
-  - Демонстраційний приклад `docs/concurrency/examples/coroutine_showcase.pp`, посібник користувача `docs/concurrency/guide-async.md`, тестовий набір `tests/concurrency/test_modern_async.pp` та оновлений повний довідник `docs/concurrency/modern-concurrency-reference.md`.
+  - Демонстраційний приклад `docs/concurrency/examples/coroutine_showcase.pp`, посібник користувача `docs/concurrency/guides/fibers.md`, тестовий набір `tests/concurrency/test_modern_async.pp` та оновлений повний довідник `docs/concurrency/modern-concurrency-reference.md`.
 - **Розділ 2.1 (`compiler/ppcx64`) — Виведення типів для узагальнених методів (Generic Type Inference) та необов'язковий `specialize`:**
   - Додано новий перемикач режимів `{$modeswitch implicitgenerics}` (у `globtype.pas`, `scanner.pas`, `ppudump.pp`).
   - У режимі `objfpc` під `{$modeswitch implicitgenerics}` дозволено опускати ключове слово `specialize`:
@@ -737,7 +750,7 @@
     - Тіло-блок (Block body): `(I) => begin ... end;`.
   - Повна інтеграція зі збіркою `System.Threading` (`TParallel.&For`, `TTask.Future`), колекціями та подіями зі скороченням шаблонного коду у 2–3 рази.
   - Повний модульний тестовий набір: `tests/concurrency/test_arrow_functions.pp`.
-  - Окремий посібник користувача: `docs/concurrency/guide-arrow-functions.md`.
+  - Окремий посібник користувача: `docs/concurrency/language/arrow-functions.md`.
 - **Розділ 2.4 (`compiler/ppcx64`) — Кортежі (Tuples) та деконструкція `(A, B) := Func()`:**
   - Додано новий перемикач режимів `{$modeswitch tuples}` (у `globtype.pas`, `scanner.pas`, `ppudump.pp`).
   - Додано опцію `df_tuple` у `tdefoption` (`symconst.pas`, `ppudump.pp`) для розпізнавання записів-кортежів.
@@ -750,5 +763,5 @@
   - Реалізовано доступ до полів кортежів: іменований (`Tup.Count`) та позиційний (`Tup.Item1`, `Tup.Item2`), включаючи зворотний фолбек `ItemN` для іменованих кортежів у `symtable.pas`.
   - Реалізовано структурну еквівалентність та сумісність типів кортежів у `defcmp.pas`: кортежі з однаковою кількістю полів і сумісними типами є взаємозамінними (`T2 := T1`).
   - Повний модульний тестовий набір (24 тести): `tests/concurrency/test_tuples.pp`.
-  - Окремий посібник користувача: `docs/concurrency/guide-tuples.md`.
+  - Окремий посібник користувача: `docs/concurrency/language/tuples.md`.
 
