@@ -3,7 +3,8 @@
 Модуль `System.Threading.ForkJoin`, пакет `vcl-compat`. Рішення —
 [ADR-0013](../adr/0013-forkjoin-fine-grained-tasks.md), приклад —
 [`examples/forkjoin.pp`](../examples/forkjoin.pp), тести —
-`packages/vcl-compat/tests/utforkjoin.pp`.
+`packages/vcl-compat/tests/utforkjoin.pp`. Рекомендації й рецепти для типових
+задач — [forkjoin-recipes.md](forkjoin-recipes.md).
 
 ## 1. Навіщо
 
