@@ -397,9 +397,12 @@ unit i_linux;
             name         : 'Linux for x86-64';
             shortname    : 'Linux';
             flags        : [tf_smartlink_sections,tf_needs_symbol_size,tf_needs_dwarf_cfi,
-{$ifdef tls_threadvars}
+{ fpc-concurrency: threadvars in the ELF TLS section by default, accessed
+  through %fs instead of pthread_getspecific; -dno_tls_threadvars when
+  building the compiler restores the upstream default }
+{$if defined(tls_threadvars) or not defined(no_tls_threadvars)}
                             tf_section_threadvars,
-{$endif tls_threadvars}
+{$endif}
                             tf_library_needs_pic,tf_needs_symbol_type,tf_files_case_sensitive,
                             tf_has_winlike_resources,tf_safecall_exceptions,tf_safecall_clearstack
                             {$ifdef llvm},tf_use_psabieh{$endif}

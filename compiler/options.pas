@@ -5385,10 +5385,15 @@ begin
   if cs_sanitize_address in init_settings.moduleswitches then
     def_system_macro('FPC_SANITIZE_ADDRESS');
 
-  { choose a reasonable tls model }
+  { choose a reasonable tls model. On x86_64-linux any unit may end up in a
+    shared library (a library turns PIC on only when its source is parsed, and
+    the units it uses are compiled without PIC), where local-exec accesses
+    are wrong. Use global-dynamic there: the linker relaxes it to local-exec
+    in executables, so programs keep the direct %fs access. }
   if (tf_section_threadvars in target_info.flags) and (init_settings.tlsmodel=tlsm_none) then
     begin
-      if cs_create_pic in init_settings.moduleswitches then
+      if (cs_create_pic in init_settings.moduleswitches) or
+         (target_info.system=system_x86_64_linux) then
         init_settings.tlsmodel:=tlsm_global_dynamic
       else
         init_settings.tlsmodel:=tlsm_local_exec;
