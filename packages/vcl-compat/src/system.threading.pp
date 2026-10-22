@@ -948,6 +948,12 @@ type
   TAsyncStateMachine = class
   private
     FStep: TAsyncStepFunc;
+    { Run requests. The invocation on the stack holds one. A continuation
+      adds another and queues a run only when the machine is idle, after
+      that invocation has stored the next state and returned. }
+    FPosts: LongInt;
+    procedure QueueRun;
+    procedure PostRun;
     procedure Run;
   protected
     procedure Complete; virtual; abstract;
@@ -957,7 +963,9 @@ type
     procedure Start(const aStep: TAsyncStepFunc);
     { Called by the step at an await: returns False if aTask has already
       finished (the step continues), otherwise arranges for the next step to
-      run in a pool thread once aTask has finished and returns True. }
+      run in a pool thread once aTask has finished and returns True.
+      The queued step does not start until this call's step has returned,
+      so it observes the state number the step stored for it. }
     function AwaitTask(const aTask: ITask): Boolean;
   end;
 
@@ -7206,9 +7214,35 @@ var
   GDelayLock: TCriticalSection;
   GDelay: TDelayQueue;
 
+procedure TAsyncStateMachine.QueueRun;
+var
+  LSelf: TAsyncStateMachine;
+begin
+  LSelf:=Self;
+  TThreadPool.Default.QueueWorkItem(
+    procedure
+    begin
+      LSelf.Run;
+    end);
+end;
+
+procedure TAsyncStateMachine.PostRun;
+begin
+  // 0 -> 1 means nobody is inside the step anymore, so the resume state
+  // is already stored. Any larger value means the step is still on the
+  // stack and will queue the resume itself after it returns.
+  if AtomicIncrement(FPosts)=1 then
+    QueueRun;
+end;
+
 procedure TAsyncStateMachine.Start(const aStep: TAsyncStepFunc);
 begin
   FStep:=aStep;
+  {$IFDEF FPC_VALGRIND}
+  VgBenignRace(@FPosts,SizeOf(FPosts));
+  {$ENDIF}
+  // This invocation owns the post. Run pairs it with a decrement.
+  AtomicIncrement(FPosts);
   Run;
 end;
 
@@ -7222,8 +7256,6 @@ begin
   Suspended:=False;
   try
     try
-      // After a suspending step another thread may already run the next one
-      // and free this object: touch nothing once the step returned True.
       if FStep() then
         begin
         Suspended:=True;
@@ -7235,8 +7267,20 @@ begin
     end;
   finally
     GCurrentAsync:=Prev;
-    if not Suspended then
+    if Suspended then
       begin
+      // The step has stored the next state and returned. A continuation
+      // that arrived inside AwaitTask only bumped FPosts. Queue it now.
+      // After QueueRun another thread may run that step and free this
+      // object: do not touch Self past this point.
+      if AtomicDecrement(FPosts)>0 then
+        QueueRun;
+      end
+    else
+      begin
+      // Drop a resume posted before a failing step returned, so it cannot
+      // start on a machine that is about to disappear.
+      AtomicExchange(FPosts,0);
       // Drop the step (and with it the routine's captured variables).
       FStep:=nil;
       Free;
@@ -7252,17 +7296,12 @@ begin
   if not Result then
     Exit;
   LSelf:=Self;
-  // Always continue in a pool thread: if aTask finishes while it is being
-  // subscribed, the callback runs at once in this thread, which is still
-  // inside the step.
+  // The callback can run on this thread before the call returns, while
+  // the step is still on the stack. PostRun must not enter that step.
   TaskOnComplete(aTask,
     procedure
     begin
-      TThreadPool.Default.QueueWorkItem(
-        procedure
-        begin
-          LSelf.Run;
-        end);
+      LSelf.PostRun;
     end);
 end;
 

@@ -508,8 +508,6 @@ implementation
         temp: tsym;
         next: tstate;
         mp, cond: tnode;
-        suspend: tblocknode;
-        suspendlast: tstatementnode;
       begin
         if not assigned(awaitproc) then
           begin
@@ -535,12 +533,15 @@ implementation
         do_typecheckpass(call.methodpointer);
         next:=new_state;
         cur.add(cassignmentnode.create(load_sym(temp),mp));
-        suspend:=internalstatements(suspendlast);
-        addstatement(suspendlast,assign_const(state_sym,next.id));
-        addstatement(suspendlast,cexitnode.create(cordconstnode.create(1,booldef,false)));
+        { Store the resume state before AsyncAwait. A continuation of this
+          await must observe that number, including one armed before this
+          call returns. }
+        cur.add(assign_const(state_sym,next.id));
         cond:=ccallnode.create(ccallparanode.create(load_sym(temp),nil),
                  awaitproc,awaitproc.owner,nil,[],nil);
-        cur.add(cifnode.create(cond,suspend,assign_const(state_sym,next.id)));
+        cur.add(cifnode.create(cond,
+                 cexitnode.create(cordconstnode.create(1,booldef,false)),
+                 nil));
         if assigned(stmt) and (stmt<>call) then
           next.add(stmt)
         else

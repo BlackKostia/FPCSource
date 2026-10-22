@@ -15,6 +15,7 @@ uses
 var
   Passed, Failed: Integer;
   FinallyFlag: Integer;
+  RaceEntries: LongInt;
 
 procedure Check(const Msg: string; Ok: Boolean);
 begin
@@ -168,6 +169,50 @@ begin
   Result := S + 'c';
 end;
 
+{ A pool thread used to resume the step before it had stored the next state,
+  so the statements before await ran again and the task was subscribed twice. }
+function RaceBody(const Task: ITask): specialize IFuture<Integer>; async;
+begin
+  AtomicIncrement(RaceEntries);
+  await Task;
+  Result := 1;
+end;
+
+procedure Arm(const Src: specialize TTaskCompletionSource<Byte>);
+begin
+  TTask.Run(
+    procedure
+    begin
+      Src.SetResult(0);
+    end);
+end;
+
+procedure CheckRace;
+const
+  N = 400;
+var
+  I, Sum: Integer;
+  Src: array[0..399] of specialize TTaskCompletionSource<Byte>;
+  Fut: array[0..399] of specialize IFuture<Integer>;
+begin
+  RaceEntries := 0;
+  for I := 0 to N - 1 do
+    Src[I] := specialize TTaskCompletionSource<Byte>.Create;
+  for I := 0 to N - 1 do
+    begin
+    Arm(Src[I]);
+    Fut[I] := RaceBody(Src[I].Task);
+    end;
+  Sum := 0;
+  for I := 0 to N - 1 do
+    begin
+    Sum := Sum + Fut[I].Value;
+    Src[I].Free;
+    end;
+  Check('resume does not repeat the prefix', RaceEntries = N);
+  Check('each raced await returns once', Sum = N);
+end;
+
 function WaitValue(const F: specialize IFuture<Integer>): Integer;
 begin
   Result := F.Value;
@@ -245,6 +290,9 @@ begin
   Writeln('--- a managed local survives await ---');
   FS := Sticky;
   Check('string is abc', FS.Value = 'abc');
+
+  Writeln('--- continuation sees the stored state ---');
+  CheckRace;
 
   Writeln(Passed, ' passed, ', Failed, ' failed');
   if Failed <> 0 then
