@@ -1666,6 +1666,7 @@ type
                 not(has_no_code(init_procinfo.code)) then
                begin
                  init_procinfo.code:=cnodeutils.wrap_proc_body(init_procinfo.procdef,init_procinfo.code);
+                 init_procinfo.convert_captured_syms;
                  init_procinfo.generate_code_tree;
                  include(module.moduleflags,mf_init);
                end
@@ -1681,6 +1682,7 @@ type
                 not(has_no_code(finalize_procinfo.code)) then
                begin
                  finalize_procinfo.code:=cnodeutils.wrap_proc_body(finalize_procinfo.procdef,finalize_procinfo.code);
+                 finalize_procinfo.convert_captured_syms;
                  finalize_procinfo.generate_code_tree;
                  include(module.moduleflags,mf_finalize);
                end
@@ -2802,7 +2804,10 @@ type
         if Errorcount=0 then
           tstoredsymtable(curr.localsymtable).checklabels;
 
-        { See remark in unit init/final }
+        { See remark in unit init/final. Anonymous functions and async
+          arrows in the program body close over locals; rewrite those
+          loads before code generation, as a named routine does. }
+        main_procinfo.convert_captured_syms;
         main_procinfo.generate_code_tree;
         main_procinfo.resetprocdef;
         release_main_proc(curr,main_procinfo);
@@ -2811,6 +2816,7 @@ type
             { initialization can be implicit only }
             include(curr.moduleflags,mf_init);
             init_procinfo.code:=cnodeutils.wrap_proc_body(init_procinfo.procdef,init_procinfo.code);
+            init_procinfo.convert_captured_syms;
             init_procinfo.generate_code;
             init_procinfo.resetprocdef;
             release_main_proc(curr,init_procinfo);
@@ -2822,6 +2828,7 @@ type
                not(has_no_code(finalize_procinfo.code)) then
               begin
                 finalize_procinfo.code:=cnodeutils.wrap_proc_body(finalize_procinfo.procdef,finalize_procinfo.code);
+                finalize_procinfo.convert_captured_syms;
                 finalize_procinfo.generate_code_tree;
                 include(curr.moduleflags,mf_finalize);
               end;

@@ -52,7 +52,6 @@ interface
         procedure add_entry_exit_code;
         procedure setup_tempgen;
         procedure TransformNodeTree;
-        procedure convert_captured_syms;
       protected
         procedure generate_code_exceptfilters;
       public
@@ -80,6 +79,7 @@ interface
         procedure printproc(pass:string);
         procedure generate_code;
         procedure generate_code_tree;
+        procedure convert_captured_syms;
         procedure generate_exceptfilter(nestedpi: tcgprocinfo);
         procedure generate_exit_label(list: tasmlist); virtual;
         procedure resetprocdef;
@@ -126,7 +126,7 @@ interface
     { parses only the body of a non nested routine; needs a correctly setup pd }
     procedure read_proc_body(pd:tprocdef);
 
-    function read_arrow_proc(expected_funcref:tobjectdef;expected_procvar:tprocvardef):tprocdef;
+    function read_arrow_proc(expected_funcref:tobjectdef;expected_procvar:tprocvardef;isasync:boolean):tprocdef;
 
     procedure import_external_proc(pd:tprocdef);
 
@@ -2791,7 +2791,7 @@ implementation
       end;
 
 
-    function read_arrow_proc(expected_funcref:tobjectdef;expected_procvar:tprocvardef):tprocdef;
+    function read_arrow_proc(expected_funcref:tobjectdef;expected_procvar:tprocvardef;isasync:boolean):tprocdef;
       var
         old_current_procinfo : tprocinfo;
         old_current_structdef: tabstractrecorddef;
@@ -2813,6 +2813,7 @@ implementation
         retsym : tsym;
         vs : tparavarsym;
         bodynode, code, p_ret : tnode;
+        async_ok, lowered : boolean;
 
       function get_expected_para_type(idx: longint): tdef;
         var
@@ -2885,6 +2886,8 @@ implementation
         aprocsym.ProcdefList.Add(pd);
         pd.proctypeoption := potype_procedure;
         include(pd.procoptions, po_anonymous);
+        if isasync then
+          include(pd.implprocoptions, pio_async);
         if (st.symtabletype = localsymtable) and
            (st.defowner.typ = procdef) and
            ([po_staticmethod, po_classmethod] * tprocdef(st.defowner).procoptions <> []) then
@@ -3020,6 +3023,21 @@ implementation
               end;
           end;
 
+        { The task type is fixed before the body. An async expression is the
+          inner value under STATEMACHINE, so it cannot be asked to name the
+          IFuture<T> wrapper. }
+        async_ok := false;
+        if isasync then
+          begin
+            if not is_void(pd.returndef) and
+               not (is_interface(pd.returndef) or
+                    is_class(pd.returndef) or
+                    (pd.returndef.typ = recorddef)) then
+              Message(parser_e_async_must_return_task_or_future)
+            else
+              async_ok := true;
+          end;
+
         if assigned(old_current_procinfo) and
            (old_current_procinfo.procdef.defoptions * [df_specialization, df_generic] <> []) then
           begin
@@ -3060,6 +3078,11 @@ implementation
         current_procinfo.entryswitches := current_settings.localswitches;
         block_type := bt_body;
         code := nil;
+        lowered := false;
+        { Redirect Result to the inner value before the body is parsed, the
+          same point named async routines do it. }
+        if isasync and async_ok then
+          prepare_async_statemachine_result(pd);
 
         if current_scanner.token = _BEGIN then
           begin
@@ -3068,7 +3091,15 @@ implementation
         else
           begin
             bodynode := expr(false);
-            if bodynode.nodetype = assignn then
+            if isasync then
+              begin
+                { Return type is already fixed. A procedure body is the
+                  expression itself; a function body is assigned to Result
+                  below, without typechecking ahead of the state-machine pass. }
+                if pd.proctypeoption <> potype_function then
+                  code := cblocknode.create(cstatementnode.create(bodynode, nil));
+              end
+            else if bodynode.nodetype = assignn then
               begin
                 pd.proctypeoption := potype_procedure;
                 pd.returndef := voidtype;
@@ -3129,9 +3160,17 @@ implementation
             if assigned(p_ret) then
               begin
                 code := cassignmentnode.create(p_ret, bodynode);
-                do_typecheckpass(code);
+                if not isasync then
+                  do_typecheckpass(code);
                 code := cblocknode.create(cstatementnode.create(code, nil));
               end;
+          end;
+
+        if isasync and async_ok then
+          begin
+            finish_async_statemachine_parse(pd);
+            if assigned(code) then
+              lowered := lower_async_statemachine(pd, code);
           end;
 
         postprocess_capturer(current_procinfo);
@@ -3145,6 +3184,10 @@ implementation
             tcgprocinfo(current_procinfo).code := code;
             current_procinfo.entrypos := code.fileinfo;
             do_typecheckpass(tcgprocinfo(current_procinfo).code);
+            { The state-machine steps are function references created by the
+              typecheck above, so the capturer VMT is built afterwards. }
+            if lowered then
+              postprocess_capturer(current_procinfo);
           end;
 
         tcgprocinfo(current_procinfo).remove_from_symtablestack;

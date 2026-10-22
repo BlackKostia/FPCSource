@@ -182,6 +182,9 @@ unit procinfo;
           function has_nestedprocs: boolean;
           function get_normal_proc: tprocinfo;
           procedure addnestedproc(child: tprocinfo);
+          { Move every direct nested routine to newparent. Used when an
+            anonymous routine's body is relocated onto a capturer method. }
+          procedure reparent_nestedprocs(newparent: tprocinfo);
           function find_nestedproc_by_pd(pd:tprocdef):tprocinfo;
 
           procedure add_local_ref_sym(sym:tsym);
@@ -296,6 +299,24 @@ implementation
         if nestedprocs=nil then
           nestedprocs:=TLinkedList.Create;
         nestedprocs.insert(child);
+      end;
+
+
+    procedure tprocinfo.reparent_nestedprocs(newparent: tprocinfo);
+      var
+        child, nxt: tprocinfo;
+      begin
+        if not assigned(nestedprocs) or (newparent=nil) or (newparent=self) then
+          exit;
+        child:=tprocinfo(nestedprocs.first);
+        while assigned(child) do
+          begin
+            nxt:=tprocinfo(child.next);
+            nestedprocs.remove(child);
+            child.parent:=newparent;
+            newparent.addnestedproc(child);
+            child:=nxt;
+          end;
       end;
 
     function tprocinfo.find_nestedproc_by_pd(pd:tprocdef):tprocinfo;

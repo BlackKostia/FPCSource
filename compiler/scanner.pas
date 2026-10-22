@@ -241,6 +241,7 @@ interface
           procedure stoprecordtokens;
           function is_recording_tokens:boolean;
           function is_arrow_function:boolean;
+          function is_async_arrow_function:boolean;
           function is_tuple_deconstruction:boolean;
           function is_tuple_type:boolean;
           function peek_first_tuple_element(out has_colon: boolean; out has_comma: boolean): TIDString;
@@ -3328,10 +3329,214 @@ type
       end;
 {$endif}
 
+    function arrow_follows_paren(p: PAnsiChar): boolean;
+      var
+        paren_depth: integer;
+      begin
+        result := false;
+        if p = nil then
+          exit;
+        paren_depth := 1;
+        while p^ <> #0 do
+          begin
+            case p^ of
+              '(':
+                begin
+                  if (p + 1)^ = '*' then
+                    begin
+                      inc(p, 2);
+                      while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = ')')) do
+                        inc(p);
+                      if (p^ = '*') and ((p + 1)^ = ')') then
+                        inc(p, 2);
+                    end
+                  else
+                    begin
+                      inc(paren_depth);
+                      inc(p);
+                    end;
+                end;
+              ')':
+                begin
+                  dec(paren_depth);
+                  if paren_depth = 0 then
+                    begin
+                      inc(p);
+                      while p^ <> #0 do
+                        begin
+                          case p^ of
+                            ' ', #9..#13:
+                              inc(p);
+                            '{':
+                              begin
+                                inc(p);
+                                while (p^ <> #0) and (p^ <> '}') do
+                                  inc(p);
+                                if p^ = '}' then
+                                  inc(p);
+                              end;
+                            '/':
+                              begin
+                                if (p + 1)^ = '/' then
+                                  begin
+                                    inc(p, 2);
+                                    while (p^ <> #0) and not (p^ in [#10, #13]) do
+                                      inc(p);
+                                  end
+                                else if (p + 1)^ = '*' then
+                                  begin
+                                    inc(p, 2);
+                                    while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = '/')) do
+                                      inc(p);
+                                    if (p^ = '*') and ((p + 1)^ = '/') then
+                                      inc(p, 2);
+                                  end
+                                else
+                                  break;
+                              end;
+                            '(':
+                              begin
+                                if (p + 1)^ = '*' then
+                                  begin
+                                    inc(p, 2);
+                                    while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = ')')) do
+                                      inc(p);
+                                    if (p^ = '*') and ((p + 1)^ = ')') then
+                                      inc(p, 2);
+                                  end
+                                else
+                                  break;
+                              end;
+                            else
+                              break;
+                          end;
+                        end;
+                      if p^ = ':' then
+                        begin
+                          inc(p);
+                          while (p^ <> #0) and not (p^ in [';', #10, #13]) do
+                            begin
+                              if (p^ = '=') and ((p + 1)^ = '>') then
+                                begin
+                                  result := true;
+                                  exit;
+                                end;
+                              inc(p);
+                            end;
+                        end
+                      else if (p^ = '=') and ((p + 1)^ = '>') then
+                        begin
+                          result := true;
+                          exit;
+                        end;
+                      exit(false);
+                    end;
+                end;
+              #39:
+                begin
+                  inc(p);
+                  while (p^ <> #0) and (p^ <> #39) do
+                    inc(p);
+                  if p^ = #39 then
+                    inc(p);
+                end;
+              '{':
+                begin
+                  inc(p);
+                  while (p^ <> #0) and (p^ <> '}') do
+                    inc(p);
+                  if p^ = '}' then
+                    inc(p);
+                end;
+              '/':
+                begin
+                  if (p + 1)^ = '/' then
+                    begin
+                      inc(p, 2);
+                      while (p^ <> #0) and not (p^ in [#10, #13]) do
+                        inc(p);
+                    end
+                  else if (p + 1)^ = '*' then
+                    begin
+                      inc(p, 2);
+                      while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = '/')) do
+                        inc(p);
+                      if (p^ = '*') and ((p + 1)^ = '/') then
+                        inc(p, 2);
+                    end
+                  else
+                    inc(p);
+                end;
+              ';':
+                begin
+                  if paren_depth <> 1 then
+                    exit(false);
+                  inc(p);
+                end;
+              else
+                inc(p);
+            end;
+          end;
+      end;
+
+
+    procedure skip_arrow_trivia(var p: PAnsiChar);
+      begin
+        while p^ <> #0 do
+          begin
+            case p^ of
+              ' ', #9..#13:
+                inc(p);
+              '{':
+                begin
+                  inc(p);
+                  while (p^ <> #0) and (p^ <> '}') do
+                    inc(p);
+                  if p^ = '}' then
+                    inc(p);
+                end;
+              '/':
+                begin
+                  if (p + 1)^ = '/' then
+                    begin
+                      inc(p, 2);
+                      while (p^ <> #0) and not (p^ in [#10, #13]) do
+                        inc(p);
+                    end
+                  else if (p + 1)^ = '*' then
+                    begin
+                      inc(p, 2);
+                      while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = '/')) do
+                        inc(p);
+                      if (p^ = '*') and ((p + 1)^ = '/') then
+                        inc(p, 2);
+                    end
+                  else
+                    break;
+                end;
+              '(':
+                begin
+                  if (p + 1)^ = '*' then
+                    begin
+                      inc(p, 2);
+                      while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = ')')) do
+                        inc(p);
+                      if (p^ = '*') and ((p + 1)^ = ')') then
+                        inc(p, 2);
+                    end
+                  else
+                    break;
+                end;
+              else
+                break;
+            end;
+          end;
+      end;
+
+
     function tscannerfile.is_arrow_function: boolean;
       var
         p: PAnsiChar;
-        paren_depth: integer;
       begin
         result := false;
         if not (m_arrow_functions in current_settings.modeswitches) then
@@ -3351,149 +3556,7 @@ type
           exit;
 
         if token = _LKLAMMER then
-          begin
-            paren_depth := 1;
-            while p^ <> #0 do
-              begin
-                case p^ of
-                  '(':
-                    begin
-                      if (p + 1)^ = '*' then
-                        begin
-                          inc(p, 2);
-                          while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = ')')) do
-                            inc(p);
-                          if (p^ = '*') and ((p + 1)^ = ')') then
-                            inc(p, 2);
-                        end
-                      else
-                        begin
-                          inc(paren_depth);
-                          inc(p);
-                        end;
-                    end;
-                  ')':
-                    begin
-                      dec(paren_depth);
-                      if paren_depth = 0 then
-                        begin
-                          inc(p);
-                          while p^ <> #0 do
-                            begin
-                              case p^ of
-                                ' ', #9..#13:
-                                  inc(p);
-                                '{':
-                                  begin
-                                    inc(p);
-                                    while (p^ <> #0) and (p^ <> '}') do
-                                      inc(p);
-                                    if p^ = '}' then
-                                      inc(p);
-                                  end;
-                                '/':
-                                  begin
-                                    if (p + 1)^ = '/' then
-                                      begin
-                                        inc(p, 2);
-                                        while (p^ <> #0) and not (p^ in [#10, #13]) do
-                                          inc(p);
-                                      end
-                                    else if (p + 1)^ = '*' then
-                                      begin
-                                        inc(p, 2);
-                                        while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = '/')) do
-                                          inc(p);
-                                        if (p^ = '*') and ((p + 1)^ = '/') then
-                                          inc(p, 2);
-                                      end
-                                    else
-                                      break;
-                                  end;
-                                '(':
-                                  begin
-                                    if (p + 1)^ = '*' then
-                                      begin
-                                        inc(p, 2);
-                                        while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = ')')) do
-                                          inc(p);
-                                        if (p^ = '*') and ((p + 1)^ = ')') then
-                                          inc(p, 2);
-                                      end
-                                    else
-                                      break;
-                                  end;
-                                else
-                                  break;
-                              end;
-                            end;
-                          if p^ = ':' then
-                            begin
-                              inc(p);
-                              while (p^ <> #0) and not (p^ in [';', #10, #13]) do
-                                begin
-                                  if (p^ = '=') and ((p + 1)^ = '>') then
-                                    begin
-                                      result := true;
-                                      exit;
-                                    end;
-                                  inc(p);
-                                end;
-                            end
-                          else if (p^ = '=') and ((p + 1)^ = '>') then
-                            begin
-                              result := true;
-                              exit;
-                            end;
-                          exit(false);
-                        end;
-                    end;
-                  #39:
-                    begin
-                      inc(p);
-                      while (p^ <> #0) and (p^ <> #39) do
-                        inc(p);
-                      if p^ = #39 then
-                        inc(p);
-                    end;
-                  '{':
-                    begin
-                      inc(p);
-                      while (p^ <> #0) and (p^ <> '}') do
-                        inc(p);
-                      if p^ = '}' then
-                        inc(p);
-                    end;
-                  '/':
-                    begin
-                      if (p + 1)^ = '/' then
-                        begin
-                          inc(p, 2);
-                          while (p^ <> #0) and not (p^ in [#10, #13]) do
-                            inc(p);
-                        end
-                      else if (p + 1)^ = '*' then
-                        begin
-                          inc(p, 2);
-                          while (p^ <> #0) and not ((p^ = '*') and ((p + 1)^ = '/')) do
-                            inc(p);
-                          if (p^ = '*') and ((p + 1)^ = '/') then
-                            inc(p, 2);
-                        end
-                      else
-                        inc(p);
-                    end;
-                  ';':
-                    begin
-                      if paren_depth <> 1 then
-                        exit(false);
-                      inc(p);
-                    end;
-                  else
-                    inc(p);
-                end;
-              end;
-          end
+          result := arrow_follows_paren(p)
         else if token in [_ID, _NOID] then
           begin
             while p^ <> #0 do
@@ -3526,6 +3589,46 @@ type
               end;
             if (p^ = '=') and ((p + 1)^ = '>') then
               result := true;
+          end;
+      end;
+
+
+
+    function tscannerfile.is_async_arrow_function: boolean;
+      var
+        p: PAnsiChar;
+      begin
+        result := false;
+        if not (m_arrow_functions in current_settings.modeswitches) then
+          exit;
+        if (token <> _ID) or (pattern <> 'ASYNC') then
+          exit;
+{$ifdef CHECK_INPUTPOINTER_LIMITS}
+        if assigned(hidden_inputpointer) and (hidden_inputpointer > hidden_inputbuffer) then
+          p := hidden_inputpointer - 1
+        else
+          p := hidden_inputpointer;
+{$else}
+        if assigned(inputpointer) and (inputpointer > inputbuffer) then
+          p := inputpointer - 1
+        else
+          p := inputpointer;
+{$endif}
+        if p = nil then
+          exit;
+        skip_arrow_trivia(p);
+        if p^ = '(' then
+          begin
+            inc(p);
+            result := arrow_follows_paren(p);
+          end
+        else if p^ in ['A'..'Z', 'a'..'z', '_'] then
+          begin
+            inc(p);
+            while p^ in ['A'..'Z', 'a'..'z', '_', '0'..'9'] do
+              inc(p);
+            skip_arrow_trivia(p);
+            result := (p^ = '=') and ((p + 1)^ = '>');
           end;
       end;
 

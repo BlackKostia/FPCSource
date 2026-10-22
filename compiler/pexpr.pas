@@ -3763,7 +3763,7 @@ implementation
       end;
 
 
-    procedure parse_arrow_function(var p1:tnode;var again:boolean;getaddr:boolean);
+    procedure parse_arrow_function(var p1:tnode;var again:boolean;getaddr:boolean;isasync:boolean);
       var
         filepos: tfileposinfo;
         oldprocvardef: tprocvardef;
@@ -3775,7 +3775,7 @@ implementation
         oldfuncrefdef := getfuncrefdef;
         getprocvardef := nil;
         getfuncrefdef := nil;
-        pd := read_arrow_proc(oldfuncrefdef, oldprocvardef);
+        pd := read_arrow_proc(oldfuncrefdef, oldprocvardef, isasync);
         getprocvardef := oldprocvardef;
         getfuncrefdef := oldfuncrefdef;
         do_proc_call(pd.procsym, pd.owner, nil, not (current_scanner.token in [_POINT, _CARET, _LECKKLAMMER]),
@@ -3925,7 +3925,7 @@ implementation
               (block_type=bt_body) and
               current_scanner.is_arrow_function then
              begin
-               parse_arrow_function(p1,again,getaddr);
+               parse_arrow_function(p1,again,getaddr,false);
                exit;
              end;
 
@@ -4333,6 +4333,13 @@ implementation
            { await is a contextual keyword: an identifier named "await" that is
              in scope (a variable, function, ...) keeps its normal meaning, so
              existing code using that name still compiles }
+           else if (m_arrow_functions in current_settings.modeswitches) and
+                   (block_type=bt_body) and
+                   current_scanner.is_async_arrow_function then
+             begin
+               consume(_ID);
+               parse_arrow_function(p1,again,getaddr,true);
+             end
            else if (current_scanner.pattern='AWAIT') and
                    not searchsym(current_scanner.pattern,srsym,srsymtable) then
              begin
@@ -4872,7 +4879,7 @@ implementation
                     (block_type=bt_body) and
                     current_scanner.is_arrow_function then
                    begin
-                     parse_arrow_function(p1,again,getaddr);
+                     parse_arrow_function(p1,again,getaddr,false);
                    end
                  else
                    begin

@@ -112,6 +112,30 @@ Divide := (A, B: Double): Single => A / B;
     end;
   ```
 
+### 3.7. Асинхронна стрілка (`async`)
+
+Префікс `async` пишеться окремо, перед списком параметрів, як у C#:
+
+```pascal
+{$ASYNCMODE STATEMACHINE}
+
+type
+  TLoad = reference to function: specialize IFuture<Integer>;
+var
+  Load: TLoad;
+begin
+  Load := async () =>
+    begin
+      await TTask.Delay(20);
+      Result := 42;
+    end;
+end;
+```
+
+Той самий префікс стоїть перед одним параметром без дужок (`async N => ...`) і перед явно типізованим списком (`async (N: Integer) => ...`). Без нього стрілка лишається звичайною підпрограмою: `await` у `() =>` не призупиняє ні її, ні зовнішню `async`-функцію.
+
+Тип результату береться з цільового `reference to` або з явної анотації `(...): specialize IFuture<T>`. Це має бути `ITask`, `IFuture<T>` або процедура. У `{$ASYNCMODE STATEMACHINE}` вираз після `=>` є внутрішнім значенням `T`, як `Result` в іменованої `function ...: specialize IFuture<T>; async`.
+
 ---
 
 ## 4. Контекстне виведення типів (Type Inference)

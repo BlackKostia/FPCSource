@@ -1063,6 +1063,10 @@ implementation
             function simply call that function-turned-method }
           pi.code:=pinested.code;
           pinested.code:=internalstatements(stmt);
+          { State-machine steps were outlined as children of the anonymous
+            routine. The locals they close over move with this symtable, so
+            the steps have to follow the body onto the capturer method. }
+          pinested.reparent_nestedprocs(pi);
         end
       else
         pi.code:=internalstatements(stmt);
