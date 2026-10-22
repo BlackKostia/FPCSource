@@ -30,11 +30,12 @@ begin
   end;
 end;
 
+
 function SlowAnswerAsync: specialize IFuture<Integer>; async;
 begin
   Result := TTask.specialize Future<Integer>(
     function: Integer
-    begin
+    begin      
       Sleep(100);
       Result := 42;
     end);
