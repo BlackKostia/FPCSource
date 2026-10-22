@@ -4343,6 +4343,16 @@ implementation
            else if (current_scanner.pattern='AWAIT') and
                    not searchsym(current_scanner.pattern,srsym,srsymtable) then
              begin
+               { Same rule as C#. The current routine must itself be async:
+                 () => await ... does not suspend that arrow or an outer async
+                 routine, and a plain procedure would block the thread in
+                 .Value/.Wait. A running fiber is not visible here; those
+                 members still suspend one through TaskAwaitHook. The operand
+                 is still parsed so the rest of the file can be checked. }
+               if not (assigned(current_procinfo) and
+                       assigned(current_procinfo.procdef) and
+                       (pio_async in current_procinfo.procdef.implprocoptions)) then
+                 MessagePos(filepos,parser_e_await_only_in_async);
                consume(_ID);
                p1:=factor(false,[]);
                if assigned(p1) then

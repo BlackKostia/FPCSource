@@ -889,7 +889,7 @@ begin
     function: Integer
     begin
       Before := True; { runs synchronously up to the first await }
-      Result := (await SlowFuture(200, 41)) + 1;
+      Result := (SlowFuture(200, 41).Value) + 1;
     end);
   Took := GetTickCount64 - T0;
   AssertTrue('Code before the first await ran in the call', Before);
@@ -919,9 +919,9 @@ begin
       var
         V: Integer;
       begin
-        { If await blocked, the first coroutine would block this thread
+        { If Value blocked, the first coroutine would block this thread
           and no timer could ever fire. }
-        V := await TLoopDelay.Start(Loop, 100, 1);
+        V := TLoopDelay.Start(Loop, 100, 1).Value;
         Inc(Sum, V);
         Inc(Done);
       end, Loop, 32 * 1024);
@@ -962,12 +962,12 @@ begin
   F := TFiber.specialize Async<Integer>(
     function: Integer
     begin
-      Result := await TTask.specialize Future<Integer>(
+      Result := TTask.specialize Future<Integer>(
         function: Integer
         begin
           Sleep(20);
           raise EFiberTestError.Create('awaited failure');
-        end);
+        end).Value;
     end);
   Msg := '';
   try
@@ -988,7 +988,7 @@ begin
   T := TFiber.Spawn(
     procedure
     begin
-      await SlowFuture(50, 0);
+      SlowFuture(50, 0).Wait;
       Flag := True;
     end);
   AssertTrue('Procedure coroutine finished', T.Wait(5000));
@@ -1001,9 +1001,9 @@ var
   V: Integer;
 begin
   T0 := GetTickCount64;
-  V := await SlowFuture(100, 7);
+  V := SlowFuture(100, 7).Value;
   AssertEquals('Value', 7, V);
-  AssertTrue('Outside a fiber await waits in place', GetTickCount64 - T0 >= 90);
+  AssertTrue('Outside a fiber Value waits in place', GetTickCount64 - T0 >= 90);
 end;
 
 procedure WaitingProducer(const Yield: specialize TGenerator<Integer>.TYieldProc);

@@ -54,7 +54,7 @@ begin
   F1 := ComputeBaseAsync;
   F2 := ProcessDataAsync(F1);
 
-  FinalAnswer := await F2;
+  FinalAnswer := F2.Value;
   WriteLn(Format('[Compiler await] Отримано результат: %d (очікувалось 84)', [FinalAnswer]));
 
   TaskObj := TTask.Run(
@@ -63,7 +63,7 @@ begin
       Sleep(20);
       WriteLn('[Compiler await] Фонова задача ITask успішно виконана');
     end);
-  await TaskObj;
+  TaskObj.Wait;
   WriteLn;
 end;
 

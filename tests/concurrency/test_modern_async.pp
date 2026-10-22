@@ -52,7 +52,7 @@ begin
     var
       V: Integer;
     begin
-      V := await DelayFuture(AMs, AValue);
+      V := DelayFuture(AMs, AValue).Value;
       Result := V * 2;
     end);
 end;
@@ -72,8 +72,8 @@ begin
   Check('Call returns to caller immediately (< 50ms)', Took < 50);
   Check('Future is initially not completed', F.Status <> TTaskStatus.Completed);
 
-  { Now await the result }
-  Res := await F;
+  { Now read the result. await is only legal inside an async routine. }
+  Res := F.Value;
   Check('Result from async function is correct (21 * 2 = 42)', Res = 42);
   Check('Future is now completed', F.Status = TTaskStatus.Completed);
 end;
@@ -87,7 +87,7 @@ begin
   SpawnAsync(
     procedure
     begin
-      await DelayFuture(AMs, 0);
+      DelayFuture(AMs, 0).Wait;
       GBackgroundDone := True;
     end);
 end;
@@ -136,9 +136,9 @@ begin
       var
         Val: Integer;
       begin
-        { If await blocked, 500 tasks * 50ms = 25 seconds!
-          With non-blocking async, all 500 tasks suspend and resume concurrently }
-        Val := await DelayFuture(50, 1);
+        { If Value blocked, 500 tasks * 50ms = 25 seconds.
+          Inside the fiber it suspends, so the tasks run concurrently. }
+        Val := DelayFuture(50, 1).Value;
         InterlockedIncrement(CompletedCount);
         InterlockedExchangeAdd64(TotalSum, Val);
       end, Loop, 32 * 1024);
@@ -161,7 +161,7 @@ begin
   Result := specialize RunAsync<Integer>(
     function: Integer
     begin
-      Result := (await DelayFuture(30, X)) + 10;
+      Result := DelayFuture(30, X).Value + 10;
     end);
 end;
 
@@ -170,7 +170,7 @@ begin
   Result := specialize RunAsync<Integer>(
     function: Integer
     begin
-      Result := (await DelayFuture(30, X)) * 3;
+      Result := DelayFuture(30, X).Value * 3;
     end);
 end;
 
@@ -181,8 +181,8 @@ begin
     var
       S1, S2: Integer;
     begin
-      S1 := await Step1Async(InputVal);  { Input + 10 }
-      S2 := await Step2Async(S1);        { (Input + 10) * 3 }
+      S1 := Step1Async(InputVal).Value;  { Input + 10 }
+      S2 := Step2Async(S1).Value;        { (Input + 10) * 3 }
       Result := S2;
     end);
 end;
@@ -195,7 +195,7 @@ begin
   Writeln('--- Test 4: Multi-Step Async Pipeline ---');
   { (5 + 10) * 3 = 45 }
   F := PipelineAsync(5);
-  Res := await F;
+  Res := F.Value;
   Check('Async pipeline result is 45', Res = 45);
 end;
 
@@ -220,7 +220,7 @@ begin
   Caught := False;
   ErrMsg := '';
   try
-    await FaultingAsync;
+    FaultingAsync.Wait;
   except
     on E: EAggregateException do
     begin
@@ -244,7 +244,7 @@ end;
 { --- 6. Arrow Functions + Async Integration --- }
 function ArrowAsyncAdd(A, B: Integer): specialize IFuture<Integer>; async;
 begin
-  Result := specialize RunAsync<Integer>(() => Integer((await DelayFuture(20, A)) + (await DelayFuture(20, B))));
+  Result := specialize RunAsync<Integer>(() => Integer(DelayFuture(20, A).Value + DelayFuture(20, B).Value));
 end;
 
 procedure TestArrowAsync;
@@ -254,7 +254,7 @@ var
 begin
   Writeln('--- Test 6: Arrow Functions and Async Synergy ---');
   F := ArrowAsyncAdd(100, 200);
-  Ans := await F;
+  Ans := F.Value;
   Check('Arrow lambda in async routine produced 300', Ans = 300);
 end;
 

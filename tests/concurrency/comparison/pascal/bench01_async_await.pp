@@ -25,8 +25,8 @@ begin
     var
       A, B: Integer;
     begin
-      A := await DelayAsync(40, X);
-      B := await DelayAsync(40, A * 2);
+      A := DelayAsync(40, X).Value;
+      B := DelayAsync(40, A * 2).Value;
       Result := B + 10;
     end);
 end;
@@ -44,7 +44,7 @@ begin
 
   Writeln('Call to async function took: ', TookCall, ' ms (Non-blocking: ', TookCall < 20, ')');
 
-  Res := await F;
+  Res := F.Value;
   TookTotal := GetTickCount64 - T0;
 
   Writeln('Computed result: ', Res, ' (Expected: 60)');

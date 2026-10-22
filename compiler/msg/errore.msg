@@ -1745,7 +1745,12 @@ parser_e_stmt_expr_anon_needs_type=03379_E_Anonymous functions in a statement ex
 parser_e_async_must_return_task_or_future=03380_E_Async function must return ITask or IFuture<T>
 % An async function must have a return type of ITask or IFuture<T>, or be a procedure.
 parser_e_await_only_in_async=03381_E_Await can only be used inside an async routine or active fiber
-% The await operator suspends execution until the awaited task is complete. It can only be used within routines declared as async or executing within a fiber.
+% The await operator suspends the routine that is declared \var{async}.
+% The parser emits this when the current routine is not: an arrow without
+% the \var{async} prefix, an ordinary procedure and the main program are
+% all rejected, including when an outer routine is \var{async}. A running
+% fiber is not visible to the parser; \var{IFuture.Value} and \var{ITask.Wait}
+% still suspend one.
 parser_e_nocopy_only_records=03382_E_The directive "nocopy" is only allowed for record types
 % Only record types (including generic records) can be declared non-copyable with \var{end nocopy;}.
 parser_e_nocopy_value_para=03383_E_Type "$1" cannot be copied, it must not be passed as value parameter

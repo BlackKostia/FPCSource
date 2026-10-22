@@ -193,19 +193,27 @@ end;
 
 ### 5.1. Оператор `await`
 
-`await E` компілятор перетворює на `E.Value`, якщо `E` має член `Value`
-(`IFuture<T>`), інакше на `E.Wait` (`ITask`). Тобто `await` — це очікування
-результату задачі. Чи блокує воно потік, залежить від того, де виконується код:
+`await` дозволений лише в підпрограмі, оголошеній з `async`. Інакше це
+помилка компіляції `parser_e_await_only_in_async` (03381): стрілка без
+префікса `async`, звичайна процедура і головна програма. Зовнішня
+`async`-підпрограма цього не скасовує.
 
-| Де виконується `await` | Що відбувається |
+У `{$ASYNCMODE AUTO}` і `FIBER` дозволений `await E` компілятор перетворює
+на `E.Value`, якщо `E` має член `Value` (`IFuture<T>`), інакше на `E.Wait`
+(`ITask`). Чи блокує це потік, залежить від того, де виконується код:
+
+| Де виконується `await` в `async`-підпрограмі | Що відбувається |
 |---|---|
 | усередині файбера (`TFiber.Async`, `TFiber.Spawn`, власний `TFiber`) | файбер **призупиняється**, потік ОС вільний; файбер продовжить роботу, коли задача завершиться — у потоці свого циклу подій або, без циклу, у потоці пулу |
 | у генераторі (`TGenerator<T>`) | очікування **блокує** потік: файбер генератора перемикається лише в `Yield` |
 | поза файбером | очікування **блокує** поточний потік, як `Value`/`Wait` |
 
-Так само неблокувально всередині файбера працюють `IFuture.Value`,
-`ITask.Wait` без таймауту і `TTask.WaitForAll` без таймауту — `await` лише
-коротший запис. `Wait` з таймаутом і `WaitForAny` блокують і у файбері.
+Зворотний виклик `TFiber.Async`, `RunAsync` чи `SpawnAsync` сам часто не
+позначений `async` (він повертає внутрішнє `T`, а не `IFuture<T>`). У ньому
+`await` — помилка. Пишіть `.Value` або `.Wait`: вони так само віддають
+файбер через `TaskAwaitHook`. Так само неблокувально всередині файбера
+працюють `IFuture.Value`, `ITask.Wait` без таймауту і `TTask.WaitForAll`
+без таймауту. `Wait` з таймаутом і `WaitForAny` блокують і у файбері.
 
 `await` — контекстне ключове слово: якщо в області видимості є змінна,
 функція чи поле з іменем `await`, воно має звичайне значення.
@@ -225,8 +233,8 @@ begin
     var
       A, B: Integer;
     begin
-      A := await DownloadSizeAsync('a.bin');  // файбер чекає, потік вільний
-      B := await DownloadSizeAsync('b.bin');
+      A := DownloadSizeAsync('a.bin').Value;  // файбер чекає, потік вільний
+      B := DownloadSizeAsync('b.bin').Value;
       Result := A + B;
     end, Loop);
   while Total.Status <> TTaskStatus.Completed do
@@ -267,9 +275,9 @@ begin
     var
       DataA, DataB: Integer;
     begin
-      // Неблокуюче призупинення файбера на await:
-      DataA := await FetchPartAAsync(Id);
-      DataB := await FetchPartBAsync(Id);
+      // Неблокуюче призупинення файбера на .Value:
+      DataA := FetchPartAAsync(Id).Value;
+      DataB := FetchPartBAsync(Id).Value;
       Result := DataA + DataB;
     end);
 end;
@@ -277,7 +285,7 @@ end;
 // Виклик з боку викликача НЕ блокує потік:
 F := CalculateDataAsync(42); // повертає IFuture миттєво (< 1 мс)
 // Виконуємо іншу роботу...
-Total := await F; // розгортає результат
+Total := F.Value; // розгортає результат
 ```
 
 ---

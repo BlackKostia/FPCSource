@@ -26,7 +26,7 @@ begin
     var
       V: Integer;
     begin
-      V := await Level3Async;
+      V := Level3Async.Value;
       Result := V + 1;
     end);
 end;
@@ -38,7 +38,7 @@ begin
     var
       V: Integer;
     begin
-      V := await Level2Async;
+      V := Level2Async.Value;
       Result := V + 1;
     end);
 end;
@@ -52,7 +52,7 @@ begin
   T0 := GetTickCount64;
 
   try
-    await Level1Async;
+    Level1Async.Wait;
   except
     on E: EAggregateException do
     begin

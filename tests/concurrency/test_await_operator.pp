@@ -1,8 +1,9 @@
 program test_await_operator;
 
-{ The await operator: "await E" reads E.Value when E has a Value member
-  (IFuture<T>), otherwise calls E.Wait (ITask). It blocks the current
-  thread until E is complete. }
+{ await inside an async routine under the default ASYNCMODE AUTO:
+  "await E" reads E.Value when E has a Value member (IFuture<T>), otherwise
+  calls E.Wait (ITask), and blocks this thread until E is complete.
+  Outside an async routine the same token is a compile error. }
 
 {$mode objfpc}{$H+}
 {$modeswitch anonymousfunctions}
@@ -41,7 +42,7 @@ begin
     end);
 end;
 
-procedure TestValue;
+procedure TestValue; async;
 var
   V: Integer;
   T0: QWord;
@@ -52,7 +53,7 @@ begin
   Check('await waits for the future (blocking)', GetTickCount64 - T0 >= 90);
 end;
 
-procedure TestTask;
+procedure TestTask; async;
 var
   T: ITask;
   Done: Boolean;
@@ -63,7 +64,7 @@ begin
   Check('await ITask waits for completion', Done);
 end;
 
-procedure TestException;
+procedure TestException; async;
 var
   F: specialize IFuture<Integer>;
   Caught: Boolean;

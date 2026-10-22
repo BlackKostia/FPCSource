@@ -51,7 +51,7 @@ begin
   F2 := AddTenAsync(F1);
 
   { Await F2 directly }
-  FinalVal := await F2;
+  FinalVal := F2.Value;
   Writeln('Final value from await: ', FinalVal);
 
   if FinalVal <> 52 then
@@ -66,7 +66,7 @@ begin
     begin
       Writeln('Task finished');
     end);
-  await T;
+  T.Wait;
 
   Writeln('SUCCESS: All async/await compiler tests passed!');
 end.
