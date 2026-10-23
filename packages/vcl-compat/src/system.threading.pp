@@ -827,6 +827,8 @@ type
     class function WaitForAny(const aTasks: array of ITask; const aTimeout: TTimeSpan): Integer; overload; static;
     class function WhenAll(const aTasks: array of ITask): ITask; static;
     class function WhenAny(const aTasks: array of ITask): specialize IFuture<ITask>; static;
+    generic class function FromResult<T>(const aValue: T): specialize IFuture<T>; static;
+    generic class function FromException<T>(aError: Exception): specialize IFuture<T>; static;
   end;
 
   { TFutureContinuationTask }
@@ -868,6 +870,7 @@ type
     constructor Create(aSender: TObject; aEvent: TFunctionEventT; const aFunc: TFunctionRefT; aPool: TThreadPool); overload;
     constructor Create(aSender: TObject; aEvent: TFunctionEventT; const aFunc: TFunctionRefT; const aCancelToken: TCancellationToken; aPool: TThreadPool); overload;
     constructor CreateTaskContinuation(const aAntecedent: ITask; const aTaskFunc: TFunctionTaskRefT; const aFunc: TFunctionRefT; const aCancelToken: TCancellationToken; aPool: TThreadPool); overload;
+    constructor CreateCompleted(const aValue: T);
     destructor Destroy; override;
     function ContinueWith(const aAction: TFutureProcT): ITask; overload;
     function ContinueWith(const aAction: TFutureProcT; aOptions: TTaskContinuationOptions): ITask; overload;
@@ -1383,6 +1386,8 @@ procedure AsyncReleaseException(aError: Pointer);
 procedure AsyncReraise(aError: Pointer);
 function AsyncStateRunTask(const aStep: TAsyncStepFunc): ITask;
 generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc; const aGetResult: specialize TFunc<T>): specialize IFuture<T>;
+generic function AsyncFromResult<T>(const aValue: T): specialize IFuture<T>;
+generic function AsyncFromException<T>(aError: Pointer): specialize IFuture<T>;
 
 {
   These must be exposed, otherwise they cannot be used inside generic methods :/
@@ -5377,6 +5382,22 @@ begin
   inherited Create(Params);
 end;
 
+constructor TFuture.CreateCompleted(const aValue: T);
+var
+  Params : TTaskParams;
+begin
+  Params:=Default(TTaskParams);
+  inherited Create(Params);
+  FFuncEvent:=nil;
+  FFuncRef:=nil;
+  FFuncTaskRef:=nil;
+  FAntecedentTask:=nil;
+  FResult:=aValue;
+  FStateFlags:=[TOptionStateFlag.Complete];
+  FStatus:=TTaskStatus.Completed;
+  FDone:=True;
+end;
+
 constructor TFuture.CreateTaskContinuation(const aAntecedent: ITask; const aTaskFunc: TFunctionTaskRefT;
   const aFunc: TFunctionRefT; const aCancelToken: TCancellationToken; aPool: TThreadPool);
 var
@@ -7630,6 +7651,32 @@ begin
   M.Start(aStep);
 end;
 
+generic function AsyncFromResult<T>(const aValue: T): specialize IFuture<T>;
+begin
+  Result:=specialize TFuture<T>.CreateCompleted(aValue);
+end;
+
+generic function AsyncFromException<T>(aError: Pointer): specialize IFuture<T>;
+var
+  Source: specialize TTaskCompletionSource<T>;
+  E: Exception;
+begin
+  Source:=specialize TTaskCompletionSource<T>.Create;
+  if Assigned(aError) and (TObject(aError) is Exception) then
+    E:=Exception(aError)
+  else
+    E:=Exception.Create('Task faulted');
+  if E is EOperationCancelled then
+    begin
+      Source.SetCanceled;
+      E.Free;
+    end
+  else
+    Source.SetException(E);
+  Result:=Source.Task;
+  Source.Free;
+end;
+
 constructor TDelayQueue.Create;
 begin
   inherited Create(True);
@@ -7913,6 +7960,16 @@ begin
       else
         CompleteProc(nil);
     end;
+end;
+
+generic class function TTask.FromResult<T>(const aValue: T): specialize IFuture<T>;
+begin
+  Result:=specialize TFuture<T>.CreateCompleted(aValue);
+end;
+
+generic class function TTask.FromException<T>(aError: Exception): specialize IFuture<T>;
+begin
+  Result:=specialize AsyncFromException<T>(Pointer(aError));
 end;
 
 class function TTask.WhenAny(const aTasks: array of ITask): specialize IFuture<ITask>;

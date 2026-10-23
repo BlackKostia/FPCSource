@@ -84,6 +84,9 @@ implementation
         procedure take_list(list: tstatementnode; var cur: tstate);
         function dispatch_tree: tnode;
         procedure typecheck_step(info: tprocinfo; body: tnode);
+        function make_from_result_assign(n: tnode): tnode;
+        function make_from_exception_call(n: tnode): tnode;
+        function build_fastpath(var code: tnode): tnode;
         function build(var code: tnode): tnode;
       end;
 
@@ -315,6 +318,34 @@ implementation
       end;
 
 
+    function find_async_from_result: tprocsym;
+      var
+        dummy: tprocsym;
+      begin
+        result:=find_proc('ASYNCFROMRESULT$1');
+        if assigned(result) then
+          exit;
+        dummy:=find_proc('ASYNCFROMRESULT');
+        if assigned(dummy) and (sp_generic_dummy in dummy.symoptions) and
+           assigned(dummy.genprocsymovlds) and (dummy.genprocsymovlds.count>0) then
+          result:=tprocsym(dummy.genprocsymovlds[0]);
+      end;
+
+
+    function find_async_from_exception: tprocsym;
+      var
+        dummy: tprocsym;
+      begin
+        result:=find_proc('ASYNCFROMEXCEPTION$1');
+        if assigned(result) then
+          exit;
+        dummy:=find_proc('ASYNCFROMEXCEPTION');
+        if assigned(dummy) and (sp_generic_dummy in dummy.symoptions) and
+           assigned(dummy.genprocsymovlds) and (dummy.genprocsymovlds.count>0) then
+          result:=tprocsym(dummy.genprocsymovlds[0]);
+      end;
+
+
     function capture_walk(var n: tnode; arg: pointer): foreachnoderesult;
       var
         ownerpd: tprocdef;
@@ -441,8 +472,12 @@ implementation
           booldef:=pasbool8type;
         innerdef:=future_value_type(pd.returndef);
         if assigned(innerdef) then
-          { The leading $ is stripped and the rest is not uppercased. }
-          result_sym:=tsym(pd.localst.find('ASYNCRESULT'));
+          begin
+            { The leading $ is stripped and the rest is not uppercased. }
+            result_sym:=tsym(pd.localst.find('ASYNCRESULT'));
+            if not assigned(result_sym) then
+              result_sym:=tsym(pd.localst.find('$ASYNCRESULT'));
+          end;
         tokensym:=find_cancellation_token_para(pd);
         if assigned(tokensym) then
           checkcancelproc:=find_proc('ASYNCCHECKCANCELLATION');
@@ -1102,6 +1137,150 @@ implementation
       end;
 
 
+    function replace_exit_walk(var n: tnode; arg: pointer): foreachnoderesult;
+      var
+        lower: tlower;
+        stmt: tstatementnode;
+        blk: tnode;
+        ex: tnode;
+      begin
+        result:=fen_false;
+        if n.nodetype=exitn then
+          begin
+            lower:=tlower(arg);
+            stmt:=nil;
+            blk:=internalstatements(stmt);
+            if assigned(texitnode(n).left) then
+              begin
+                addstatement(stmt,texitnode(n).left);
+                texitnode(n).left:=nil;
+              end;
+            addstatement(stmt,lower.make_from_result_assign(n));
+            ex:=cexitnode.create(nil);
+            include(ex.flags,nf_internal);
+            addstatement(stmt,ex);
+            n.free;
+            n:=blk;
+            result:=fen_norecurse_false;
+          end;
+      end;
+
+
+    function tlower.make_from_result_assign(n: tnode): tnode;
+      var
+        fromproc: tprocsym;
+        ctx: tspecializationcontext;
+        posinfo: pfileposinfo;
+        call: tnode;
+      begin
+        result:=nil;
+        fromproc:=find_async_from_result;
+        if not assigned(fromproc) then
+          begin
+            fail(n,'System.Threading.AsyncFromResult is not visible; ensure system.threading is in uses');
+            exit;
+          end;
+        if not assigned(result_sym) then
+          begin
+            fail(n,'the async result variable is missing');
+            exit;
+          end;
+        if not assigned(innerdef.typesym) then
+          begin
+            fail(n,'the async result type has no name');
+            exit;
+          end;
+        ctx:=tspecializationcontext.create;
+        ctx.paramlist.add(innerdef.typesym);
+        new(posinfo);
+        posinfo^:=pd.fileinfo;
+        ctx.poslist.add(posinfo);
+        ctx.genname:=fromproc.realname;
+        make_prettystring(innerdef,true,'',ctx.prettyname,ctx.specializename);
+        call:=ccallnode.create(
+                ccallparanode.create(load_sym(result_sym),nil),
+                fromproc,fromproc.owner,nil,[],ctx);
+        result:=cassignmentnode.create(
+                  cloadnode.create(pd.funcretsym,pd.funcretsym.owner),
+                  call);
+      end;
+
+
+    function tlower.make_from_exception_call(n: tnode): tnode;
+      var
+        fromproc: tprocsym;
+        ctx: tspecializationcontext;
+        posinfo: pfileposinfo;
+        call: tnode;
+        acq: tnode;
+      begin
+        result:=nil;
+        fromproc:=find_async_from_exception;
+        if not assigned(fromproc) then
+          begin
+            fail(n,'System.Threading.AsyncFromException is not visible; ensure system.threading is in uses');
+            exit;
+          end;
+        if not assigned(innerdef.typesym) then
+          begin
+            fail(n,'the async result type has no name');
+            exit;
+          end;
+        ctx:=tspecializationcontext.create;
+        ctx.paramlist.add(innerdef.typesym);
+        new(posinfo);
+        posinfo^:=pd.fileinfo;
+        ctx.poslist.add(posinfo);
+        ctx.genname:=fromproc.realname;
+        make_prettystring(innerdef,true,'',ctx.prettyname,ctx.specializename);
+        acq:=ccallnode.createintern('ACQUIREEXCEPTIONOBJECT',nil);
+        call:=ccallnode.create(
+                ccallparanode.create(acq,nil),
+                fromproc,fromproc.owner,nil,[],ctx);
+        result:=cassignmentnode.create(
+                  cloadnode.create(pd.funcretsym,pd.funcretsym.owner),
+                  call);
+      end;
+
+
+    function tlower.build_fastpath(var code: tnode): tnode;
+      var
+        trylast, traplast: tstatementnode;
+        tryblk, trapblk: tnode;
+        assign_node: tnode;
+        except_assign: tnode;
+        settokenproc: tprocsym;
+      begin
+        result:=nil;
+        assign_node:=make_from_result_assign(code);
+        if not assigned(assign_node) then
+          exit;
+        except_assign:=make_from_exception_call(code);
+        if not assigned(except_assign) then
+          exit;
+
+        if has_exit(code) then
+          foreachnodestatic(pm_postprocess,code,@replace_exit_walk,Self);
+
+        tryblk:=internalstatements(trylast);
+        if assigned(tokensym) then
+          begin
+            settokenproc:=find_proc('ASYNCSETCANCELLATIONTOKEN');
+            if assigned(settokenproc) then
+              addstatement(trylast,ccallnode.create(
+                                     ccallparanode.create(load_sym(tokensym),nil),
+                                     settokenproc,settokenproc.owner,nil,[],nil));
+          end;
+        addstatement(trylast,code);
+        addstatement(trylast,assign_node);
+
+        trapblk:=internalstatements(traplast);
+        addstatement(traplast,except_assign);
+
+        result:=ctryexceptnode.create(tryblk,nil,trapblk);
+      end;
+
+
     function tlower.build(var code: tnode): tnode;
       var
         cur: tstate;
@@ -1116,8 +1295,13 @@ implementation
         settokenproc: tprocsym;
       begin
         result:=nil;
-        if not has_await(code) and not assigned(innerdef) then
-          exit;
+        if not has_await(code) then
+          begin
+            if not assigned(innerdef) then
+              exit;
+            result:=build_fastpath(code);
+            exit;
+          end;
         if has_await(code) then
           begin
             awaitproc:=find_proc('ASYNCAWAIT');
