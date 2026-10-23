@@ -800,8 +800,9 @@ end;
 шлях — [guides/fibers.md](guides/fibers.md).
 
 У компіляторі trunk `compiler/ppcx64`:
-- **Строга валідація сигнатур**: Процедурна директива `async` маркує процедури та функції. Компілятор перевіряє типи повернення:
-  - Функції з `async;` зобов'язані повертати дескриптор задачі (`ITask`, `specialize IFuture<T>`). Спроба повернути примітивний тип (`function Calc: Integer; async;`) призводить до помилки компіляції `parser_e_async_must_return_task_or_future` (03380):
+- **Строга валідація сигнатур**: Процедурна директива `async` маркує процедури та функції. Компілятор перевіряє типи повернення та параметри:
+  - **Заборона `var` та `out` параметрів**: підпрограми з `async;` (процедури, функції, методи, анонімні та стрілкові функції) не можуть приймати параметри за посиланням `var` або `out` задля запобігання пошкодженню стеку викликача (помилка `parser_e_async_no_var_out_para`, 03391: `Error: Async routines cannot have var or out parameters`).
+  - **Типи повернення**: Функції з `async;` зобов'язані повертати дескриптор задачі (`ITask`, `specialize IFuture<T>`). Спроба повернути примітивний тип (`function Calc: Integer; async;`) призводить до помилки компіляції `parser_e_async_must_return_task_or_future` (03380):
     ```text
     Error: Async function must return ITask or IFuture<T>
     ```
@@ -811,9 +812,16 @@ end;
     - У **файберному режимі (`AUTO` / `FIBER`)**, що є типовим за замовчуванням, `Result` — це локальне повернення замикання на виділеному стеку файбера (128 КБ), а `await` — кооперативне перемикання контексту процесора. Тіло трансформується фазою `lower_async_fiber` у `TFiber.Async<T>` або `TFiber.Spawn`, і потік ОС не блокується завдяки `TaskAwaitHook`.
     - У **режимі автомата (`STATEMACHINE`)** `Result` — це поле стану на купі (`$ASYNCRESULT`), а `await` — розрізання тіла на кроки (безстекова підписка на continuation), що знижується фазою `lower_async_statemachine`.
   - Синтаксис вихідного коду для розробника є **на 100% сумісним**: в обох режимах усередині `function ...: specialize IFuture<T>; async;` змінна `Result` завжди має внутрішній тип `T`, а `await` є неблокуючим.
-- **Що вже знижується у STATEMACHINE**: прямий рядок операторів, `X := await Future`, `await Task`, `if`/`else` (**включно з умовами** на зразок `if await Flag then` або `if not await Flag then`), `while`/`for` (але не межа циклу), `break`/`continue`/`exit`, `try`/`finally` і `try`/`except` без `on`. `finally` виконується на справжньому виході, а не в мить призупинення. Збій очікуваної задачі піднімається знову, тож `except` у тілі його бачить.
+- **Що вже знижується у STATEMACHINE**:
+  - прямий рядок операторів, `X := await Future`, `await Task`;
+  - **складні вирази з кількома очікуваннями**: `X := await A + await B;`, `Result := (await A) * 2 + (await B);`, виклики `DoWork(await A, await B);` (компілятор послідовно піднімає підвирази через `lift_awaits` у проміжні змінні на купі);
+  - `if`/`else` (**включно з умовами** на зразок `if await Flag then` або `if not await Flag then`);
+  - цикли `while` та `repeat .. until` (**включно з умовами** на зразок `while await Cond() do` або `repeat .. until await Done();`), з підтримкою `break` та `continue`;
+  - `for` .. `to` / `downto` (тіло циклу);
+  - `break`/`continue`/`exit` (включно з `exit(await A + await B)`);
+  - `try`/`finally` і `try`/`except` без `on`. `finally` виконується на справжньому виході, а не в мить призупинення. Збій очікуваної задачі піднімається знову, тож `except` у тілі його бачить.
 - **Що є помилкою компіляції** (`parser_e_await_only_in_async`, 03381): `await` поза підпрограмою з `async` — у звичайній процедурі, у головній програмі і в `() =>` без префікса `async`. Зовнішня `async`-підпрограма цього не скасовує.
-- **Що є помилкою компіляції** (`parser_e_await_unsupported`, 03390) у STATEMACHINE: `await` в умові циклів `while`/`repeat`, у межі `for`, у складному виразі присвоєння `X := (await A) + (await B)`, у `case` і в гілці `on E:`.
+- **Що є помилкою компіляції** (`parser_e_await_unsupported`, 03390) у STATEMACHINE: `await` у межі `for`, у циклі `for .. in`, у `case` і в гілці `on E:`.
 - **`TTask.Delay`**: одна спільна черга дедлайнів і один потік таймера. `Delay(0)` завершується одразу. Очікування не викликає `Sleep` на потоці пулу.
   ```pascal
   {$ASYNCMODE STATEMACHINE}
