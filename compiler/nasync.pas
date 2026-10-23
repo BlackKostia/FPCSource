@@ -306,12 +306,42 @@ implementation
 
     function find_async_state_run: tprocsym;
       var
+        dummy, sym: tprocsym;
+        i: integer;
+      begin
+        result:=nil;
+        dummy:=find_proc('ASYNCSTATERUN');
+        if assigned(dummy) and (sp_generic_dummy in dummy.symoptions) and
+           assigned(dummy.genprocsymovlds) then
+          begin
+            for i:=0 to dummy.genprocsymovlds.count-1 do
+              begin
+                sym:=tprocsym(dummy.genprocsymovlds[i]);
+                if assigned(sym) and assigned(sym.ProcdefList) and (sym.ProcdefList.count>0) then
+                  begin
+                    if tprocdef(sym.ProcdefList[0]).paras.count = 1 then
+                      begin
+                        result:=sym;
+                        exit;
+                      end;
+                  end;
+              end;
+            if dummy.genprocsymovlds.count>0 then
+              result:=tprocsym(dummy.genprocsymovlds[0]);
+          end;
+        if not assigned(result) then
+          result:=find_proc('ASYNCSTATERUN$1');
+      end;
+
+
+    function find_async_set_result: tprocsym;
+      var
         dummy: tprocsym;
       begin
-        result:=find_proc('ASYNCSTATERUN$1');
+        result:=find_proc('ASYNCSETRESULT$1');
         if assigned(result) then
           exit;
-        dummy:=find_proc('ASYNCSTATERUN');
+        dummy:=find_proc('ASYNCSETRESULT');
         if assigned(dummy) and (sp_generic_dummy in dummy.symoptions) and
            assigned(dummy.genprocsymovlds) and (dummy.genprocsymovlds.count>0) then
           result:=tprocsym(dummy.genprocsymovlds[0]);
@@ -1286,13 +1316,13 @@ implementation
         cur: tstate;
         list: tstatementnode;
         savedpi: tprocinfo;
-        stepbody, getbody: tnode;
+        stepbody: tnode;
         outlast: tstatementnode;
         ctx: tspecializationcontext;
         posinfo: pfileposinfo;
-        stepn, getn, call: tnode;
+        stepn, call: tnode;
         startid: integer;
-        settokenproc: tprocsym;
+        settokenproc, setresproc: tprocsym;
       begin
         result:=nil;
         if not has_await(code) then
@@ -1349,10 +1379,6 @@ implementation
         raise_sym:=new_local('$ASYNCRAISE',voidpointertype);
 
         stepinfo:=outer.create_for_outlining('$asyncstep',nil,potype_function,booldef,code);
-        { Function-reference interfaces are keyed by the source position.
-          The step and the result reader are both born at the user's
-          statement, so give them distinct positions or they collapse into
-          one interface and the step is never called. }
         stepinfo.procdef.fileinfo.column:=1;
         stepinfo.procdef.procsym.fileinfo.column:=1;
         insert_funcret_local(stepinfo.procdef);
@@ -1364,6 +1390,23 @@ implementation
         current_procinfo:=stepinfo;
         { State 0 finishes the step. The body starts at the next state. }
         cur:=new_state;
+        if assigned(innerdef) then
+          begin
+            setresproc:=find_async_set_result;
+            if assigned(setresproc) then
+              begin
+                ctx:=tspecializationcontext.create;
+                ctx.paramlist.add(innerdef.typesym);
+                new(posinfo);
+                posinfo^:=pd.fileinfo;
+                ctx.poslist.add(posinfo);
+                ctx.genname:=setresproc.realname;
+                make_prettystring(innerdef,true,'',ctx.prettyname,ctx.specializename);
+                cur.add(ccallnode.create(
+                          ccallparanode.create(load_sym(result_sym),nil),
+                          setresproc,setresproc.owner,nil,[],ctx));
+              end;
+          end;
         cur.add(cexitnode.create(cordconstnode.create(0,booldef,false)));
         cur:=new_state;
         startid:=cur.id;
@@ -1395,24 +1438,6 @@ implementation
         typecheck_step(stepinfo,stepbody);
         current_procinfo:=savedpi;
 
-        getn:=nil;
-        if assigned(innerdef) then
-          begin
-            getinfo:=outer.create_for_outlining('$asyncget',nil,potype_function,innerdef,stepbody);
-            getinfo.procdef.fileinfo.column:=2;
-            getinfo.procdef.procsym.fileinfo.column:=2;
-            insert_funcret_local(getinfo.procdef);
-            getinfo.procdef.is_implemented:=true;
-            current_procinfo:=getinfo;
-            getbody:=cassignmentnode.create(
-                       load_sym(getinfo.procdef.funcretsym),
-                       load_sym(result_sym));
-            getbody:=cblocknode.create(cstatementnode.create(getbody,nil));
-            typecheck_step(getinfo,getbody);
-            current_procinfo:=savedpi;
-            getn:=cloadnode.create(getinfo.procdef.procsym,getinfo.procdef.procsym.owner);
-          end;
-
         stepn:=cloadnode.create(stepinfo.procdef.procsym,stepinfo.procdef.procsym.owner);
         if assigned(innerdef) then
           begin
@@ -1423,9 +1448,8 @@ implementation
             ctx.poslist.add(posinfo);
             ctx.genname:=runproc.realname;
             make_prettystring(innerdef,true,'',ctx.prettyname,ctx.specializename);
-            { The parameter list is stored last-argument-first, as the parser does. }
             call:=ccallnode.create(
-                    ccallparanode.create(getn,ccallparanode.create(stepn,nil)),
+                    ccallparanode.create(stepn,nil),
                     runproc,runproc.owner,nil,[],ctx);
           end
         else

@@ -969,10 +969,14 @@ type
     FCancellationToken: TCancellationToken;
     FCanceled: Boolean;
     FGate: IAwaitGate;
+    FInStart: Boolean;
+    FSuspended: Boolean;
+    FSyncError: Exception;
     procedure QueueRun;
     procedure PostRun;
     procedure Run;
   protected
+    procedure PrepareSuspend; virtual;
     procedure Complete; virtual; abstract;
     procedure Fail(aError: Exception); virtual; abstract;
     property CancellationToken: TCancellationToken read FCancellationToken write FCancellationToken;
@@ -988,6 +992,9 @@ type
       The queued step does not start until this call's step has returned,
       so it observes the state number the step stored for it. }
     function AwaitTask(const aTask: ITask): Boolean;
+    function ExtractSyncError: Exception;
+    property Suspended: Boolean read FSuspended;
+    property SyncError: Exception read FSyncError;
   end;
 
   generic TAsyncStateMachineOf<T> = class(TAsyncStateMachine)
@@ -998,15 +1005,27 @@ type
   private
     FSource: TSourceT;
     FGetResult: TResultFunc;
+    FSyncResult: T;
+    FRetTask: TFutureT;
+    function EnsureSource: TSourceT;
   protected
+    procedure PrepareSuspend; override;
     procedure Complete; override;
     procedure Fail(aError: Exception); override;
   public
-    constructor Create(const aGetResult: TResultFunc);
+    constructor Create; overload;
+    constructor Create(const aGetResult: TResultFunc); overload;
     destructor Destroy; override;
+    procedure SetResultDirect(const aValue: T);
+    function Start(const aStep: TAsyncStepFunc; out aTask: TFutureT): Boolean;
     function Task: TFutureT;
+    property SyncResult: T read FSyncResult;
   end;
 
+threadvar
+  GCurrentAsync: TAsyncStateMachine;
+
+type
   { TITaskHelper }
 
   TITaskHelper = type helper for ITask
@@ -1385,7 +1404,9 @@ procedure AsyncCheckCancellation;
 procedure AsyncReleaseException(aError: Pointer);
 procedure AsyncReraise(aError: Pointer);
 function AsyncStateRunTask(const aStep: TAsyncStepFunc): ITask;
-generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc; const aGetResult: specialize TFunc<T>): specialize IFuture<T>;
+generic procedure AsyncSetResult<T>(const aValue: T);
+generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc): specialize IFuture<T>; overload;
+generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc; const aGetResult: specialize TFunc<T>): specialize IFuture<T>; overload;
 generic function AsyncFromResult<T>(const aValue: T): specialize IFuture<T>;
 generic function AsyncFromException<T>(aError: Pointer): specialize IFuture<T>;
 
@@ -7270,19 +7291,20 @@ end;
   TAsyncStateMachine
   *********************************************************************}
 
-threadvar
-  GCurrentAsync: TAsyncStateMachine;
-
 type
   TAsyncTaskMachine = class(TAsyncStateMachine)
   private
     FSource: specialize TTaskCompletionSource<Byte>;
+    FRetTask: ITask;
+    function EnsureSource: specialize TTaskCompletionSource<Byte>;
   protected
+    procedure PrepareSuspend; override;
     procedure Complete; override;
     procedure Fail(aError: Exception); override;
   public
     constructor Create;
     destructor Destroy; override;
+    function Start(const aStep: TAsyncStepFunc; out aTask: ITask): Boolean;
     function Task: ITask;
   end;
 
@@ -7418,7 +7440,14 @@ begin
     FGate.Detach;
     FGate:=nil;
     end;
+  FreeAndNil(FSyncError);
   inherited Destroy;
+end;
+
+function TAsyncStateMachine.ExtractSyncError: Exception;
+begin
+  Result:=FSyncError;
+  FSyncError:=nil;
 end;
 
 procedure TAsyncStateMachine.ThrowCancellation;
@@ -7449,6 +7478,10 @@ begin
     QueueRun;
 end;
 
+procedure TAsyncStateMachine.PrepareSuspend;
+begin
+end;
+
 procedure TAsyncStateMachine.Start(const aStep: TAsyncStepFunc);
 begin
   FStep:=aStep;
@@ -7463,11 +7496,11 @@ end;
 procedure TAsyncStateMachine.Run;
 var
   Prev: TAsyncStateMachine;
-  Suspended: Boolean;
+  LSuspended: Boolean;
 begin
   Prev:=GCurrentAsync;
   GCurrentAsync:=Self;
-  Suspended:=False;
+  LSuspended:=False;
   try
     try
       if Assigned(FGate) then
@@ -7477,16 +7510,18 @@ begin
         end;
       if FStep() then
         begin
-        Suspended:=True;
+        LSuspended:=True;
+        FSuspended:=True;
         Exit;
         end;
+      FSuspended:=False;
       Complete;
     except
       Fail(Exception(AcquireExceptionObject));
     end;
   finally
     GCurrentAsync:=Prev;
-    if Suspended then
+    if LSuspended then
       begin
       // The step has stored the next state and returned. A continuation
       // that arrived inside AwaitTask only bumped FPosts. Queue it now.
@@ -7502,7 +7537,8 @@ begin
       AtomicExchange(FPosts,0);
       // Drop the step (and with it the routine's captured variables).
       FStep:=nil;
-      Free;
+      if not FInStart then
+        Free;
       end;
   end;
 end;
@@ -7519,84 +7555,204 @@ begin
     FCanceled:=True;
     ThrowCancellation;
     end;
+  PrepareSuspend;
   Gate:=TAwaitGate.Create(Self);
   FGate:=Gate;
   Gate.Arm(aTask,FCancellationToken);
+end;
+
+constructor TAsyncStateMachineOf.Create;
+begin
+  inherited Create;
+  FGetResult:=nil;
+  FSource:=nil;
+  FSyncResult:=Default(T);
+  FRetTask:=nil;
 end;
 
 constructor TAsyncStateMachineOf.Create(const aGetResult: TResultFunc);
 begin
   inherited Create;
   FGetResult:=aGetResult;
-  FSource:=TSourceT.Create;
+  FSource:=nil;
+  FSyncResult:=Default(T);
+  FRetTask:=nil;
+end;
+
+procedure TAsyncStateMachineOf.SetResultDirect(const aValue: T);
+begin
+  if Assigned(FSource) then
+    FSource.SetResultHere(aValue)
+  else
+    FSyncResult:=aValue;
 end;
 
 destructor TAsyncStateMachineOf.Destroy;
 begin
   FGetResult:=nil;
+  FRetTask:=nil;
+  FSyncResult:=Default(T);
   FreeAndNil(FSource);
   inherited Destroy;
 end;
 
+function TAsyncStateMachineOf.EnsureSource: TSourceT;
+begin
+  if not Assigned(FSource) then
+    FSource:=TSourceT.Create;
+  Result:=FSource;
+end;
+
+procedure TAsyncStateMachineOf.PrepareSuspend;
+begin
+  if not Assigned(FRetTask) then
+    FRetTask:=EnsureSource.Task;
+end;
+
+function TAsyncStateMachineOf.Start(const aStep: TAsyncStepFunc; out aTask: TFutureT): Boolean;
+begin
+  FStep:=aStep;
+  {$IFDEF FPC_VALGRIND}
+  VgBenignRace(@FPosts,SizeOf(FPosts));
+  {$ENDIF}
+  AtomicIncrement(FPosts);
+  FInStart:=True;
+  try
+    Run;
+  finally
+    FInStart:=False;
+  end;
+  if FSuspended then
+    begin
+    aTask:=FRetTask;
+    FRetTask:=nil;
+    Result:=True;
+    end
+  else
+    begin
+    Result:=False;
+    end;
+end;
+
 function TAsyncStateMachineOf.Task: TFutureT;
 begin
-  Result:=FSource.Task;
+  Result:=EnsureSource.Task;
 end;
 
 procedure TAsyncStateMachineOf.Complete;
 begin
   if Assigned(FGetResult) then
-    FSource.SetResultHere(FGetResult())
-  else
-    FSource.SetResultHere(Default(T));
+    begin
+    if Assigned(FSource) then
+      FSource.SetResultHere(FGetResult())
+    else
+      FSyncResult:=FGetResult();
+    end;
 end;
 
 procedure TAsyncStateMachineOf.Fail(aError: Exception);
 begin
-  if aError is EOperationCancelled then
+  if Assigned(FSource) then
     begin
-    FSource.SetCanceled;
-    aError.Free;
+    if aError is EOperationCancelled then
+      begin
+      FSource.SetCanceled;
+      aError.Free;
+      end
+    else
+      FSource.SetException(aError);
     end
   else
-    FSource.SetException(aError);
+    begin
+    FSyncError:=aError;
+    end;
 end;
 
 constructor TAsyncTaskMachine.Create;
 begin
   inherited Create;
-  FSource:=specialize TTaskCompletionSource<Byte>.Create;
+  FSource:=nil;
+  FRetTask:=nil;
 end;
 
 destructor TAsyncTaskMachine.Destroy;
 begin
+  FRetTask:=nil;
   FreeAndNil(FSource);
   inherited Destroy;
 end;
 
+function TAsyncTaskMachine.EnsureSource: specialize TTaskCompletionSource<Byte>;
+begin
+  if not Assigned(FSource) then
+    FSource:=specialize TTaskCompletionSource<Byte>.Create;
+  Result:=FSource;
+end;
+
+procedure TAsyncTaskMachine.PrepareSuspend;
+begin
+  if not Assigned(FRetTask) then
+    FRetTask:=EnsureSource.Task;
+end;
+
+function TAsyncTaskMachine.Start(const aStep: TAsyncStepFunc; out aTask: ITask): Boolean;
+begin
+  FStep:=aStep;
+  {$IFDEF FPC_VALGRIND}
+  VgBenignRace(@FPosts,SizeOf(FPosts));
+  {$ENDIF}
+  AtomicIncrement(FPosts);
+  FInStart:=True;
+  try
+    Run;
+  finally
+    FInStart:=False;
+  end;
+  if FSuspended then
+    begin
+    aTask:=FRetTask;
+    FRetTask:=nil;
+    Result:=True;
+    end
+  else
+    begin
+    Result:=False;
+    end;
+end;
+
 function TAsyncTaskMachine.Task: ITask;
 begin
-  Result:=FSource.Task;
+  Result:=EnsureSource.Task;
 end;
 
 procedure TAsyncTaskMachine.Complete;
 begin
-  FSource.SetResultHere(0);
+  if Assigned(FSource) then
+    FSource.SetResultHere(0);
 end;
 
 procedure TAsyncTaskMachine.Fail(aError: Exception);
 begin
-  if aError is EOperationCancelled then
+  if Assigned(FSource) then
     begin
-    FSource.SetCanceled;
-    aError.Free;
+    if aError is EOperationCancelled then
+      begin
+      FSource.SetCanceled;
+      aError.Free;
+      end
+    else
+      FSource.SetException(aError);
     end
   else
-    FSource.SetException(aError);
+    begin
+    FSyncError:=aError;
+    end;
 end;
 
 function AsyncAwait(const aTask: ITask): Boolean;
 begin
+  if (aTask.Status in [TTaskStatus.Completed,TTaskStatus.Canceled,TTaskStatus.Exception]) then
+    Exit(False);
   if not Assigned(GCurrentAsync) then
     Result:=False
   else
@@ -7635,20 +7791,64 @@ end;
 function AsyncStateRunTask(const aStep: TAsyncStepFunc): ITask;
 var
   M: TAsyncTaskMachine;
+  Err: Exception;
 begin
   M:=TAsyncTaskMachine.Create;
-  // Start may free M once the step finishes, so keep the task first.
-  Result:=M.Task;
-  M.Start(aStep);
+  if M.Start(aStep, Result) then
+    Exit;
+  try
+    Err:=M.ExtractSyncError;
+    if Assigned(Err) then
+      Result:=specialize AsyncFromException<Byte>(Pointer(Err))
+    else
+      Result:=specialize TFuture<Byte>.CreateCompleted(0);
+  finally
+    M.Free;
+  end;
+end;
+
+generic procedure AsyncSetResult<T>(const aValue: T);
+begin
+  if Assigned(GCurrentAsync) then
+    specialize TAsyncStateMachineOf<T>(GCurrentAsync).SetResultDirect(aValue);
+end;
+
+generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc): specialize IFuture<T>;
+var
+  M: specialize TAsyncStateMachineOf<T>;
+  Err: Exception;
+begin
+  M:=specialize TAsyncStateMachineOf<T>.Create;
+  if M.Start(aStep, Result) then
+    Exit;
+  try
+    Err:=M.ExtractSyncError;
+    if Assigned(Err) then
+      Result:=specialize AsyncFromException<T>(Pointer(Err))
+    else
+      Result:=specialize TFuture<T>.CreateCompleted(M.SyncResult);
+  finally
+    M.Free;
+  end;
 end;
 
 generic function AsyncStateRun<T>(const aStep: TAsyncStepFunc; const aGetResult: specialize TFunc<T>): specialize IFuture<T>;
 var
   M: specialize TAsyncStateMachineOf<T>;
+  Err: Exception;
 begin
   M:=specialize TAsyncStateMachineOf<T>.Create(aGetResult);
-  Result:=M.Task;
-  M.Start(aStep);
+  if M.Start(aStep, Result) then
+    Exit;
+  try
+    Err:=M.ExtractSyncError;
+    if Assigned(Err) then
+      Result:=specialize AsyncFromException<T>(Pointer(Err))
+    else
+      Result:=specialize TFuture<T>.CreateCompleted(M.SyncResult);
+  finally
+    M.Free;
+  end;
 end;
 
 generic function AsyncFromResult<T>(const aValue: T): specialize IFuture<T>;

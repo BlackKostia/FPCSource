@@ -1,0 +1,2176 @@
+{
+  "pascal": {
+    "summary": {
+      "wall_avg": 1.0928561067965348,
+      "wall_min": 1.049209933000384,
+      "wall_max": 1.1303058819903526,
+      "wall_stdev": 0.03716512153838175,
+      "rss_avg": 4.958,
+      "rss_min": 4.86,
+      "rss_max": 5.0,
+      "user_avg": 0.258,
+      "sys_avg": 0.062,
+      "vol_cs_avg": 3748.2,
+      "invol_cs_avg": 28.8,
+      "categories": {
+        "1": {
+          "id": 1,
+          "name": "Deep Recursion & Call-Chaining",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 9.6,
+          "min_ms": 8,
+          "max_ms": 13
+        },
+        "2": {
+          "id": 2,
+          "name": "Massive Fan-Out & Fan-In",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 91.6,
+          "min_ms": 76,
+          "max_ms": 111
+        },
+        "3": {
+          "id": 3,
+          "name": "Fast-Path Synchronous Awaits",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 55.6,
+          "min_ms": 48,
+          "max_ms": 64
+        },
+        "4": {
+          "id": 4,
+          "name": "First-Finisher Racing",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 59.2,
+          "min_ms": 56,
+          "max_ms": 64
+        },
+        "5": {
+          "id": 5,
+          "name": "Cooperative Cancellation",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 1.6,
+          "min_ms": 1,
+          "max_ms": 2
+        },
+        "6": {
+          "id": 6,
+          "name": "Exception Propagation & Handling",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 3.2,
+          "min_ms": 3,
+          "max_ms": 4
+        },
+        "7": {
+          "id": 7,
+          "name": "Deterministic Cleanup",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 58.8,
+          "min_ms": 56,
+          "max_ms": 60
+        },
+        "8": {
+          "id": 8,
+          "name": "Complex Control Flow & Expressions",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 236.6,
+          "min_ms": 228,
+          "max_ms": 245
+        },
+        "9": {
+          "id": 9,
+          "name": "State Preservation Across Thread Hopping",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 119,
+          "min_ms": 115,
+          "max_ms": 126
+        },
+        "10": {
+          "id": 10,
+          "name": "Multi-threaded Reentrancy",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 20.6,
+          "min_ms": 10,
+          "max_ms": 34
+        },
+        "11": {
+          "id": 11,
+          "name": "Mixed Heterogeneous WhenAll",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 110.2,
+          "min_ms": 104,
+          "max_ms": 123
+        },
+        "12": {
+          "id": 12,
+          "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 63.4,
+          "min_ms": 60,
+          "max_ms": 66
+        },
+        "13": {
+          "id": 13,
+          "name": "WhenAny Fast-Path Racing & Winner Claims",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 3.4,
+          "min_ms": 1,
+          "max_ms": 7
+        },
+        "14": {
+          "id": 14,
+          "name": "Fast-Path Optimization Under Complex Flow",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "15": {
+          "id": 15,
+          "name": "TTask.FromResult & TTask.FromException Direct API",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 1,
+          "min_ms": 0,
+          "max_ms": 2
+        },
+        "16": {
+          "id": 16,
+          "name": "Advanced Cancellation Token in Await",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 1.2,
+          "min_ms": 0,
+          "max_ms": 4
+        },
+        "17": {
+          "id": 17,
+          "name": "Unobserved Fire-and-Forget Exceptions",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 55.2,
+          "min_ms": 54,
+          "max_ms": 60
+        },
+        "18": {
+          "id": 18,
+          "name": "High-Density Lock-Free Fan-Out / Fan-In",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 14,
+          "min_ms": 9,
+          "max_ms": 21
+        },
+        "19": {
+          "id": 19,
+          "name": "Nested Combinator Hierarchies",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 6.8,
+          "min_ms": 3,
+          "max_ms": 12
+        },
+        "20": {
+          "id": 20,
+          "name": "Memory Stability & ARC Lifecycle",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 14.8,
+          "min_ms": 7,
+          "max_ms": 20
+        }
+      }
+    },
+    "loc": 870,
+    "binary_bytes": 2453808,
+    "binary_mb": 2.34,
+    "raw_runs": [
+      {
+        "wall_time_sec": 1.1303058819903526,
+        "user_time_sec": 0.2,
+        "sys_time_sec": 0.04,
+        "cpu_percent": 21.2,
+        "max_rss_kb": 5112,
+        "max_rss_mb": 4.99,
+        "vol_context_switches": 3649,
+        "invol_context_switches": 11,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 10
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 76
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 48
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 59
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 56
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 236
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 115
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 12
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 105
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 61
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 54
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 10
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 4
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 15
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.0582476559939096,
+        "user_time_sec": 0.24,
+        "sys_time_sec": 0.08,
+        "cpu_percent": 30.2,
+        "max_rss_kb": 5092,
+        "max_rss_mb": 4.97,
+        "vol_context_switches": 3790,
+        "invol_context_switches": 25,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 8
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 85
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 59
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 56
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 59
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 239
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 119
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 34
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 112
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 65
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 54
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 9
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 7
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.049209933000384,
+        "user_time_sec": 0.25,
+        "sys_time_sec": 0.04,
+        "cpu_percent": 27.6,
+        "max_rss_kb": 4972,
+        "max_rss_mb": 4.86,
+        "vol_context_switches": 3721,
+        "invol_context_switches": 27,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 13
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 90
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 52
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 58
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 60
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 228
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 117
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 10
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 104
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 60
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 4
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 54
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 18
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 9
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 20
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.1035825779981678,
+        "user_time_sec": 0.3,
+        "sys_time_sec": 0.08,
+        "cpu_percent": 34.4,
+        "max_rss_kb": 5124,
+        "max_rss_mb": 5.0,
+        "vol_context_switches": 3780,
+        "invol_context_switches": 24,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 8
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 111
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 55
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 64
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 4
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 59
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 245
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 118
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 29
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 107
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 66
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 54
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 12
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 6
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 17
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.1229344849998597,
+        "user_time_sec": 0.3,
+        "sys_time_sec": 0.07,
+        "cpu_percent": 32.9,
+        "max_rss_kb": 5092,
+        "max_rss_mb": 4.97,
+        "vol_context_switches": 3801,
+        "invol_context_switches": 57,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 9
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 96
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 64
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 59
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 60
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 235
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 126
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 18
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 123
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 65
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 7
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 4
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 60
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 21
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 12
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 15
+          }
+        }
+      }
+    ]
+  },
+  "csharp": {
+    "summary": {
+      "wall_avg": 1.1579972668027039,
+      "wall_min": 1.133268425008282,
+      "wall_max": 1.1782991450018017,
+      "wall_stdev": 0.01882745550140978,
+      "rss_avg": 37.91,
+      "rss_min": 37.51,
+      "rss_max": 38.3,
+      "user_avg": 0.45,
+      "sys_avg": 0.124,
+      "vol_cs_avg": 3850.2,
+      "invol_cs_avg": 660.4,
+      "categories": {
+        "1": {
+          "id": 1,
+          "name": "Deep Recursion & Call-Chaining",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 2.4,
+          "min_ms": 2,
+          "max_ms": 3
+        },
+        "2": {
+          "id": 2,
+          "name": "Massive Fan-Out & Fan-In",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 80.8,
+          "min_ms": 75,
+          "max_ms": 90
+        },
+        "3": {
+          "id": 3,
+          "name": "Fast-Path Synchronous Awaits",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 11.8,
+          "min_ms": 8,
+          "max_ms": 20
+        },
+        "4": {
+          "id": 4,
+          "name": "First-Finisher Racing",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 62.8,
+          "min_ms": 61,
+          "max_ms": 65
+        },
+        "5": {
+          "id": 5,
+          "name": "Cooperative Cancellation",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 96.4,
+          "min_ms": 91,
+          "max_ms": 103
+        },
+        "6": {
+          "id": 6,
+          "name": "Exception Propagation & Handling",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 17.2,
+          "min_ms": 5,
+          "max_ms": 34
+        },
+        "7": {
+          "id": 7,
+          "name": "Deterministic Cleanup",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 67.2,
+          "min_ms": 61,
+          "max_ms": 74
+        },
+        "8": {
+          "id": 8,
+          "name": "Complex Control Flow & Expressions",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 242.2,
+          "min_ms": 238,
+          "max_ms": 250
+        },
+        "9": {
+          "id": 9,
+          "name": "State Preservation Across Thread Hopping",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 147.6,
+          "min_ms": 141,
+          "max_ms": 152
+        },
+        "10": {
+          "id": 10,
+          "name": "Multi-threaded Reentrancy & Sustained Concurrency",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 67.6,
+          "min_ms": 61,
+          "max_ms": 84
+        },
+        "11": {
+          "id": 11,
+          "name": "Mixed Heterogeneous WhenAll",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 107.2,
+          "min_ms": 104,
+          "max_ms": 113
+        },
+        "12": {
+          "id": 12,
+          "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 73.2,
+          "min_ms": 64,
+          "max_ms": 77
+        },
+        "13": {
+          "id": 13,
+          "name": "WhenAny Fast-Path Racing & Winner Claims",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 1,
+          "min_ms": 0,
+          "max_ms": 2
+        },
+        "14": {
+          "id": 14,
+          "name": "Fast-Path Optimization Under Complex Flow",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 0.8,
+          "min_ms": 0,
+          "max_ms": 1
+        },
+        "15": {
+          "id": 15,
+          "name": "TTask.FromResult & TTask.FromException Direct API",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 0,
+          "min_ms": 0,
+          "max_ms": 0
+        },
+        "16": {
+          "id": 16,
+          "name": "Advanced Cancellation Token in Await",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 5.8,
+          "min_ms": 5,
+          "max_ms": 7
+        },
+        "17": {
+          "id": 17,
+          "name": "Unobserved Fire-and-Forget Exceptions",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 56,
+          "min_ms": 55,
+          "max_ms": 57
+        },
+        "18": {
+          "id": 18,
+          "name": "High-Density Lock-Free Fan-Out / Fan-In",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 1.2,
+          "min_ms": 0,
+          "max_ms": 2
+        },
+        "19": {
+          "id": 19,
+          "name": "Nested Combinator Hierarchies",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 2,
+          "min_ms": 0,
+          "max_ms": 3
+        },
+        "20": {
+          "id": 20,
+          "name": "Memory Stability & ARC Lifecycle",
+          "passed": 50,
+          "total": 50,
+          "failed": 0,
+          "avg_ms": 5,
+          "min_ms": 2,
+          "max_ms": 6
+        }
+      }
+    },
+    "loc": 558,
+    "binary_bytes": 47104,
+    "binary_mb": 0.04,
+    "raw_runs": [
+      {
+        "wall_time_sec": 1.1782991450018017,
+        "user_time_sec": 0.5,
+        "sys_time_sec": 0.12,
+        "cpu_percent": 52.6,
+        "max_rss_kb": 38580,
+        "max_rss_mb": 37.68,
+        "vol_context_switches": 3892,
+        "invol_context_switches": 249,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 82
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 20
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 62
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 92
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 34
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 72
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 238
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 146
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy & Sustained Concurrency",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 63
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 104
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 76
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 6
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 57
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 6
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.1520494029973634,
+        "user_time_sec": 0.46,
+        "sys_time_sec": 0.13,
+        "cpu_percent": 51.2,
+        "max_rss_kb": 39056,
+        "max_rss_mb": 38.14,
+        "vol_context_switches": 3840,
+        "invol_context_switches": 165,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 82
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 8
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 65
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 103
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 7
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 61
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 240
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 150
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy & Sustained Concurrency",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 65
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 113
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 77
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 5
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 55
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 6
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.150835291002295,
+        "user_time_sec": 0.43,
+        "sys_time_sec": 0.12,
+        "cpu_percent": 47.8,
+        "max_rss_kb": 38832,
+        "max_rss_mb": 37.92,
+        "vol_context_switches": 3835,
+        "invol_context_switches": 1768,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 75
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 13
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 61
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 96
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 5
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 64
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 250
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 141
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy & Sustained Concurrency",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 84
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 105
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 64
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 6
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 56
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 5
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.1755340700037777,
+        "user_time_sec": 0.42,
+        "sys_time_sec": 0.13,
+        "cpu_percent": 46.8,
+        "max_rss_kb": 38408,
+        "max_rss_mb": 37.51,
+        "vol_context_switches": 3804,
+        "invol_context_switches": 706,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 3
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 90
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 10
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 63
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 100
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 20
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 74
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 241
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 149
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy & Sustained Concurrency",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 61
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 108
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 74
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 7
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 55
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 1
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 6
+          }
+        }
+      },
+      {
+        "wall_time_sec": 1.133268425008282,
+        "user_time_sec": 0.44,
+        "sys_time_sec": 0.12,
+        "cpu_percent": 49.4,
+        "max_rss_kb": 39224,
+        "max_rss_mb": 38.3,
+        "vol_context_switches": 3880,
+        "invol_context_switches": 414,
+        "exit_code": 0,
+        "category_times": {
+          "1": {
+            "id": 1,
+            "name": "Deep Recursion & Call-Chaining",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          },
+          "2": {
+            "id": 2,
+            "name": "Massive Fan-Out & Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 75
+          },
+          "3": {
+            "id": 3,
+            "name": "Fast-Path Synchronous Awaits",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 8
+          },
+          "4": {
+            "id": 4,
+            "name": "First-Finisher Racing",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 63
+          },
+          "5": {
+            "id": 5,
+            "name": "Cooperative Cancellation",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 91
+          },
+          "6": {
+            "id": 6,
+            "name": "Exception Propagation & Handling",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 20
+          },
+          "7": {
+            "id": 7,
+            "name": "Deterministic Cleanup",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 65
+          },
+          "8": {
+            "id": 8,
+            "name": "Complex Control Flow & Expressions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 242
+          },
+          "9": {
+            "id": 9,
+            "name": "State Preservation Across Thread Hopping",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 152
+          },
+          "10": {
+            "id": 10,
+            "name": "Multi-threaded Reentrancy & Sustained Concurrency",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 65
+          },
+          "11": {
+            "id": 11,
+            "name": "Mixed Heterogeneous WhenAll",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 106
+          },
+          "12": {
+            "id": 12,
+            "name": "WhenAll Fault Aggregation & Atomic Exception Races",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 75
+          },
+          "13": {
+            "id": 13,
+            "name": "WhenAny Fast-Path Racing & Winner Claims",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "14": {
+            "id": 14,
+            "name": "Fast-Path Optimization Under Complex Flow",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "15": {
+            "id": 15,
+            "name": "TTask.FromResult & TTask.FromException Direct API",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "16": {
+            "id": 16,
+            "name": "Advanced Cancellation Token in Await",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 5
+          },
+          "17": {
+            "id": 17,
+            "name": "Unobserved Fire-and-Forget Exceptions",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 57
+          },
+          "18": {
+            "id": 18,
+            "name": "High-Density Lock-Free Fan-Out / Fan-In",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "19": {
+            "id": 19,
+            "name": "Nested Combinator Hierarchies",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 0
+          },
+          "20": {
+            "id": 20,
+            "name": "Memory Stability & ARC Lifecycle",
+            "passed": 50,
+            "total": 50,
+            "failed": 0,
+            "elapsed_ms": 2
+          }
+        }
+      }
+    ]
+  }
+}
