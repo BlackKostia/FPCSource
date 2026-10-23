@@ -7769,9 +7769,8 @@ type
   private
     FSource: specialize TTaskCompletionSource<Byte>;
     FRemaining: LongInt;
-    FFirstEx: Exception;
-    FHasCanceled: Boolean;
-    FLock: TRTLCriticalSection;
+    FFirstEx: Pointer;
+    FHasCanceled: LongInt;
   public
     constructor Create(aCount: Integer);
     destructor Destroy; override;
@@ -7798,17 +7797,15 @@ type
 constructor TWhenAllContext.Create(aCount: Integer);
 begin
   inherited Create;
-  InitCriticalSection(FLock);
   FRemaining:=aCount;
   FSource:=specialize TTaskCompletionSource<Byte>.Create;
   FFirstEx:=nil;
-  FHasCanceled:=False;
+  FHasCanceled:=0;
 end;
 
 destructor TWhenAllContext.Destroy;
 begin
   FSource.Free;
-  DoneCriticalSection(FLock);
   inherited Destroy;
 end;
 
@@ -7841,27 +7838,20 @@ begin
         IsCanceled:=True;
     end;
 
-  EnterCriticalSection(FLock);
-  try
-    if IsFaulted then
-      begin
-        if not Assigned(FFirstEx) then
-          FFirstEx:=Ex
-        else if Assigned(Ex) and (Ex <> FFirstEx) then
-          Ex.Free;
-      end;
-    if IsCanceled then
-      FHasCanceled:=True;
-  finally
-    LeaveCriticalSection(FLock);
-  end;
+  if IsFaulted and Assigned(Ex) then
+    begin
+      if InterlockedCompareExchange(FFirstEx, Pointer(Ex), nil) <> nil then
+        Ex.Free;
+    end;
+  if IsCanceled then
+    InterlockedExchange(FHasCanceled, 1);
 
   Left:=InterlockedDecrement(FRemaining);
   if Left=0 then
     begin
       if Assigned(FFirstEx) then
-        FSource.SetException(FFirstEx)
-      else if FHasCanceled then
+        FSource.SetException(Exception(FFirstEx))
+      else if FHasCanceled <> 0 then
         FSource.SetCanceled
       else
         FSource.SetResult(0);
