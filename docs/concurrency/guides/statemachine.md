@@ -124,7 +124,19 @@ class function TTask.Delay(aMilliseconds: Cardinal): ITask; static;
 `tests/concurrency/comparison/pascal/bench03_c100k_tasks.pp`. Це не
 файберний bench03 і в таймований набір не входить.
 
-## 7. Збірка прикладу
+## 7. Підтримка токенів скасування (TCancellationToken) у стейт-машині
+
+Якщо `async`-підпрограма оголошує параметр типу `TCancellationToken`:
+```pascal
+function FetchUserAsync(const AToken: TCancellationToken): IFuture<TUser>; async;
+```
+1. Компілятор автоматично розпізнає наявність токена та генерує виклик `AsyncSetCancellationToken(AToken)` у першому стані стейт-машини.
+2. При кожному `await Task` рантайм стейт-машини озброює шлюз `TAwaitGate`, прив'язуючи його як до завершення задачі, так і до `AToken.Register(...)`.
+3. У разі виклику `AToken.Cancel()` стейт-машина миттєво ставиться в чергу на відновлення (`PostRun`), минаючи очікування задачі.
+4. На початку стану відновлення викликається `AsyncCheckCancellation`, який піднімає виняток `EOperationCancelled`. Якщо очікування було обгорнуто в `try ... finally`, блок очищення ресурсів гарантовано виконується.
+5. При запізнілому завершенні фонової задачі шлюз `TAwaitGate` безпечно ігнорує подію (від'єднаний стан `Detach`), запобігаючи Use-After-Free.
+
+## 8. Збірка прикладу
 
 ```sh
 . tests/concurrency/fpcenv.sh

@@ -35,6 +35,13 @@ type
     procedure Execute;
   end;
 
+  IFiberAwaitGate = interface
+    ['{B48C5B32-E791-4948-8C60-2E3C2D4378A5}']
+    procedure Detach;
+    procedure OnTaskComplete;
+    procedure OnCancel;
+  end;
+
   TFiber = class
   private
     FStackBase: Pointer;
@@ -55,6 +62,9 @@ type
     FSavedExceptObj: Pointer;
     FCallerExceptObj: Pointer;
     FCallerStackBottom: Pointer;
+    FCancellationToken: TCancellationToken;
+    FCanceled: Boolean;
+    FGate: IFiberAwaitGate;
     { 1 while the fiber is not executing on any thread. A resume that comes
       from another thread (a future's continuation, a pool task) waits for
       it, because the fiber may not have finished switching out yet. }
@@ -317,6 +327,11 @@ end;
 
 destructor TFiber.Destroy;
 begin
+  if Assigned(FGate) then
+  begin
+    FGate.Detach;
+    FGate := nil;
+  end;
   if FState = fsRunning then
     raise EInvalidFiberOperation.Create('Cannot destroy an actively running fiber');
   { State becomes fsCompleted (or fsSuspended) just before the fiber switches
@@ -523,21 +538,149 @@ begin
     TThreadPool.Default.QueueWorkItem(procedure begin TFiber.ResumeFromOtherThread(LFiber); end);
 end;
 
-procedure TFiber.SuspendUntil(const ATask: ITask);
-var
-  LFiber: TFiber;
+type
+  TFiberAwaitGate = class(TInterfacedObject, IFiberAwaitGate)
+  private
+    FLock: TCriticalSection;
+    FFiber: TFiber;
+    FReg: TCancellationTokenRegistration;
+    FDone: Boolean;
+    procedure OnTaskComplete;
+    procedure OnCancel;
+  public
+    constructor Create(AFiber: TFiber);
+    destructor Destroy; override;
+    procedure Detach;
+    procedure Arm(const ATask: ITask; const AToken: TCancellationToken);
+  end;
+
+constructor TFiberAwaitGate.Create(AFiber: TFiber);
 begin
-  LFiber := Self;
-  FState := fsSuspended;
-  { The completion callback runs in the thread that completes the task, or
-    at once if it is already complete; ScheduleResume waits until the fiber
-    has really switched out. }
+  inherited Create;
+  FLock := TCriticalSection.Create;
+  FFiber := AFiber;
+  FDone := False;
+end;
+
+destructor TFiberAwaitGate.Destroy;
+begin
+  FReg.Unregister;
+  FLock.Free;
+  inherited Destroy;
+end;
+
+procedure TFiberAwaitGate.Detach;
+begin
+  FLock.Enter;
+  try
+    FDone := True;
+    FFiber := nil;
+  finally
+    FLock.Leave;
+  end;
+  FReg.Unregister;
+end;
+
+procedure TFiberAwaitGate.OnTaskComplete;
+var
+  F: TFiber;
+begin
+  FLock.Enter;
+  try
+    if FDone then
+      Exit;
+    FDone := True;
+    F := FFiber;
+    FFiber := nil;
+  finally
+    FLock.Leave;
+  end;
+  FReg.Unregister;
+  if Assigned(F) then
+    F.ScheduleResume;
+end;
+
+procedure TFiberAwaitGate.OnCancel;
+var
+  F: TFiber;
+begin
+  FLock.Enter;
+  try
+    if FDone then
+      Exit;
+    FDone := True;
+    F := FFiber;
+    FFiber := nil;
+  finally
+    FLock.Leave;
+  end;
+  if Assigned(F) then
+  begin
+    F.FCanceled := True;
+    F.ScheduleResume;
+  end;
+end;
+
+procedure TFiberAwaitGate.Arm(const ATask: ITask; const AToken: TCancellationToken);
+var
+  GateRef: IFiberAwaitGate;
+begin
+  GateRef := Self;
+  if AToken.CanBeCanceled then
+    FReg := AToken.Register(
+      procedure
+      begin
+        GateRef.OnCancel;
+      end);
   TaskOnComplete(ATask,
     procedure
     begin
-      LFiber.ScheduleResume;
+      GateRef.OnTaskComplete;
     end);
+end;
+
+procedure TFiber.SuspendUntil(const ATask: ITask);
+var
+  LFiber: TFiber;
+  Gate: TFiberAwaitGate;
+begin
+  if (FCancellationToken.CanBeCanceled and FCancellationToken.IsCancellationRequested) or FCanceled then
+  begin
+    FCanceled := True;
+    FCancellationToken.ThrowIfCancellationRequested;
+    raise EOperationCancelled.Create('Operation cancelled');
+  end;
+
+  LFiber := Self;
+  FState := fsSuspended;
+  if FCancellationToken.CanBeCanceled then
+  begin
+    Gate := TFiberAwaitGate.Create(Self);
+    FGate := Gate;
+    Gate.Arm(ATask, FCancellationToken);
+  end
+  else
+  begin
+    TaskOnComplete(ATask,
+      procedure
+      begin
+        LFiber.ScheduleResume;
+      end);
+  end;
+
   Yield;
+
+  if Assigned(FGate) then
+  begin
+    FGate.Detach;
+    FGate := nil;
+  end;
+
+  if FCanceled or (FCancellationToken.CanBeCanceled and FCancellationToken.IsCancellationRequested) then
+  begin
+    FCancellationToken.ThrowIfCancellationRequested;
+    raise EOperationCancelled.Create('Operation cancelled');
+  end;
 end;
 
 class procedure TFiber.Start(AFiber: TFiber);
@@ -554,12 +697,20 @@ end;
 procedure TFiberAsyncBody.Execute;
 var
   LRes: T;
+  LExcept: Exception;
 begin
   try
     LRes := Func();
     Source.SetResult(LRes);
   except
-    Source.SetException(Exception(AcquireExceptionObject));
+    LExcept := Exception(AcquireExceptionObject);
+    if LExcept is EOperationCancelled then
+    begin
+      Source.SetCanceled;
+      LExcept.Free;
+    end
+    else
+      Source.SetException(LExcept);
   end;
   Source.Free; { the task stays valid }
   Free;
@@ -595,12 +746,21 @@ begin
   Result := LSource.Task;
   LFiber := TFiber.Create(
     procedure
+    var
+      LExcept: Exception;
     begin
       try
         AProc();
         LSource.SetResult(True);
       except
-        LSource.SetException(Exception(AcquireExceptionObject));
+        LExcept := Exception(AcquireExceptionObject);
+        if LExcept is EOperationCancelled then
+        begin
+          LSource.SetCanceled;
+          LExcept.Free;
+        end
+        else
+          LSource.SetException(LExcept);
       end;
       LSource.Free;
     end, AStackSize, ALoop);
@@ -779,9 +939,18 @@ begin
   Result := TFiber.Spawn(AProc);
 end;
 
+procedure FiberSetTokenHook(const aToken: TCancellationToken);
+begin
+  if Assigned(GCurrentFiber) then
+    GCurrentFiber.FCancellationToken := aToken;
+end;
+
 initialization
   TaskAwaitHook := @FiberAwaitHook;
+  AsyncSetTokenHook := @FiberSetTokenHook;
 finalization
   if TaskAwaitHook = @FiberAwaitHook then
     TaskAwaitHook := nil;
+  if AsyncSetTokenHook = @FiberSetTokenHook then
+    AsyncSetTokenHook := nil;
 end.

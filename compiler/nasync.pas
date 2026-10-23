@@ -59,7 +59,8 @@ implementation
         booldef, innerdef: tdef;
         state_sym, handler_sym, leave_sym, leavestop_sym, leaveto_sym,
         except_sym, raise_sym, result_sym: tsym;
-        awaitproc, runproc: tprocsym;
+        awaitproc, runproc, checkcancelproc: tprocsym;
+        tokensym: tsym;
         handlerid: integer;
         { True when the body has try/finally or try/except. Only then does
           the step dispatcher need an exception frame on every state. }
@@ -254,6 +255,41 @@ implementation
       end;
 
 
+    function is_cancellation_token_def(def: tdef): boolean;
+      begin
+        result:=false;
+        if not assigned(def) then
+          exit;
+        if assigned(def.typesym) and (upper(def.typesym.realname)='TCANCELLATIONTOKEN') then
+          exit(true);
+        if (def.typ=recorddef) and assigned(search_struct_member(tabstractrecorddef(def),'THROWIFCANCELLATIONREQUESTED')) then
+          exit(true);
+      end;
+
+
+    function find_cancellation_token_para(pd: tprocdef): tsym;
+      var
+        i: integer;
+        sym: tsym;
+      begin
+        result:=nil;
+        if not assigned(pd) or not assigned(pd.parast) then
+          exit;
+        for i:=0 to pd.parast.symlist.count-1 do
+          begin
+            sym:=tsym(pd.parast.symlist[i]);
+            if (sym.typ=paravarsym) and assigned(tparavarsym(sym).vardef) then
+              begin
+                if is_cancellation_token_def(tparavarsym(sym).vardef) then
+                  begin
+                    result:=sym;
+                    exit;
+                  end;
+              end;
+          end;
+      end;
+
+
     function find_proc(const aname: tidstring): tprocsym;
       var
         sym: tsym;
@@ -407,6 +443,9 @@ implementation
         if assigned(innerdef) then
           { The leading $ is stripped and the rest is not uppercased. }
           result_sym:=tsym(pd.localst.find('ASYNCRESULT'));
+        tokensym:=find_cancellation_token_para(pd);
+        if assigned(tokensym) then
+          checkcancelproc:=find_proc('ASYNCCHECKCANCELLATION');
       end;
 
 
@@ -579,6 +618,8 @@ implementation
         exclude(call.callnodeflags,cnf_await);
         do_typecheckpass(call.methodpointer);
         next:=new_state;
+        if assigned(tokensym) and assigned(checkcancelproc) then
+          next.add(ccallnode.create(nil,checkcancelproc,checkcancelproc.owner,nil,[],nil));
         cur.add(cassignmentnode.create(load_sym(temp),mp));
         { Store the resume state before AsyncAwait. A continuation of this
           await must observe that number, including one armed before this
@@ -1072,6 +1113,7 @@ implementation
         posinfo: pfileposinfo;
         stepn, getn, call: tnode;
         startid: integer;
+        settokenproc: tprocsym;
       begin
         result:=nil;
         if not has_await(code) and not assigned(innerdef) then
@@ -1141,6 +1183,14 @@ implementation
         cur.add(cexitnode.create(cordconstnode.create(0,booldef,false)));
         cur:=new_state;
         startid:=cur.id;
+        if assigned(tokensym) then
+          begin
+            settokenproc:=find_proc('ASYNCSETCANCELLATIONTOKEN');
+            if assigned(settokenproc) then
+              cur.add(ccallnode.create(
+                        ccallparanode.create(load_sym(tokensym),nil),
+                        settokenproc,settokenproc.owner,nil,[],nil));
+          end;
         if code.nodetype=blockn then
           begin
             list:=tstatementnode(tblocknode(code).left);
@@ -1411,6 +1461,9 @@ implementation
         outlast: tstatementnode;
         bodycode: tnode;
         ret_info: treplace_ret_info;
+        tokensym: tsym;
+        settokenproc: tprocsym;
+        callnode: tnode;
       begin
         result:=false;
         if not assigned(code) or not fiber_proc(pd) then
@@ -1461,6 +1514,20 @@ implementation
 
         bodycode:=code;
         code:=nil;
+        tokensym:=find_cancellation_token_para(pd);
+        if assigned(tokensym) then
+          begin
+            settokenproc:=find_proc('ASYNCSETCANCELLATIONTOKEN');
+            if assigned(settokenproc) then
+              begin
+                callnode:=ccallnode.create(
+                            ccallparanode.create(load_sym(tokensym),nil),
+                            settokenproc,settokenproc.owner,nil,[],nil);
+                bodycode:=cblocknode.create(
+                            cstatementnode.create(callnode,
+                              cstatementnode.create(bodycode,nil)));
+              end;
+          end;
         if potype=potype_function then
           begin
             ret_info.old_sym:=tsym(pd.localst.find('ASYNCRESULT'));

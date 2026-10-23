@@ -945,6 +945,13 @@ type
 
   TAsyncStepFunc = reference to function: Boolean;
 
+  IAwaitGate = interface
+    ['{8A95E7C1-2856-42E1-BA83-7F63C450942F}']
+    procedure Detach;
+    procedure OnTaskComplete;
+    procedure OnCancel;
+  end;
+
   { Internal: drives an async routine that the compiler translated into a
     state machine ($ASYNCMODE STATEMACHINE). The step function returns True
     when it has suspended at an await, False when the routine has finished.
@@ -956,13 +963,20 @@ type
       adds another and queues a run only when the machine is idle, after
       that invocation has stored the next state and returned. }
     FPosts: LongInt;
+    FCancellationToken: TCancellationToken;
+    FCanceled: Boolean;
+    FGate: IAwaitGate;
     procedure QueueRun;
     procedure PostRun;
     procedure Run;
   protected
     procedure Complete; virtual; abstract;
     procedure Fail(aError: Exception); virtual; abstract;
+    property CancellationToken: TCancellationToken read FCancellationToken write FCancellationToken;
+    property IsCanceled: Boolean read FCanceled write FCanceled;
+    procedure ThrowCancellation;
   public
+    destructor Destroy; override;
     { Runs the first step in the calling thread. }
     procedure Start(const aStep: TAsyncStepFunc);
     { Called by the step at an await: returns False if aTask has already
@@ -1338,6 +1352,8 @@ type
 
   TUnobservedTaskExceptionEvent = procedure(const ATask: ITask; AException: Exception);
 
+  TAsyncSetTokenHook = procedure(const aToken: TCancellationToken);
+
 var
   { Installed by a coroutine library (fcl-coroutines installs one for
     TFiber). Waits without a timeout - ITask.Wait, IFuture.Value, the await
@@ -1348,6 +1364,9 @@ var
   { Global hook for unobserved task exceptions (e.g. fire-and-forget async procedures) }
   OnUnobservedTaskException: TUnobservedTaskExceptionEvent = nil;
 
+  { Hook called when an async routine sets its cancellation token }
+  AsyncSetTokenHook: TAsyncSetTokenHook = nil;
+
 { Calls aProc once aTask has finished, in the thread that completes it, or at
   once in the calling thread if it already has. Unlike ContinueWith it
   creates no task, so it is never canceled and needs no pool thread. }
@@ -1355,6 +1374,10 @@ procedure TaskOnComplete(const aTask: ITask; const aProc: TProcRef);
 
 { Called by a state-machine step. True means the step must suspend. }
 function AsyncAwait(const aTask: ITask): Boolean;
+{ Called to set the cancellation token for the current async routine }
+procedure AsyncSetCancellationToken(const aToken: TCancellationToken);
+{ Called after await suspension to check if cancellation occurred }
+procedure AsyncCheckCancellation;
 { The state machine holds an exception as a pointer between steps. }
 procedure AsyncReleaseException(aError: Pointer);
 procedure AsyncReraise(aError: Pointer);
@@ -7266,6 +7289,124 @@ var
   GDelayLock: TCriticalSection;
   GDelay: TDelayQueue;
 
+type
+  TAwaitGate = class(TInterfacedObject, IAwaitGate)
+  private
+    FLock: TCriticalSection;
+    FMachine: TAsyncStateMachine;
+    FReg: TCancellationTokenRegistration;
+    FDone: Boolean;
+    procedure OnTaskComplete;
+    procedure OnCancel;
+  public
+    constructor Create(aMachine: TAsyncStateMachine);
+    destructor Destroy; override;
+    procedure Detach;
+    procedure Arm(const aTask: ITask; const aToken: TCancellationToken);
+  end;
+
+constructor TAwaitGate.Create(aMachine: TAsyncStateMachine);
+begin
+  inherited Create;
+  FLock:=TCriticalSection.Create;
+  FMachine:=aMachine;
+  FDone:=False;
+end;
+
+destructor TAwaitGate.Destroy;
+begin
+  FReg.Unregister;
+  FLock.Free;
+  inherited Destroy;
+end;
+
+procedure TAwaitGate.Detach;
+begin
+  FLock.Enter;
+  try
+    FDone:=True;
+    FMachine:=nil;
+  finally
+    FLock.Leave;
+  end;
+  FReg.Unregister;
+end;
+
+procedure TAwaitGate.OnTaskComplete;
+var
+  M: TAsyncStateMachine;
+begin
+  FLock.Enter;
+  try
+    if FDone then
+      Exit;
+    FDone:=True;
+    M:=FMachine;
+    FMachine:=nil;
+  finally
+    FLock.Leave;
+  end;
+  FReg.Unregister;
+  if Assigned(M) then
+    M.PostRun;
+end;
+
+procedure TAwaitGate.OnCancel;
+var
+  M: TAsyncStateMachine;
+begin
+  FLock.Enter;
+  try
+    if FDone then
+      Exit;
+    FDone:=True;
+    M:=FMachine;
+    FMachine:=nil;
+  finally
+    FLock.Leave;
+  end;
+  if Assigned(M) then
+    begin
+    M.FCanceled:=True;
+    M.PostRun;
+    end;
+end;
+
+procedure TAwaitGate.Arm(const aTask: ITask; const aToken: TCancellationToken);
+var
+  GateRef: IAwaitGate;
+begin
+  GateRef:=Self;
+  if aToken.CanBeCanceled then
+    FReg:=aToken.Register(
+      procedure
+      begin
+        GateRef.OnCancel;
+      end);
+  TaskOnComplete(aTask,
+    procedure
+    begin
+      GateRef.OnTaskComplete;
+    end);
+end;
+
+destructor TAsyncStateMachine.Destroy;
+begin
+  if Assigned(FGate) then
+    begin
+    FGate.Detach;
+    FGate:=nil;
+    end;
+  inherited Destroy;
+end;
+
+procedure TAsyncStateMachine.ThrowCancellation;
+begin
+  if FCancellationToken.CanBeCanceled then
+    FCancellationToken.ThrowIfCancellationRequested;
+  raise EOperationCancelled.Create(SOperationCancelled);
+end;
+
 procedure TAsyncStateMachine.QueueRun;
 var
   LSelf: TAsyncStateMachine;
@@ -7308,6 +7449,11 @@ begin
   Suspended:=False;
   try
     try
+      if Assigned(FGate) then
+        begin
+        FGate.Detach;
+        FGate:=nil;
+        end;
       if FStep() then
         begin
         Suspended:=True;
@@ -7342,19 +7488,19 @@ end;
 
 function TAsyncStateMachine.AwaitTask(const aTask: ITask): Boolean;
 var
-  LSelf: TAsyncStateMachine;
+  Gate: TAwaitGate;
 begin
   Result:=not (aTask.Status in [TTaskStatus.Completed,TTaskStatus.Canceled,TTaskStatus.Exception]);
   if not Result then
     Exit;
-  LSelf:=Self;
-  // The callback can run on this thread before the call returns, while
-  // the step is still on the stack. PostRun must not enter that step.
-  TaskOnComplete(aTask,
-    procedure
+  if (FCancellationToken.CanBeCanceled and FCancellationToken.IsCancellationRequested) or FCanceled then
     begin
-      LSelf.PostRun;
-    end);
+    FCanceled:=True;
+    ThrowCancellation;
+    end;
+  Gate:=TAwaitGate.Create(Self);
+  FGate:=Gate;
+  Gate.Arm(aTask,FCancellationToken);
 end;
 
 constructor TAsyncStateMachineOf.Create(const aGetResult: TResultFunc);
@@ -7386,7 +7532,13 @@ end;
 
 procedure TAsyncStateMachineOf.Fail(aError: Exception);
 begin
-  FSource.SetException(aError);
+  if aError is EOperationCancelled then
+    begin
+    FSource.SetCanceled;
+    aError.Free;
+    end
+  else
+    FSource.SetException(aError);
 end;
 
 constructor TAsyncTaskMachine.Create;
@@ -7413,7 +7565,13 @@ end;
 
 procedure TAsyncTaskMachine.Fail(aError: Exception);
 begin
-  FSource.SetException(aError);
+  if aError is EOperationCancelled then
+    begin
+    FSource.SetCanceled;
+    aError.Free;
+    end
+  else
+    FSource.SetException(aError);
 end;
 
 function AsyncAwait(const aTask: ITask): Boolean;
@@ -7422,6 +7580,22 @@ begin
     Result:=False
   else
     Result:=GCurrentAsync.AwaitTask(aTask);
+end;
+
+procedure AsyncSetCancellationToken(const aToken: TCancellationToken);
+begin
+  if Assigned(GCurrentAsync) then
+    GCurrentAsync.CancellationToken:=aToken;
+  if Assigned(AsyncSetTokenHook) then
+    AsyncSetTokenHook(aToken);
+  if aToken.CanBeCanceled and aToken.IsCancellationRequested then
+    aToken.ThrowIfCancellationRequested;
+end;
+
+procedure AsyncCheckCancellation;
+begin
+  if Assigned(GCurrentAsync) and GCurrentAsync.IsCanceled then
+    GCurrentAsync.ThrowCancellation;
 end;
 
 procedure AsyncReleaseException(aError: Pointer);
