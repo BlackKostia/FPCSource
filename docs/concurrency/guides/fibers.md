@@ -262,31 +262,33 @@ end.
 ### 5.4. Ергономічний синтаксис `RunAsync` та `SpawnAsync` (модуль `fclasync`)
 
 Для найбільш зручного написання асинхронного коду в стилі сучасних мов програмування модуль `fclasync` надає прямі хелпери:
-- **`RunAsync<T>(Func)`** — виконує функцію як асинхронну корутину і миттєво повертає викликачу `specialize IFuture<T>`.
+- **`RunAsync<T>(Func)`** — виконує функцію на файбері і повертає викликачу `specialize IFuture<T>`. До першого незавершеного очікування тіло виконується на поточному потоці.
 - **`SpawnAsync(Proc)`** — запускає процедуру у фоновій корутині, повертаючи `ITask`.
 - **`AsyncSleep(ms)`** — неблокуючий сон у файбері, що вивільняє системний потік.
 
-Приклад з повною підтримкою лямбд `=>`:
+Функція з `async` у `{$ASYNCMODE AUTO}` і `FIBER` повертає `ITask` або `specialize IFuture<T>`. Її `Result` — це майбутнє. Зворотний виклик `RunAsync` повертає внутрішній `T` і чекає через `.Value` або `.Wait`.
+
 ```pascal
-function CalculateDataAsync(Id: Integer): specialize IFuture<Integer>; async;
+function ComputeAsync(X: Integer): specialize IFuture<Integer>; async;
 begin
   Result := specialize RunAsync<Integer>(
     function: Integer
     var
-      DataA, DataB: Integer;
+      A, B: Integer;
     begin
-      // Неблокуюче призупинення файбера на .Value:
-      DataA := FetchPartAAsync(Id).Value;
-      DataB := FetchPartBAsync(Id).Value;
-      Result := DataA + DataB;
+      A := FetchPartA(X).Value;
+      B := FetchPartB(X).Value;
+      Result := A + B;
     end);
 end;
-
-// Виклик з боку викликача НЕ блокує потік:
-F := CalculateDataAsync(42); // повертає IFuture миттєво (< 1 мс)
-// Виконуємо іншу роботу...
-Total := F.Value; // розгортає результат
 ```
+
+- Директива `async` на `ComputeAsync` тіло не призупиняє. Майбутнє з'являється тому, що його повертає `RunAsync`. Код зовнішньої функції після цього присвоєння виконується одразу.
+- `RunAsync` входить у файбер на поточному потоці і йде зворотним викликом, доки `.Value` не зустріне незавершену задачу. Якщо обидві частини вже готові, сума рахується всередині виклику.
+- Два `.Value` йдуть послідовно: друга частина стартує після завершення першої.
+- Виняток зворотного виклику лягає в майбутнє. Виняток до входу у файбер іде викликачеві, і майбутнього він не отримує.
+- `ComputeAsync(X).Value` поза файбером блокує потік викликача. На потоці циклу подій, куди має повернутися файбер, таке очікування не закінчується.
+- Кожен виклик займає файбер зі стеком 128 КБ. У `STATEMACHINE` присвоєння `Result := RunAsync(...)` не підходить: там `Result` — внутрішній `Integer`.
 
 ---
 

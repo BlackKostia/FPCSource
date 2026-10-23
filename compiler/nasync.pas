@@ -20,6 +20,7 @@ interface
     procedure prepare_async_statemachine_result(pd: tprocdef);
     procedure finish_async_statemachine_parse(pd: tprocdef);
     function lower_async_statemachine(pd: tprocdef; var code: tnode): boolean;
+    function lower_async_fiber(pd: tprocdef; var code: tnode): boolean;
 
 implementation
 
@@ -273,11 +274,24 @@ implementation
       end;
 
 
-    function statemachine_proc(pd: tprocdef): boolean;
+    function is_async_proc(pd: tprocdef): boolean;
       begin
         result:=assigned(pd) and (pio_async in pd.implprocoptions) and
-                assigned(current_module) and (current_module.asyncmode=2) and
                 not (df_generic in pd.defoptions);
+      end;
+
+
+    function statemachine_proc(pd: tprocdef): boolean;
+      begin
+        result:=is_async_proc(pd) and
+                assigned(current_module) and (current_module.asyncmode=2);
+      end;
+
+
+    function fiber_proc(pd: tprocdef): boolean;
+      begin
+        result:=is_async_proc(pd) and
+                (not assigned(current_module) or (current_module.asyncmode<>2));
       end;
 
 
@@ -288,7 +302,7 @@ implementation
         sym: tsym;
         i: integer;
       begin
-        if not statemachine_proc(pd) then
+        if not is_async_proc(pd) then
           exit;
         inner:=future_value_type(pd.returndef);
         if not assigned(inner) then
@@ -1124,6 +1138,285 @@ implementation
             code:=nw;
             result:=true;
           end;
+      end;
+
+
+    type
+      treplace_ret_info = record
+        old_sym: tsym;
+        new_sym: tsym;
+      end;
+
+    function replace_funcret_walk(var n: tnode; arg: pointer): foreachnoderesult;
+      var
+        info: ^treplace_ret_info;
+        sym, target: tsym;
+      begin
+        result:=fen_false;
+        info:=arg;
+        if n.nodetype<>loadn then
+          exit;
+        sym:=tloadnode(n).symtableentry;
+        if (sym.typ in [localvarsym,paravarsym,absolutevarsym]) and
+           (vo_is_funcret in tabstractvarsym(sym).varoptions) then
+          begin
+            tloadnode(n).symtableentry:=info^.new_sym;
+            tloadnode(n).symtable:=info^.new_sym.owner;
+            tabstractvarsym(info^.new_sym).varstate:=vs_readwritten;
+            inc(info^.new_sym.refs);
+            exit;
+          end;
+        if (sym=info^.old_sym) or (sym.name='ASYNCRESULT') or (sym.realname='ASYNCRESULT') then
+          begin
+            tloadnode(n).symtableentry:=info^.new_sym;
+            tloadnode(n).symtable:=info^.new_sym.owner;
+            tabstractvarsym(info^.new_sym).varstate:=vs_readwritten;
+            inc(info^.new_sym.refs);
+            exit;
+          end;
+        if (sym.typ=absolutevarsym) and (tabsolutevarsym(sym).abstyp=tovar) and
+           assigned(tabsolutevarsym(sym).ref) and
+           assigned(tabsolutevarsym(sym).ref.firstsym) then
+          begin
+            target:=tabsolutevarsym(sym).ref.firstsym^.sym;
+            if (target=info^.old_sym) or (target.name='ASYNCRESULT') or (target.realname='ASYNCRESULT') then
+              begin
+                tloadnode(n).symtableentry:=info^.new_sym;
+                tloadnode(n).symtable:=info^.new_sym.owner;
+                tabstractvarsym(info^.new_sym).varstate:=vs_readwritten;
+                inc(info^.new_sym.refs);
+                exit;
+              end;
+          end;
+      end;
+
+
+    procedure typecheck_fiber_body(info: tprocinfo; body: tnode; outerpd: tprocdef);
+      var
+        saved: tprocinfo;
+      begin
+        saved:=current_procinfo;
+        current_procinfo:=info;
+        tcgprocinfo(info).add_to_symtablestack;
+        do_typecheckpass(body);
+        foreachnodestatic(pm_postprocess,body,@capture_walk,outerpd);
+        tcgprocinfo(info).code:=body;
+        tcgprocinfo(info).remove_from_symtablestack;
+        current_procinfo:=saved;
+      end;
+
+
+    function find_fiber_async_proc(out obj_node: tnode; out obj_st: tsymtable): tprocsym;
+      var
+        sym: tsym;
+        st: tsymtable;
+        dummy: tprocsym;
+      begin
+        result:=nil;
+        obj_node:=nil;
+        obj_st:=nil;
+        { 1. Flat function AsyncFiberRun<T> }
+        if searchsym('ASYNCFIBERRUN$1',sym,st) and (sym.typ=procsym) then
+          begin
+            result:=tprocsym(sym);
+            exit;
+          end;
+        if searchsym('ASYNCFIBERRUN',sym,st) and (sym.typ=procsym) then
+          begin
+            dummy:=tprocsym(sym);
+            if (sp_generic_dummy in dummy.symoptions) and
+               assigned(dummy.genprocsymovlds) and (dummy.genprocsymovlds.count>0) then
+              result:=tprocsym(dummy.genprocsymovlds[0])
+            else
+              result:=dummy;
+            exit;
+          end;
+        { 2. Flat function RunAsync<T> }
+        if searchsym('RUNASYNC$1',sym,st) and (sym.typ=procsym) then
+          begin
+            result:=tprocsym(sym);
+            exit;
+          end;
+        if searchsym('RUNASYNC',sym,st) and (sym.typ=procsym) then
+          begin
+            dummy:=tprocsym(sym);
+            if (sp_generic_dummy in dummy.symoptions) and
+               assigned(dummy.genprocsymovlds) and (dummy.genprocsymovlds.count>0) then
+              result:=tprocsym(dummy.genprocsymovlds[0])
+            else
+              result:=dummy;
+            exit;
+          end;
+        { 3. Class method TFiber.Async<T> }
+        if searchsym('TFIBER',sym,st) and (sym.typ=typesym) and
+           assigned(ttypesym(sym).typedef) and (ttypesym(sym).typedef.typ in [objectdef,recorddef]) then
+          begin
+            obj_st:=tabstractrecorddef(ttypesym(sym).typedef).symtable;
+            sym:=search_struct_member(tabstractrecorddef(ttypesym(sym).typedef),'ASYNC$1');
+            if not assigned(sym) then
+              sym:=search_struct_member(tabstractrecorddef(ttypesym(sym).typedef),'ASYNC');
+            if assigned(sym) and (sym.typ=procsym) then
+              begin
+                dummy:=tprocsym(sym);
+                if (sp_generic_dummy in dummy.symoptions) and
+                   assigned(dummy.genprocsymovlds) and (dummy.genprocsymovlds.count>0) then
+                  result:=tprocsym(dummy.genprocsymovlds[0])
+                else
+                  result:=dummy;
+                obj_node:=ctypenode.create(tabstractrecorddef(sym.owner.defowner));
+                exit;
+              end;
+          end;
+      end;
+
+
+    function find_fiber_spawn_proc(out obj_node: tnode; out obj_st: tsymtable): tprocsym;
+      var
+        sym: tsym;
+        st: tsymtable;
+      begin
+        result:=nil;
+        obj_node:=nil;
+        obj_st:=nil;
+        { 1. Flat function AsyncFiberRunTask }
+        if searchsym('ASYNCFIBERRUNTASK',sym,st) and (sym.typ=procsym) then
+          begin
+            result:=tprocsym(sym);
+            exit;
+          end;
+        { 2. Flat function SpawnAsync }
+        if searchsym('SPAWNASYNC',sym,st) and (sym.typ=procsym) then
+          begin
+            result:=tprocsym(sym);
+            exit;
+          end;
+        { 3. Class method TFiber.Spawn }
+        if searchsym('TFIBER',sym,st) and (sym.typ=typesym) and
+           assigned(ttypesym(sym).typedef) and (ttypesym(sym).typedef.typ in [objectdef,recorddef]) then
+          begin
+            obj_st:=tabstractrecorddef(ttypesym(sym).typedef).symtable;
+            sym:=search_struct_member(tabstractrecorddef(ttypesym(sym).typedef),'SPAWN');
+            if assigned(sym) and (sym.typ=procsym) then
+              begin
+                result:=tprocsym(sym);
+                obj_node:=ctypenode.create(tabstractrecorddef(sym.owner.defowner));
+                exit;
+              end;
+          end;
+      end;
+
+
+    function lower_async_fiber(pd: tprocdef; var code: tnode): boolean;
+      var
+        innerdef: tdef;
+        potype: tproctypeoption;
+        resdef: tdef;
+        fiberinfo: tprocinfo;
+        fibern, call: tnode;
+        runproc: tprocsym;
+        run_obj: tnode;
+        run_st: tsymtable;
+        ctx: tspecializationcontext;
+        posinfo: pfileposinfo;
+        outlast: tstatementnode;
+        bodycode: tnode;
+        ret_info: treplace_ret_info;
+      begin
+        result:=false;
+        if not assigned(code) or not fiber_proc(pd) then
+          exit;
+        innerdef:=future_value_type(pd.returndef);
+        if assigned(innerdef) then
+          begin
+            potype:=potype_function;
+            resdef:=innerdef;
+            if not assigned(innerdef.typesym) then
+              begin
+                messagepos1(pd.fileinfo,parser_e_await_unsupported,'the async result type has no name');
+                exit;
+              end;
+            runproc:=find_fiber_async_proc(run_obj,run_st);
+            if not assigned(runproc) then
+              begin
+                messagepos1(pd.fileinfo,parser_e_await_unsupported,'async fiber runtime (AsyncFiberRun, TFiber.Async, or RunAsync) is not visible; ensure fclasync or async.fiber is in uses');
+                exit;
+              end;
+          end
+        else
+          begin
+            potype:=potype_procedure;
+            resdef:=voidtype;
+            runproc:=find_fiber_spawn_proc(run_obj,run_st);
+            if not assigned(runproc) then
+              begin
+                messagepos1(pd.fileinfo,parser_e_await_unsupported,'async fiber runtime (AsyncFiberRunTask, TFiber.Spawn, or SpawnAsync) is not visible; ensure fclasync or async.fiber is in uses');
+                exit;
+              end;
+          end;
+
+        fiberinfo:=current_procinfo.create_for_outlining('$asyncfiber',nil,potype,resdef,code);
+        fiberinfo.procdef.fileinfo:=pd.fileinfo;
+        fiberinfo.procdef.procsym.fileinfo:=pd.fileinfo;
+        if potype=potype_function then
+          begin
+            insert_funcret_local(fiberinfo.procdef);
+            tabstractvarsym(fiberinfo.procdef.funcretsym).varstate:=vs_readwritten;
+            inc(fiberinfo.procdef.funcretsym.refs);
+          end;
+        include(fiberinfo.flags,pi_do_call);
+        include(fiberinfo.flags,pi_uses_exceptions);
+        fiberinfo.procdef.is_implemented:=true;
+
+        bodycode:=code;
+        code:=nil;
+        if potype=potype_function then
+          begin
+            ret_info.old_sym:=tsym(pd.localst.find('ASYNCRESULT'));
+            if not assigned(ret_info.old_sym) then
+              ret_info.old_sym:=tsym(pd.localst.find('$ASYNCRESULT'));
+            ret_info.new_sym:=fiberinfo.procdef.funcretsym;
+            foreachnodestatic(pm_postprocess,bodycode,@replace_funcret_walk,@ret_info);
+          end;
+
+        typecheck_fiber_body(fiberinfo,bodycode,pd);
+
+        fibern:=cloadnode.create(fiberinfo.procdef.procsym,fiberinfo.procdef.procsym.owner);
+        if assigned(innerdef) then
+          begin
+            ctx:=tspecializationcontext.create;
+            ctx.paramlist.add(innerdef.typesym);
+            new(posinfo);
+            posinfo^:=pd.fileinfo;
+            ctx.poslist.add(posinfo);
+            ctx.genname:=runproc.realname;
+            make_prettystring(innerdef,true,'',ctx.prettyname,ctx.specializename);
+            if assigned(run_obj) then
+              call:=ccallnode.create(
+                      ccallparanode.create(fibern,nil),
+                      runproc,run_st,run_obj,[cnf_member_call],ctx)
+            else
+              call:=ccallnode.create(
+                      ccallparanode.create(fibern,nil),
+                      runproc,runproc.owner,nil,[],ctx);
+            call:=cassignmentnode.create(
+                    cloadnode.create(pd.funcretsym,pd.funcretsym.owner),
+                    call);
+          end
+        else
+          begin
+            if assigned(run_obj) then
+              call:=ccallnode.create(
+                      ccallparanode.create(fibern,nil),
+                      runproc,run_st,run_obj,[cnf_member_call],nil)
+            else
+              call:=ccallnode.create(
+                      ccallparanode.create(fibern,nil),
+                      runproc,runproc.owner,nil,[],nil);
+          end;
+
+        code:=internalstatements(outlast);
+        addstatement(outlast,call);
+        result:=true;
       end;
 
 end.

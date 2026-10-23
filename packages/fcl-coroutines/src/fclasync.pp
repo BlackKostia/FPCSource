@@ -45,6 +45,10 @@ generic function RunAsync<T>(const AFunc: specialize TFunc<T>; ALoop: IEventLoop
 { Run asynchronous procedure returning ITask without blocking caller thread }
 function SpawnAsync(const AProc: TProc; ALoop: IEventLoop = nil; AStackSize: Cardinal = 128 * 1024): ITask;
 
+{ Compiler lowering helpers for lower_async_fiber phase }
+generic function AsyncFiberRun<T>(const AFunc: specialize TFunc<T>): specialize IFuture<T>;
+function AsyncFiberRunTask(const AProc: TProc): ITask;
+
 { Non-blocking sleep: yields fiber to event loop / pool until timer expiry }
 procedure AsyncSleep(AMilliseconds: Cardinal; ALoop: IEventLoop = nil);
 
@@ -58,6 +62,16 @@ end;
 function SpawnAsync(const AProc: TProc; ALoop: IEventLoop; AStackSize: Cardinal): ITask;
 begin
   Result := TFiber.Spawn(AProc, ALoop, AStackSize);
+end;
+
+generic function AsyncFiberRun<T>(const AFunc: specialize TFunc<T>): specialize IFuture<T>;
+begin
+  Result := async.fiber.specialize AsyncFiberRun<T>(AFunc);
+end;
+
+function AsyncFiberRunTask(const AProc: TProc): ITask;
+begin
+  Result := async.fiber.AsyncFiberRunTask(AProc);
 end;
 
 procedure AsyncSleep(AMilliseconds: Cardinal; ALoop: IEventLoop);

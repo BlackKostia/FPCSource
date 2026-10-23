@@ -2,8 +2,13 @@
 # Середовище для компіляції тестів гілки feature/concurrency
 # свіжозібраним компілятором trunk і юнітами з дерева джерел.
 # Використання: . tests/concurrency/fpcenv.sh ; $FPC_TRUNK @"$FPC_CFG" prog.pp
-ROOT=$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)
-[ -x "$ROOT/compiler/ppcx64" ] || ROOT=$(git rev-parse --show-toplevel)
+if [ -n "$BASH_SOURCE" ]; then
+  SCRIPT_DIR=$(cd "$(dirname "$BASH_SOURCE")" 2>/dev/null && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+fi
+ROOT=$(cd "$SCRIPT_DIR/../.." 2>/dev/null && pwd)
+[ -x "$ROOT/compiler/ppcx64" ] || ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 TARGET=x86_64-linux
 FPC_SRC_PACKAGES="${FPC_SRC_PACKAGES:-fcl-coroutines fcl-async fcl-eventloop vcl-compat fcl-base fcl-hash fcl-json fcl-web fcl-xml hash wasm-utils fcl-fpcunit}"
 FPC_TRUNK="$ROOT/compiler/ppcx64"

@@ -2590,6 +2590,11 @@ implementation
                  do_typecheckpass(code);
                  postprocess_capturer(self);
                end
+             else if lower_async_fiber(procdef,code) then
+               begin
+                 do_typecheckpass(code);
+                 postprocess_capturer(self);
+               end
              else
                do_typecheckpass(code);
 
@@ -3170,7 +3175,11 @@ implementation
           begin
             finish_async_statemachine_parse(pd);
             if assigned(code) then
-              lowered := lower_async_statemachine(pd, code);
+              begin
+                lowered := lower_async_statemachine(pd, code);
+                if not lowered then
+                  lowered := lower_async_fiber(pd, code);
+              end;
           end;
 
         postprocess_capturer(current_procinfo);

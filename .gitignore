@@ -128,3 +128,6 @@ tests/concurrency/out-asan/
 # Test programs built in place (their sources are test_*.pp)
 tests/concurrency/test_*
 !tests/concurrency/test_*.pp
+.kilo-bridge/
+.agents/
+

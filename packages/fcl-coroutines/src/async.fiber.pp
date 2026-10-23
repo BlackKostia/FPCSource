@@ -120,6 +120,10 @@ type
     property SuspendOnWait: Boolean read FSuspendOnWait write FSuspendOnWait;
   end;
 
+{ Helper routines for compiler-generated lower_async_fiber phase }
+generic function AsyncFiberRun<T>(const AFunc: specialize TFunc<T>): specialize IFuture<T>;
+function AsyncFiberRunTask(const AProc: TProc): ITask;
+
 implementation
 
 threadvar
@@ -530,9 +534,12 @@ begin
 end;
 
 procedure TFiberAsyncBody.Execute;
+var
+  LRes: T;
 begin
   try
-    Source.SetResult(Func());
+    LRes := Func();
+    Source.SetResult(LRes);
   except
     Source.SetException(Exception(AcquireExceptionObject));
   end;
@@ -742,6 +749,16 @@ begin
   if LStatus <> 0 then
     raise ESocketException.CreateFmt('Async write failed with error %d', [LStatus]);
   Result := LBytesWritten;
+end;
+
+generic function AsyncFiberRun<T>(const AFunc: specialize TFunc<T>): specialize IFuture<T>;
+begin
+  Result := TFiber.specialize Async<T>(AFunc);
+end;
+
+function AsyncFiberRunTask(const AProc: TProc): ITask;
+begin
+  Result := TFiber.Spawn(AProc);
 end;
 
 initialization

@@ -46,15 +46,11 @@ end;
 
 { --- 1. Async function returns immediately to caller (non-blocking call) --- }
 function ComputeSlowlyAsync(AMs, AValue: Integer): specialize IFuture<Integer>; async;
+var
+  V: Integer;
 begin
-  Result := specialize RunAsync<Integer>(
-    function: Integer
-    var
-      V: Integer;
-    begin
-      V := DelayFuture(AMs, AValue).Value;
-      Result := V * 2;
-    end);
+  V := await DelayFuture(AMs, AValue);
+  Result := V * 2;
 end;
 
 procedure TestNonBlockingCaller;
@@ -72,7 +68,7 @@ begin
   Check('Call returns to caller immediately (< 50ms)', Took < 50);
   Check('Future is initially not completed', F.Status <> TTaskStatus.Completed);
 
-  { Now read the result. await is only legal inside an async routine. }
+  { Now read the result. }
   Res := F.Value;
   Check('Result from async function is correct (21 * 2 = 42)', Res = 42);
   Check('Future is now completed', F.Status = TTaskStatus.Completed);
@@ -84,12 +80,8 @@ var
 
 procedure BackgroundTaskAsync(AMs: Integer); async;
 begin
-  SpawnAsync(
-    procedure
-    begin
-      DelayFuture(AMs, 0).Wait;
-      GBackgroundDone := True;
-    end);
+  await DelayFuture(AMs, 0);
+  GBackgroundDone := True;
 end;
 
 procedure TestAsyncProcedure;
@@ -158,33 +150,21 @@ end;
 { --- 4. Multi-step Async Pipeline with Await --- }
 function Step1Async(X: Integer): specialize IFuture<Integer>; async;
 begin
-  Result := specialize RunAsync<Integer>(
-    function: Integer
-    begin
-      Result := DelayFuture(30, X).Value + 10;
-    end);
+  Result := await DelayFuture(30, X) + 10;
 end;
 
 function Step2Async(X: Integer): specialize IFuture<Integer>; async;
 begin
-  Result := specialize RunAsync<Integer>(
-    function: Integer
-    begin
-      Result := DelayFuture(30, X).Value * 3;
-    end);
+  Result := await DelayFuture(30, X) * 3;
 end;
 
 function PipelineAsync(InputVal: Integer): specialize IFuture<Integer>; async;
+var
+  S1, S2: Integer;
 begin
-  Result := specialize RunAsync<Integer>(
-    function: Integer
-    var
-      S1, S2: Integer;
-    begin
-      S1 := Step1Async(InputVal).Value;  { Input + 10 }
-      S2 := Step2Async(S1).Value;        { (Input + 10) * 3 }
-      Result := S2;
-    end);
+  S1 := await Step1Async(InputVal);  { Input + 10 }
+  S2 := await Step2Async(S1);        { (Input + 10) * 3 }
+  Result := S2;
 end;
 
 procedure TestAsyncPipeline;
@@ -202,13 +182,9 @@ end;
 { --- 5. Async Exception Handling (Propagation via Await) --- }
 function FaultingAsync: specialize IFuture<Integer>; async;
 begin
-  Result := specialize RunAsync<Integer>(
-    function: Integer
-    begin
-      Sleep(20);
-      raise Exception.Create('Network connection timeout in async routine');
-      Result := 0;
-    end);
+  Sleep(20);
+  raise Exception.Create('Network connection timeout in async routine');
+  Result := 0;
 end;
 
 procedure TestAsyncException;
@@ -244,16 +220,20 @@ end;
 { --- 6. Arrow Functions + Async Integration --- }
 function ArrowAsyncAdd(A, B: Integer): specialize IFuture<Integer>; async;
 begin
-  Result := specialize RunAsync<Integer>(() => Integer(DelayFuture(20, A).Value + DelayFuture(20, B).Value));
+  Result := await DelayFuture(20, A) + await DelayFuture(20, B);
 end;
 
 procedure TestArrowAsync;
+type
+  TAddFunc = reference to function(X, Y: Integer): specialize IFuture<Integer>;
 var
+  AddLambda: TAddFunc;
   F: specialize IFuture<Integer>;
   Ans: Integer;
 begin
   Writeln('--- Test 6: Arrow Functions and Async Synergy ---');
-  F := ArrowAsyncAdd(100, 200);
+  AddLambda := (X: Integer, Y: Integer) => ArrowAsyncAdd(X, Y);
+  F := AddLambda(100, 200);
   Ans := F.Value;
   Check('Arrow lambda in async routine produced 300', Ans = 300);
 end;
