@@ -338,7 +338,44 @@ end;
 
 ---
 
-## 8. Верифікація та тестування багатопоточного коду
+## 8. Загублені винятки: `OnUnobservedTaskException`
+
+Коли задача завершується з помилкою у режимі **fire-and-forget** (наприклад, асинхронна процедура `procedure Foo; async;` або `TTask.Run` без збереження посилання на `ITask`), викликач не має інтерфейсу задачі й не може викликати `await`, `.Wait` чи `.GetExceptionObject`.
+
+Раніше такий виняток просто тихо звільнявся в деструкторі `TTask.Destroy`. Тепер у `System.Threading` додано механізм перехоплення незафіксованих помилок:
+
+```pascal
+type
+  TUnobservedTaskExceptionEvent = procedure(const ATask: ITask; AException: Exception);
+
+var
+  OnUnobservedTaskException: TUnobservedTaskExceptionEvent = nil;
+```
+
+### Як це працює:
+- Якщо задача завершилася зі статусом `Exception`, але її виняток жодного разу не було прочитано/очікувано (`FExceptionObserved = False`), під час звільнення задачі викликається хук `OnUnobservedTaskException`.
+- Якщо хук `OnUnobservedTaskException = nil`, помилка виводиться у `StdErr`:
+  ```text
+  Unhandled exception in async task: EMyError: Task failed unexpectedly
+  ```
+- Працює однаково для `procedure; async;` як у режимі `{$ASYNCMODE STATEMACHINE}`, так і в режимі `{$ASYNCMODE FIBER}`, а також для «покинутих» задач `TTask.Run`.
+
+**Приклад використання:**
+
+```pascal
+procedure LogUnobservedException(const ATask: ITask; AException: Exception);
+begin
+  Logger.Error('Загублений виняток у фоновій задачі: %s: %s', 
+    [AException.ClassName, AException.Message]);
+end;
+
+initialization
+  OnUnobservedTaskException := @LogUnobservedException;
+```
+
+---
+
+## 9. Верифікація та тестування багатопоточного коду
 
 1. **Перевірка гонок даних під Valgrind Helgrind / DRD**:
    - Модуль `fpvalgrind` (пакет `rtl-objpas`) надає клієнтські запити `VgHappensBefore`, `VgHappensAfter`, `VgCleanMemory`, `VgBenignRace`, `VgForgetAll`, `VgRunningOnValgrind`.

@@ -709,7 +709,9 @@ type
     function GetDoneEvent: TLightweightEvent;
   protected
     FException: TObject;
+    FExceptionObserved: Boolean;
     FDoneEvent : TLightweightEvent;
+    procedure NotifyUnobservedException(aException: Exception);
     function UpdateStateAtomic(aNewState: TOptionStateFlags; aInvalidStates: TOptionStateFlags): Boolean; overload;
     function UpdateStateAtomic(aNewState: TOptionStateFlags; aInvalidStates: TOptionStateFlags; out aOldState: TOptionStateFlags): Boolean; overload;
     procedure SetTaskStop;
@@ -1334,12 +1336,17 @@ type
     can be suspended; the caller then blocks as usual. }
   TTaskAwaitHook = function(const aTask: ITask): Boolean;
 
+  TUnobservedTaskExceptionEvent = procedure(const ATask: ITask; AException: Exception);
+
 var
   { Installed by a coroutine library (fcl-coroutines installs one for
     TFiber). Waits without a timeout - ITask.Wait, IFuture.Value, the await
     operator, TTask.WaitForAll - call it, so that they suspend the coroutine
     instead of blocking its operating-system thread. }
   TaskAwaitHook: TTaskAwaitHook = nil;
+
+  { Global hook for unobserved task exceptions (e.g. fire-and-forget async procedures) }
+  OnUnobservedTaskException: TUnobservedTaskExceptionEvent = nil;
 
 { Calls aProc once aTask has finished, in the thread that completes it, or at
   once in the calling thread if it already has. Unlike ContinueWith it
@@ -3825,9 +3832,49 @@ begin
   raise ENoConstructException.Create(SErrInvalidTaskConstructor);
 end;
 
+procedure TTask.NotifyUnobservedException(aException: Exception);
+var
+  TaskIntf: ITask;
+begin
+  if Assigned(OnUnobservedTaskException) then
+    begin
+      FRefCount:=$40000000;
+      try
+        TaskIntf:=Self;
+        OnUnobservedTaskException(TaskIntf, aException);
+      except
+        // Prevent user exceptions from breaking destructor
+      end;
+      TaskIntf:=nil;
+      FRefCount:=0;
+    end
+  else
+    begin
+      try
+        WriteLn(StdErr, 'Unhandled exception in async task: ', aException.ClassName, ': ', aException.Message);
+      except
+      end;
+    end;
+end;
+
 destructor TTask.Destroy;
+var
+  Ex: Exception;
 begin
   FCancelRegistration.Unregister;
+  if Assigned(FException) and not FExceptionObserved then
+    begin
+      if FException is Exception then
+        Ex:=Exception(FException)
+      else if FExceptionMessage<>'' then
+        Ex:=Exception.Create(FExceptionMessage)
+      else
+        Ex:=Exception.Create(SErrTaskFaulted);
+      NotifyUnobservedException(Ex);
+      FExceptionObserved:=True;
+      if Ex<>FException then
+        Ex.Free;
+    end;
   FreeAndNil(FException);
   FreeAndNil(FDoneEvent);
   inherited Destroy;
@@ -4161,6 +4208,7 @@ begin
   Result:=Nil;
   if not HasExceptions then
     Exit;
+  FExceptionObserved:=True;
   if Length(FTasksWithExceptions)=0 then
     begin
     // Object is not nil since HasExceptions returned true.
@@ -4875,6 +4923,7 @@ begin
   FException:=nil;
   FExceptionClass:=nil;
   FExceptionMessage:='';
+  FExceptionObserved:=False;
   FCancelRegistration:=Default(TCancellationTokenRegistration);
   if TCreateFlag.Replicating in aParams.CreateFlags then
     Include(FStateFlags, TOptionStateFlag.Replicating);

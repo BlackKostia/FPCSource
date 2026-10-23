@@ -335,6 +335,24 @@ begin
     FStackBase := nil;
   end;
 
+  if Assigned(FException) then
+  begin
+    if Assigned(OnUnobservedTaskException) then
+    begin
+      try
+        OnUnobservedTaskException(nil, FException);
+      except
+      end;
+    end
+    else
+    begin
+      try
+        WriteLn(StdErr, 'Unhandled exception in fiber: ', FException.ClassName, ': ', FException.Message);
+      except
+      end;
+    end;
+  end;
+
   FException.Free;
   inherited Destroy;
 end;

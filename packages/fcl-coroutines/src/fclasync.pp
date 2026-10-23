@@ -36,6 +36,7 @@ type
 
   TFiber = async.fiber.TFiber;
   TAsyncTaskBuilder = async.statemachine.TAsyncTaskBuilder;
+  TUnobservedTaskExceptionEvent = System.Threading.TUnobservedTaskExceptionEvent;
 
 { Ergonomic modern async helper functions }
 
