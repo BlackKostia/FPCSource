@@ -1780,6 +1780,10 @@ parser_e_await_unsupported=03390_E_This await is not supported by the state-mach
 % state machine. \var{await} is only allowed as a statement or as the whole
 % right-hand side of an assignment, and not in the condition of \var{if},
 % \var{while}, \var{for} or \var{case}.
+parser_e_async_no_var_out_para=03391_E_Async routines cannot have var or out parameters
+% Async routines return control to the caller before completing, so passing
+% parameters by reference with \var{var} or \var{out} can lead to stack corruption
+% or dangling pointers when the caller stack frame is popped.
 %
 % \end{description}
 %

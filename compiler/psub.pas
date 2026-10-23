@@ -3041,6 +3041,14 @@ implementation
               Message(parser_e_async_must_return_task_or_future)
             else
               async_ok := true;
+            if assigned(pd.parast) and assigned(pd.parast.SymList) then
+              begin
+                for i:=0 to pd.parast.SymList.Count-1 do
+                  if (tsym(pd.parast.SymList[i]).typ=paravarsym) and
+                     not (vo_is_hidden_para in tparavarsym(pd.parast.SymList[i]).varoptions) and
+                     (tparavarsym(pd.parast.SymList[i]).varspez in [vs_var,vs_out]) then
+                    MessagePos(tparavarsym(pd.parast.SymList[i]).fileinfo,parser_e_async_no_var_out_para);
+              end;
           end;
 
         if assigned(old_current_procinfo) and

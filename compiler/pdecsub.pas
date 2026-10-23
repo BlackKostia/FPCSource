@@ -3127,6 +3127,7 @@ var
       }
       var
         p     : longint;
+        i     : longint;
         name : TIDString;
         po_comp : tprocoptions;
         tokenloc : TFilePosInfo;
@@ -3181,6 +3182,14 @@ var
                            is_class(tprocdef(pd).returndef) or
                            (tprocdef(pd).returndef.typ = recorddef)) then
                      Message(parser_e_async_must_return_task_or_future);
+                   if assigned(tprocdef(pd).parast) and assigned(tprocdef(pd).parast.SymList) then
+                     begin
+                       for i:=0 to tprocdef(pd).parast.SymList.Count-1 do
+                         if (tsym(tprocdef(pd).parast.SymList[i]).typ=paravarsym) and
+                            not (vo_is_hidden_para in tparavarsym(tprocdef(pd).parast.SymList[i]).varoptions) and
+                            (tparavarsym(tprocdef(pd).parast.SymList[i]).varspez in [vs_var,vs_out]) then
+                           MessagePos(tparavarsym(tprocdef(pd).parast.SymList[i]).fileinfo,parser_e_async_no_var_out_para);
+                     end;
                  end;
                parse_proc_direc:=true;
                exit;
