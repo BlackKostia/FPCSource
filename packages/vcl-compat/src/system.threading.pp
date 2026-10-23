@@ -823,6 +823,8 @@ type
     class function WaitForAny(const aTasks: array of ITask): Integer; overload; static;
     class function WaitForAny(const aTasks: array of ITask; aTimeout: Cardinal): Integer; overload; static;
     class function WaitForAny(const aTasks: array of ITask; const aTimeout: TTimeSpan): Integer; overload; static;
+    class function WhenAll(const aTasks: array of ITask): ITask; static;
+    class function WhenAny(const aTasks: array of ITask): specialize IFuture<ITask>; static;
   end;
 
   { TFutureContinuationTask }
@@ -1377,6 +1379,7 @@ Resourcestring
   SErrBreakAfterStop = 'Break loop after loop was stopped';
   SErrInvalidTaskConstructor = 'Cannot use parameterless TTask constructor';
   SErrOneOrMoreTasksCancelled = 'One or more tasks where cancelled';
+  SErrTaskFaulted = 'One or more tasks faulted';
   SAggregateExceptionCount = 'Aggregate exception for %d exceptions';
 
 Type
@@ -7531,6 +7534,208 @@ begin
     GDelayLock.Leave;
   end;
   Result:=GDelay.Add(aMilliseconds);
+end;
+
+type
+  IWhenAllContext = interface(IInterface)
+    ['{84B2FE3C-C049-4A73-BE99-528224538801}']
+    procedure TaskCompleted(const aTask: ITask);
+  end;
+
+  TWhenAllContext = class(TInterfacedObject, IWhenAllContext)
+  private
+    FSource: specialize TTaskCompletionSource<Byte>;
+    FRemaining: LongInt;
+    FFirstEx: Exception;
+    FHasCanceled: Boolean;
+    FLock: TRTLCriticalSection;
+  public
+    constructor Create(aCount: Integer);
+    destructor Destroy; override;
+    procedure TaskCompleted(const aTask: ITask);
+    property Source: specialize TTaskCompletionSource<Byte> read FSource;
+  end;
+
+  IWhenAnyContext = interface(IInterface)
+    ['{74F7DE89-7023-44BF-B822-421711298802}']
+    procedure TaskCompleted(const aTask: ITask);
+  end;
+
+  TWhenAnyContext = class(TInterfacedObject, IWhenAnyContext)
+  private
+    FSource: specialize TTaskCompletionSource<ITask>;
+    FClaimed: LongInt;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure TaskCompleted(const aTask: ITask);
+    property Source: specialize TTaskCompletionSource<ITask> read FSource;
+  end;
+
+constructor TWhenAllContext.Create(aCount: Integer);
+begin
+  inherited Create;
+  InitCriticalSection(FLock);
+  FRemaining:=aCount;
+  FSource:=specialize TTaskCompletionSource<Byte>.Create;
+  FFirstEx:=nil;
+  FHasCanceled:=False;
+end;
+
+destructor TWhenAllContext.Destroy;
+begin
+  FSource.Free;
+  DoneCriticalSection(FLock);
+  inherited Destroy;
+end;
+
+procedure TWhenAllContext.TaskCompleted(const aTask: ITask);
+var
+  Ex: Exception;
+  IsFaulted, IsCanceled: Boolean;
+  Left: LongInt;
+  TaskObj: TTask;
+begin
+  IsFaulted:=False;
+  IsCanceled:=False;
+  Ex:=nil;
+  if Assigned(aTask) then
+    begin
+      if aTask.Status=TTaskStatus.Exception then
+        begin
+          IsFaulted:=True;
+          try
+            TaskObj:=aTask as TTask;
+            if Assigned(TaskObj) then
+              Ex:=TaskObj.GetExceptionObject;
+          except
+            Ex:=nil;
+          end;
+          if not Assigned(Ex) then
+            Ex:=Exception.Create(SErrTaskFaulted);
+        end
+      else if aTask.Status=TTaskStatus.Canceled then
+        IsCanceled:=True;
+    end;
+
+  EnterCriticalSection(FLock);
+  try
+    if IsFaulted then
+      begin
+        if not Assigned(FFirstEx) then
+          FFirstEx:=Ex
+        else if Assigned(Ex) and (Ex <> FFirstEx) then
+          Ex.Free;
+      end;
+    if IsCanceled then
+      FHasCanceled:=True;
+  finally
+    LeaveCriticalSection(FLock);
+  end;
+
+  Left:=InterlockedDecrement(FRemaining);
+  if Left=0 then
+    begin
+      if Assigned(FFirstEx) then
+        FSource.SetException(FFirstEx)
+      else if FHasCanceled then
+        FSource.SetCanceled
+      else
+        FSource.SetResult(0);
+    end;
+end;
+
+constructor TWhenAnyContext.Create;
+begin
+  inherited Create;
+  FSource:=specialize TTaskCompletionSource<ITask>.Create;
+  FClaimed:=0;
+end;
+
+destructor TWhenAnyContext.Destroy;
+begin
+  FSource.Free;
+  inherited Destroy;
+end;
+
+procedure TWhenAnyContext.TaskCompleted(const aTask: ITask);
+begin
+  if InterlockedCompareExchange(FClaimed,1,0)=0 then
+    FSource.SetResult(aTask);
+end;
+
+class function TTask.WhenAll(const aTasks: array of ITask): ITask;
+var
+  Source: specialize TTaskCompletionSource<Byte>;
+  Ctx: IWhenAllContext;
+  CtxObj: TWhenAllContext;
+  I: Integer;
+  TaskI: ITask;
+  CompleteProc: TITaskProc;
+begin
+  if Length(aTasks)=0 then
+    begin
+      Source:=specialize TTaskCompletionSource<Byte>.Create;
+      Source.SetResult(0);
+      Result:=Source.Task;
+      Source.Free;
+      Exit;
+    end;
+
+  CtxObj:=TWhenAllContext.Create(Length(aTasks));
+  Ctx:=CtxObj;
+  Result:=CtxObj.Source.Task;
+
+  CompleteProc:=
+    procedure(aCompletedTask: ITask)
+    begin
+      Ctx.TaskCompleted(aCompletedTask);
+    end;
+
+  for I:=0 to High(aTasks) do
+    begin
+      TaskI:=aTasks[I];
+      if Assigned(TaskI) then
+        (TaskI as TTask).AddCompleteEvent(CompleteProc)
+      else
+        CompleteProc(nil);
+    end;
+end;
+
+class function TTask.WhenAny(const aTasks: array of ITask): specialize IFuture<ITask>;
+var
+  Source: specialize TTaskCompletionSource<ITask>;
+  Ctx: IWhenAnyContext;
+  CtxObj: TWhenAnyContext;
+  I: Integer;
+  TaskI: ITask;
+  CompleteProc: TITaskProc;
+begin
+  if Length(aTasks)=0 then
+    begin
+      Source:=specialize TTaskCompletionSource<ITask>.Create;
+      Source.SetResult(nil);
+      Result:=Source.Task;
+      Source.Free;
+      Exit;
+    end;
+
+  CtxObj:=TWhenAnyContext.Create;
+  Ctx:=CtxObj;
+  Result:=CtxObj.Source.Task;
+
+  CompleteProc:=
+    procedure(aCompletedTask: ITask)
+    begin
+      Ctx.TaskCompleted(aCompletedTask);
+    end;
+
+  for I:=0 to High(aTasks) do
+    begin
+      TaskI:=aTasks[I];
+      if Assigned(TaskI) then
+        (TaskI as TTask).AddCompleteEvent(CompleteProc);
+    end;
 end;
 
 Procedure InitThreading;

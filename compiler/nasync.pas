@@ -1504,6 +1504,10 @@ implementation
               call:=ccallnode.create(
                       ccallparanode.create(fibern,nil),
                       runproc,runproc.owner,nil,[],nil);
+            if not is_void(pd.returndef) then
+              call:=cassignmentnode.create(
+                      cloadnode.create(pd.funcretsym,pd.funcretsym.owner),
+                      call);
           end;
 
         code:=internalstatements(outlast);

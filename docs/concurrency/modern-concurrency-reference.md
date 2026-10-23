@@ -224,8 +224,10 @@ type
 | `TTask.Create(Proc: TProc): ITask` | Створює задачу у стані `Created`. Потребує явного виклику `.Start`. |
 | `TTask.Run(Proc: TProc): ITask` | Створює та негайно ставить задачу в чергу пулу потоків. |
 | `TTask.Run(Proc: TProc; constref Token: TCancellationToken): ITask` | Запускає задачу з прив'язкою до токена скасування. |
-| `TTask.WaitForAll(Tasks: array of ITask; Timeout: Cardinal): Boolean` | Блокує до завершення всіх задач у списку. |
-| `TTask.WaitForAny(Tasks: array of ITask; Timeout: Cardinal): Integer` | Повертає індекс першої завершеної задачі. |
+| `TTask.WaitForAll(Tasks: array of ITask; Timeout: Cardinal): Boolean` | Синхронно блокує потік до завершення всіх задач у списку. |
+| `TTask.WaitForAny(Tasks: array of ITask; Timeout: Cardinal): Integer` | Синхронно блокує потік до завершення першої задачі, повертаючи її індекс. |
+| `TTask.WhenAll(Tasks: array of ITask): ITask` | Неблокуючий комбінатор: повертає `ITask`, завершений коли завершилися всі задачі (ідеально для `await`). |
+| `TTask.WhenAny(Tasks: array of ITask): specialize IFuture<ITask>` | Неблокуючий комбінатор: повертає `IFuture<ITask>`, чиїм значенням є перша виконана задача. |
 
 ---
 

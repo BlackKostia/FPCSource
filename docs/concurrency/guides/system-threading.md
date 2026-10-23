@@ -125,10 +125,66 @@ begin
 end;
 ```
 
-### 4.2. Очікування групи задач (`WaitForAll` і `WaitForAny`)
+### 4.2. Синхронне блокувальне очікування групи задач (`WaitForAll` і `WaitForAny`)
 
-- **`TTask.WaitForAll([T1, T2, ...], TimeoutMs)`** — чекає завершення **всіх** задач (повертає `False`, якщо сплив таймаут; кидає `EAggregateException`, якщо хоча б одна задача впала з винятком).
-- **`TTask.WaitForAny([T1, T2, ...], TimeoutMs)`** — чекає завершення **першої** задачі з масиву й повертає її індекс (`0..High`), або `-1` у разі таймауту. Зручно для хеджування затримок (запит до кількох реплік одночасно).
+- **`TTask.WaitForAll([T1, T2, ...], TimeoutMs)`** — блокує викликаючий потік ОС до завершення **всіх** задач (повертає `False`, якщо сплив таймаут; кидає `EAggregateException`, якщо хоча б одна задача впала з винятком).
+- **`TTask.WaitForAny([T1, T2, ...], TimeoutMs)`** — блокує викликаючий потік ОС до завершення **першої** задачі з масиву й повертає її індекс (`0..High`), або `-1` у разі таймауту. Зручно для хеджування затримок (запит до кількох реплік одночасно).
+
+> [!WARNING]
+> `WaitForAll` та `WaitForAny` блокують потік операційної системи (`Wait`), тому їх небажано викликати в інтерфейсних потоках (GUI) або всередині асинхронних функцій (`async`), де це може призвести до голодування пулу потоків або зависання циклу подій.
+
+### 4.3. Неблокуючі асинхронні комбінатори (`WhenAll` і `WhenAny`)
+
+Для сучасного асинхронного програмування з `async` / `await` додано неблокуючі комбінатори:
+
+```pascal
+class function TTask.WhenAll(const aTasks: array of ITask): ITask; static;
+class function TTask.WhenAny(const aTasks: array of ITask): specialize IFuture<ITask>; static;
+```
+
+- **`TTask.WhenAll`**:
+  - Повертає `ITask`, що завершується лише тоді, коли завершилися всі передані задачі.
+  - Працює без блокування потоків через внутрішні колбеки завершення `AddCompleteEvent`.
+  - Якщо передано порожній масив `[]`, повертає вже завершену задачу.
+  - Якщо хоча б одна задача завершилася з помилкою, результуючий таск переходить у стан `Exception` і при `await` піднімає виняток у точку очікування.
+- **`TTask.WhenAny`**:
+  - Повертає `specialize IFuture<ITask>`, значення якого (`.Value` або результат `await`) є екземпляром першої задачі, що завершилася.
+  - Дозволяє неблокуюче обирати найшвидшу репліку або обробляти результати задач за мірою їх готовності.
+
+**Приклад використання:**
+
+```pascal
+function FetchDashboardAsync: specialize IFuture<TDashboardData>; async;
+var
+  UserTask: specialize IFuture<TUser>;
+  OrdersTask: specialize IFuture<TOrders>;
+  NotificationsTask: specialize IFuture<TNotifications>;
+begin
+  // Одночасний запуск фонових задач
+  UserTask := FetchUserAsync(UserId);
+  OrdersTask := FetchOrdersAsync(UserId);
+  NotificationsTask := FetchNotificationsAsync(UserId);
+
+  // Неблокуюче очікування завершення всіх трьох задач
+  await TTask.WhenAll([UserTask, OrdersTask, NotificationsTask]);
+
+  Result := TDashboardData.Create(UserTask.Value, OrdersTask.Value, NotificationsTask.Value);
+end;
+
+function FetchFromFirstMirrorAsync: specialize IFuture<TData>; async;
+var
+  M1, M2, M3: specialize IFuture<TData>;
+  Fastest: ITask;
+begin
+  M1 := FetchFromMirrorAsync('mirror1.com');
+  M2 := FetchFromMirrorAsync('mirror2.com');
+  M3 := FetchFromMirrorAsync('mirror3.com');
+
+  // Очікуємо найшвидшу відповідь без блокування
+  Fastest := await TTask.WhenAny([M1, M2, M3]);
+  Result := (Fastest as specialize IFuture<TData>).Value;
+end;
+```
 
 ---
 
