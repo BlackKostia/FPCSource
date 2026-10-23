@@ -533,6 +533,8 @@ implementation
         vs: tlocalvarsym;
       begin
         vs:=clocalvarsym.create(aname,vs_value,adef,[vo_is_internal]);
+        { Names start with $, so an unused temp would be reported as "". }
+        include(vs.symoptions,sp_internal);
         vs.varstate:=vs_readwritten;
         pd.localst.insertsym(vs);
         result:=vs;
