@@ -78,6 +78,7 @@ implementation
         function free_except_node: tnode;
         function handler_end(afterid: integer; reraise: boolean): tnode;
         procedure split_await(stmt: tnode; call: tcallnode; var cur: tstate);
+        procedure lift_awaits(var expr: tnode; var cur: tstate);
         procedure lower_node(n: tnode; var cur: tstate);
         procedure take_list(list: tstatementnode; var cur: tstate);
         function dispatch_tree: tnode;
@@ -596,6 +597,40 @@ implementation
       end;
 
 
+    procedure tlower.lift_awaits(var expr: tnode; var cur: tstate);
+      var
+        target_node: tnode;
+        call: tcallnode;
+        temp: tsym;
+        rep_info: treplace_await_info;
+        asgn: tnode;
+      begin
+        while has_await(expr) do
+          begin
+            target_node:=nil;
+            foreachnodestatic(pm_postprocess,expr,@find_first_await_walk,@target_node);
+            if not assigned(target_node) then
+              break;
+            call:=tcallnode(target_node);
+            if not assigned(call.resultdef) then
+              begin
+                fail(call,'the awaited expression has no type');
+                break;
+              end;
+            temp:=new_local('$ASYNCAWAITRES'+tostr(states.count),call.resultdef);
+            rep_info.target:=call;
+            rep_info.replacement:=load_sym(temp);
+            do_typecheckpass(rep_info.replacement);
+            foreachnodestatic(pm_postprocess,expr,@replace_await_node_walk,@rep_info);
+            asgn:=cassignmentnode.create(load_sym(temp),call);
+            do_typecheckpass(asgn);
+            lower_node(asgn,cur);
+          end;
+        if assigned(expr) then
+          do_typecheckpass(expr);
+      end;
+
+
     procedure tlower.take_list(list: tstatementnode; var cur: tstate);
       var
         nxt: tstatementnode;
@@ -646,7 +681,7 @@ implementation
         call: tcallnode;
         cond, body, other, fromn, ton, loopvar: tnode;
         head, bodys, afters, fins, exs, step: tstate;
-        bodycur, fincur, excur: tstate;
+        bodycur, fincur, excur, condcur: tstate;
         saved: tsym;
         lflags: tloopflags;
         backward: boolean;
@@ -655,10 +690,6 @@ implementation
         list: tstatementnode;
         oldhandler: integer;
         loop: tframe;
-        target_node: tnode;
-        temp: tsym;
-        rep_info: treplace_await_info;
-        asgn: tnode;
       begin
         if not assigned(n) or (n.nodetype=nothingn) then
           begin
@@ -688,14 +719,30 @@ implementation
           assignn:
             begin
               call:=await_call_of(tbinarynode(n).right);
-              if assigned(call) then
+              if assigned(call) and not has_await(tbinarynode(n).left) then
                 split_await(n,call,cur)
-              else
+              else if has_await(n) then
                 begin
-                  fail(n,'await inside an expression');
-                  n.free;
-                  cur.add(cerrornode.create);
-                end;
+                  if has_await(tbinarynode(n).left) then
+                    lift_awaits(tbinarynode(n).left,cur);
+                  if has_await(tbinarynode(n).right) then
+                    lift_awaits(tbinarynode(n).right,cur);
+                  do_typecheckpass(n);
+                  cur.add(n);
+                end
+              else
+                cur.add(n);
+            end;
+          calln:
+            begin
+              if has_await(n) then
+                begin
+                  lift_awaits(n,cur);
+                  do_typecheckpass(n);
+                  cur.add(n);
+                end
+              else
+                cur.add(n);
             end;
           ifn:
             begin
@@ -706,29 +753,8 @@ implementation
               tifnode(n).right:=nil;
               tifnode(n).t1:=nil;
               n.free;
-              while has_await(cond) do
-                begin
-                  target_node:=nil;
-                  foreachnodestatic(pm_postprocess,cond,@find_first_await_walk,@target_node);
-                  if not assigned(target_node) then
-                    break;
-                  call:=tcallnode(target_node);
-                  if not assigned(call.resultdef) then
-                    begin
-                      fail(call,'the awaited expression has no type');
-                      break;
-                    end;
-                  temp:=new_local('$ASYNCAWAITRES'+tostr(states.count),call.resultdef);
-                  rep_info.target:=call;
-                  rep_info.replacement:=load_sym(temp);
-                  do_typecheckpass(rep_info.replacement);
-                  foreachnodestatic(pm_postprocess,cond,@replace_await_node_walk,@rep_info);
-                  asgn:=cassignmentnode.create(load_sym(temp),call);
-                  do_typecheckpass(asgn);
-                  lower_node(asgn,cur);
-                end;
-              if assigned(cond) then
-                do_typecheckpass(cond);
+              if has_await(cond) then
+                lift_awaits(cond,cur);
               head:=new_state;
               bodys:=new_state;
               afters:=new_state;
@@ -753,13 +779,9 @@ implementation
               twhilerepeatnode(n).left:=nil;
               twhilerepeatnode(n).right:=nil;
               n.free;
-              if has_await(cond) then
-                begin
-                  fail(cond,'await in a condition');
-                  cond.free;
-                  cond:=cordconstnode.create(1,booldef,false);
-                end;
               if (lnf_checknegate in lflags) and (lnf_testatbegin in lflags) then
+                cond:=cnotnode.create(cond)
+              else if not (lnf_checknegate in lflags) and not (lnf_testatbegin in lflags) then
                 cond:=cnotnode.create(cond);
               head:=new_state;
               afters:=new_state;
@@ -771,7 +793,10 @@ implementation
                   { A previous iteration's continue flag must not make this
                     iteration's finally skip the loop step. }
                   head.add(assign_const(leave_sym,0));
-                  head.add(cifnode.create(cond,
+                  condcur:=head;
+                  if has_await(cond) then
+                    lift_awaits(cond,condcur);
+                  condcur.add(cifnode.create(cond,
                             assign_const(state_sym,bodys.id),
                             assign_const(state_sym,afters.id)));
                   bodycur:=bodys;
@@ -789,7 +814,10 @@ implementation
                     lower_node(body,bodycur);
                   emit_leave(bodycur,leave_cont,step.id,handlerid);
                   step.add(assign_const(leave_sym,0));
-                  step.add(cifnode.create(cond,
+                  condcur:=step;
+                  if has_await(cond) then
+                    lift_awaits(cond,condcur);
+                  condcur.add(cifnode.create(cond,
                                 assign_const(state_sym,afters.id),
                                 assign_const(state_sym,head.id)));
                 end;
@@ -938,7 +966,7 @@ implementation
             begin
               if assigned(texitnode(n).resultexpr) then
                 begin
-                  cur.add(texitnode(n).resultexpr);
+                  lower_node(texitnode(n).resultexpr,cur);
                   texitnode(n).resultexpr:=nil;
                 end;
               n.free;
