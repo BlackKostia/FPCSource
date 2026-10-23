@@ -1388,6 +1388,8 @@ implementation
         if not assigned(code) or not fiber_proc(pd) then
           exit;
         innerdef:=future_value_type(pd.returndef);
+        if not has_await(code) and not assigned(innerdef) then
+          exit;
         if assigned(innerdef) then
           begin
             potype:=potype_function;

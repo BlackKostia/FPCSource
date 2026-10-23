@@ -4377,10 +4377,9 @@ implementation
                              end;
                          end;
                      end;
-                   { State-machine async routines keep the call recognizable
-                     until the body is rewritten. Fibers still block in Wait. }
-                   if assigned(current_module) and (current_module.asyncmode=2) and
-                      assigned(current_procinfo) and assigned(current_procinfo.procdef) and
+                   { Async routines keep the call recognizable
+                     until the body is rewritten. }
+                   if assigned(current_procinfo) and assigned(current_procinfo.procdef) and
                       (pio_async in current_procinfo.procdef.implprocoptions) then
                      mark_statemachine_await(p1);
                  end;
