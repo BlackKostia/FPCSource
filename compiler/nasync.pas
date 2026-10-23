@@ -151,6 +151,38 @@ implementation
       end;
 
 
+    type
+      treplace_await_info = record
+        target: tcallnode;
+        replacement: tnode;
+      end;
+
+
+    function find_first_await_walk(var n: tnode; arg: pointer): foreachnoderesult;
+      begin
+        result:=fen_false;
+        if (n.nodetype=calln) and (cnf_await in tcallnode(n).callnodeflags) then
+          begin
+            pnode(arg)^:=n;
+            result:=fen_norecurse_true;
+          end;
+      end;
+
+
+    function replace_await_node_walk(var n: tnode; arg: pointer): foreachnoderesult;
+      var
+        info: ^treplace_await_info;
+      begin
+        result:=fen_false;
+        info:=arg;
+        if n=info^.target then
+          begin
+            n:=info^.replacement;
+            result:=fen_norecurse_true;
+          end;
+      end;
+
+
     function exit_walk(var n: tnode; arg: pointer): foreachnoderesult;
       begin
         result:=fen_false;
@@ -623,9 +655,22 @@ implementation
         list: tstatementnode;
         oldhandler: integer;
         loop: tframe;
+        target_node: tnode;
+        temp: tsym;
+        rep_info: treplace_await_info;
+        asgn: tnode;
       begin
-        if not assigned(n) then
-          exit;
+        if not assigned(n) or (n.nodetype=nothingn) then
+          begin
+            if assigned(n) then
+              n.free;
+            exit;
+          end;
+        if not has_await(n) and not has_unscoped_leave(n) then
+          begin
+            cur.add(n);
+            exit;
+          end;
         call:=await_call_of(n);
         if assigned(call) then
           begin
@@ -661,12 +706,29 @@ implementation
               tifnode(n).right:=nil;
               tifnode(n).t1:=nil;
               n.free;
-              if has_await(cond) then
+              while has_await(cond) do
                 begin
-                  fail(cond,'await in a condition');
-                  cond.free;
-                  cond:=cordconstnode.create(0,booldef,false);
+                  target_node:=nil;
+                  foreachnodestatic(pm_postprocess,cond,@find_first_await_walk,@target_node);
+                  if not assigned(target_node) then
+                    break;
+                  call:=tcallnode(target_node);
+                  if not assigned(call.resultdef) then
+                    begin
+                      fail(call,'the awaited expression has no type');
+                      break;
+                    end;
+                  temp:=new_local('$ASYNCAWAITRES'+tostr(states.count),call.resultdef);
+                  rep_info.target:=call;
+                  rep_info.replacement:=load_sym(temp);
+                  do_typecheckpass(rep_info.replacement);
+                  foreachnodestatic(pm_postprocess,cond,@replace_await_node_walk,@rep_info);
+                  asgn:=cassignmentnode.create(load_sym(temp),call);
+                  do_typecheckpass(asgn);
+                  lower_node(asgn,cur);
                 end;
+              if assigned(cond) then
+                do_typecheckpass(cond);
               head:=new_state;
               bodys:=new_state;
               afters:=new_state;
